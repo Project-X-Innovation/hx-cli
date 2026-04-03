@@ -1,0 +1,24 @@
+{
+  "name": "hx-cli",
+  "version": "0.1.0",
+  "description": "Helix CLI — production inspection for databases, logs, and APIs",
+  "type": "module",
+  "bin": {
+    "hx": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
+}
