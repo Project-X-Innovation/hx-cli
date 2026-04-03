@@ -8,6 +8,6 @@ export async function cmdRepos(config: HxConfig): Promise<void> {
     return;
   }
   for (const r of repos) {
-    console.log(`${r.displayName}  ${r.repositoryId}  [${r.types.join(", ")}]`);
+    console.log(`${r.displayName}  ${r.id}  [${r.types.join(", ")}]`);
   }
 }
