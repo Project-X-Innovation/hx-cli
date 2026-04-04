@@ -43,7 +43,7 @@ export async function runLogin(args: string[]): Promise<void> {
 
   const state = randomBytes(16).toString("hex");
 
-  const result = await new Promise<{ key: string }>((resolve, reject) => {
+  const result = await new Promise<{ key: string; url?: string }>((resolve, reject) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url ?? "/", `http://localhost`);
       if (url.pathname !== "/callback") {
@@ -71,9 +71,10 @@ export async function runLogin(args: string[]): Promise<void> {
         return;
       }
 
+      const callbackUrl = url.searchParams.get("url") ?? undefined;
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end("<html><body><h2>Authenticated!</h2><p>You can close this tab and return to your terminal.</p></body></html>");
-      resolve({ key });
+      resolve({ key, url: callbackUrl });
       server.close();
     });
 
@@ -84,7 +85,7 @@ export async function runLogin(args: string[]): Promise<void> {
         return;
       }
       const port = addr.port;
-      const authUrl = `${serverUrl}/auth/cli?port=${port}&state=${state}`;
+      const authUrl = `${serverUrl}/api/auth/cli?port=${port}&state=${state}`;
       console.error(`Opening browser to authorize...`);
       console.error(authUrl);
       openBrowser(authUrl);
@@ -97,6 +98,7 @@ export async function runLogin(args: string[]): Promise<void> {
     }, 120_000);
   });
 
-  saveConfig({ apiKey: result.key, url: serverUrl });
+  const finalUrl = result.url ?? serverUrl;
+  saveConfig({ apiKey: result.key, url: finalUrl.replace(/\/+$/, "") });
   console.error("Authenticated! Config saved to ~/.hx/config.json");
 }
