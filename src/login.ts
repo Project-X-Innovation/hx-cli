@@ -31,13 +31,13 @@ export async function runLogin(args: string[]): Promise<void> {
       process.exit(1);
     }
     saveConfig({ apiKey, url: url.replace(/\/+$/, "") });
-    console.error("Saved to ~/.hx/config.json");
+    console.error("Saved to ~/.hlx/config.json");
     return;
   }
 
   if (!serverUrl) {
-    console.error("Usage: hx login <server-url>");
-    console.error("       hx login --manual");
+    console.error("Usage: hlx login <server-url>");
+    console.error("       hlx login --manual");
     process.exit(1);
   }
 
@@ -100,5 +100,5 @@ export async function runLogin(args: string[]): Promise<void> {
 
   const finalUrl = result.url ?? serverUrl;
   saveConfig({ apiKey: result.key, url: finalUrl.replace(/\/+$/, "") });
-  console.error("Authenticated! Config saved to ~/.hx/config.json");
+  console.error("Authenticated! Config saved to ~/.hlx/config.json");
 }

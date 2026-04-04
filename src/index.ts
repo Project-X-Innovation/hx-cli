@@ -8,16 +8,16 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 function usage(): never {
-  console.error(`hx — Helix CLI for production inspection
+  console.error(`hlx — Helix CLI for production inspection
 
 Usage:
-  hx login <server-url>       Authenticate with a Helix server
-  hx login --manual           Paste API key manually
-  hx inspect repos             List repositories and inspection types
-  hx inspect db --repo <name> "<sql>"
-  hx inspect logs --repo <name> "<query>"
-  hx inspect api --repo <name> <path>
-  hx --version                 Show version`);
+  hlx login <server-url>       Authenticate with a Helix server
+  hlx login --manual           Paste API key manually
+  hlx inspect repos             List repositories and inspection types
+  hlx inspect db --repo <name> "<sql>"
+  hlx inspect logs --repo <name> "<query>"
+  hlx inspect api --repo <name> <path>
+  hlx --version                 Show version`);
   process.exit(1);
 }
 

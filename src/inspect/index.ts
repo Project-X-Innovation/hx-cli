@@ -21,10 +21,10 @@ function getPositionalArgs(args: string[], excludeFlags: string[]): string[] {
 
 function inspectUsage(): never {
   console.error(`Usage:
-  hx inspect repos
-  hx inspect db --repo <name> "<sql>"
-  hx inspect logs --repo <name> "<query>" [--limit N]
-  hx inspect api --repo <name> <path>`);
+  hlx inspect repos
+  hlx inspect db --repo <name> "<sql>"
+  hlx inspect logs --repo <name> "<query>" [--limit N]
+  hlx inspect api --repo <name> <path>`);
   process.exit(1);
 }
 

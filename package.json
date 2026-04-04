@@ -1,10 +1,10 @@
 {
-  "name": "hx-cli",
-  "version": "0.1.0",
+  "name": "@projectxinnovation/helix-cli",
+  "version": "1.1.0",
   "description": "Helix CLI — production inspection for databases, logs, and APIs",
   "type": "module",
   "bin": {
-    "hx": "./dist/index.js"
+    "hlx": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

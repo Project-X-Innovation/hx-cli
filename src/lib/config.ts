@@ -7,7 +7,7 @@ export type HxConfig = {
   url: string;
 };
 
-const CONFIG_DIR = join(homedir(), ".hx");
+const CONFIG_DIR = join(homedir(), ".hlx");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
 export function loadConfig(): HxConfig | null {
@@ -40,7 +40,7 @@ export function saveConfig(config: HxConfig): void {
 export function requireConfig(): HxConfig {
   const config = loadConfig();
   if (!config) {
-    console.error("Not authenticated. Run `hx login <server-url>` or set HELIX_API_KEY + HELIX_URL env vars.");
+    console.error("Not authenticated. Run `hlx login <server-url>` or set HELIX_API_KEY + HELIX_URL env vars.");
     process.exit(1);
   }
   return config;
