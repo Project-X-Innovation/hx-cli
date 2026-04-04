@@ -5,8 +5,13 @@ import { createInterface } from "node:readline";
 import { saveConfig } from "./lib/config.js";
 
 function openBrowser(url: string): void {
-  const cmd = process.platform === "win32" ? "start" : process.platform === "darwin" ? "open" : "xdg-open";
-  exec(`${cmd} "${url}"`);
+  if (process.platform === "win32") {
+    exec(`start "" "${url}"`);
+  } else if (process.platform === "darwin") {
+    exec(`open "${url}"`);
+  } else {
+    exec(`xdg-open "${url}"`);
+  }
 }
 
 async function prompt(question: string): Promise<string> {

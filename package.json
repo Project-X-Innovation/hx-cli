@@ -1,6 +1,6 @@
 {
   "name": "@projectxinnovation/helix-cli",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Helix CLI — production inspection for databases, logs, and APIs",
   "type": "module",
   "bin": {
