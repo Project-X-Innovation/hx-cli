@@ -1,55 +1,28 @@
 {
   "questions": [
-    "Should retry logic live in hxFetch (centralized) or in each command handler?",
-    "What timeout value is appropriate for CLI fetch calls?",
-    "Should HTTP 500 be included in the retryable status code set?",
-    "How should process.exit(1) be restructured to allow retry?",
-    "How should the CLI handle HTML error responses from the DO proxy?"
+    "Does the hx-cli source code need any changes for this ticket?",
+    "What is the relationship between CLI retry logic and the server's 422 status code?"
   ],
   "answers": [
     {
-      "answer": "Centralized in hxFetch. Every inspection command (db, logs, api) and resolveRepo all call hxFetch. Centralizing retry there ensures all paths benefit automatically with consistent behavior and no code duplication.",
+      "answer": "No. The source code already has complete retry logic (MAX_ATTEMPTS=3, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES=[429,500,502,503,504], HTML error detection, exponential backoff with jitter, 429 Retry-After support). The deployed npm package @projectxinnovation/helix-cli@1.2.0 has the old pre-hardening code. The only action needed is to rebuild and republish the package.",
       "evidence": [
-        "src/inspect/logs.ts:9 - calls hxFetch",
-        "src/inspect/db.ts:7 - calls hxFetch",
-        "src/lib/resolve-repo.ts:7 - listRepos calls hxFetch",
-        "No command handler has any error recovery beyond what hxFetch provides"
+        "hx-cli/src/lib/http.ts: Full retry logic with MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000.",
+        "hx-cli/src/lib/http.ts:6: RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]).",
+        "hx-cli/src/lib/http.ts:28-34: buildErrorMessage checks content-type for text/html and provides clear message.",
+        "hx-cli/src/lib/http.ts:66-125: Full retry loop with backoff, error classification, timeout.",
+        "Diagnosis: deployed dist/lib/http.js has bare fetch() + process.exit(1), no retry, no timeout."
       ]
     },
     {
-      "answer": "30 seconds. The server has a 15s external query timeout and will add retry (up to ~25s total for 3 attempts). 30s allows the server to complete its retry cycle. The login command uses 120s but that includes human interaction; queries should not take that long.",
+      "answer": "The server will use HTTP 422 for deterministic query errors (bad SQL, missing table). The CLI's RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504] already excludes 422, so deterministic errors will fail fast without wasted retry attempts. This alignment works without any CLI code changes. HTTP 500 (unexpected server errors, potentially transient) IS retried by the CLI, which is correct behavior.",
       "evidence": [
-        "inspection-proxy-service.ts:228 - AbortSignal.timeout(15000) for ClickHouse",
-        "inspection-proxy-service.ts:145-146 - 15s statement_timeout + connectionTimeoutMillis for PG",
-        "src/login.ts:100 - 120s timeout for login (includes browser auth flow)",
-        "Server retry: 3 attempts with 2s+4s backoff = ~21s worst case before returning error"
-      ]
-    },
-    {
-      "answer": "Yes. After the server-side fix, external query failures return 500 instead of 502. These are often transient. Permanent validation errors return 400/404 and won't be retried. Including 500 ensures the CLI retries the cases most likely to succeed on a subsequent attempt.",
-      "evidence": [
-        "Server tech-research directs changing HttpError(502) to HttpError(500) for external failures",
-        "HttpError(400) used for: empty query, missing credentials, write operations — all permanent",
-        "HttpError(404) used for: repo not found, credential not configured — all permanent"
-      ]
-    },
-    {
-      "answer": "Move process.exit(1) from hxFetch to the top-level CLI entry point (src/index.ts). hxFetch throws errors instead. This allows the retry loop inside hxFetch to catch and retry on transient failures. The top-level handler catches any unhandled error, prints the message, and exits with code 1.",
-      "evidence": [
-        "src/lib/http.ts:35-36 - process.exit(1) prevents any retry",
-        "src/index.ts - CLI entry point, natural place for top-level error handling",
-        "src/lib/resolve-repo.ts:31 - has its own process.exit(1) for 'repo not found' (keep this, it's a usage error)"
-      ]
-    },
-    {
-      "answer": "Check the response Content-Type header. If it contains 'text/html', show a clear message: 'Server returned an HTML error page (HTTP {status}). The request may have timed out or the service may be temporarily unavailable.' Do not dump raw HTML to stderr.",
-      "evidence": [
-        "Diagnosis: DO proxy returns content-type: text/html with generic error page body",
-        "Current behavior: hxFetch slices first 500 chars of response text, which is HTML tags",
-        "Agents cannot parse or interpret HTML error pages"
+        "hx-cli/src/lib/http.ts:6: RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]) — 422 is not included.",
+        "helix-global-server tech-research (this run): Decision 2 directs HTTP 422 for deterministic query errors.",
+        "hx-cli/src/lib/http.ts:91-94: isRetryableResponse(response) check controls retry — 422 will be false, triggering immediate error."
       ]
     }
   ],
-  "statement": "The CLI needs centralized retry in hxFetch with 30s timeout via AbortSignal.timeout, 3 attempts with exponential backoff for retryable status codes (429, 500, 502, 503, 504), error classification to avoid retrying permanent failures, HTML response detection, and process.exit moved to the top-level entry point. Zero runtime dependencies preserved; all APIs available in Node.js >=18.",
+  "statement": "The hx-cli requires no source code changes. All retry, timeout, and error handling logic already exists in source but was never published to npm. The only action is to rebuild and republish the package. The CLI's existing RETRYABLE_STATUS_CODES already aligns with the server's planned 422 status code for deterministic query errors (422 is not retried), achieving correct fail-fast behavior without modification.",
   "followups": []
 }
