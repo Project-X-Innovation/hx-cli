@@ -9,7 +9,12 @@ export async function listRepos(config: HxConfig): Promise<RepoInfo[]> {
 }
 
 export async function resolveRepo(config: HxConfig, nameOrId: string): Promise<string> {
-  const repos = await listRepos(config);
+  let repos: RepoInfo[];
+  try {
+    repos = await listRepos(config);
+  } catch (error) {
+    throw new Error("Failed to fetch repository list: " + (error instanceof Error ? error.message : String(error)));
+  }
 
   // Exact ID match
   const byId = repos.find((r) => r.id === nameOrId);

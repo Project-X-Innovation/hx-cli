@@ -1,0 +1,28 @@
+{
+  "questions": [
+    "Does hxFetch use AbortSignal.timeout to prevent indefinite hangs?",
+    "Does hxFetch retry retryable errors (429, 5xx, network errors) with exponential backoff?",
+    "Does the CLI detect HTML error responses and show a clear message instead of raw HTML?",
+    "Has process.exit(1) been removed from http.ts and replaced with thrown errors caught by index.ts?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. hxFetch passes signal: AbortSignal.timeout(30_000) to every fetch call (REQUEST_TIMEOUT_MS = 30000).",
+      "evidence": ["src/lib/http.ts line 72: signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)"]
+    },
+    {
+      "answer": "Yes. hxFetch retries up to 3 attempts with exponential backoff (2s base + jitter). RETRYABLE_STATUS_CODES includes 429, 500, 502, 503, 504. Network errors (TypeError, TimeoutError, AbortError) are also retried. 429 honors Retry-After header capped at 60s.",
+      "evidence": ["src/lib/http.ts lines 3-6: constants", "src/lib/http.ts line 66: retry loop", "src/lib/http.ts lines 80-88: 429 Retry-After handling"]
+    },
+    {
+      "answer": "Yes. buildErrorMessage checks content-type for text/html and returns a clear message: 'Server returned an HTML error page (HTTP <status>). The request may have timed out or the service may be temporarily unavailable.' Non-HTML errors show the first 500 chars of the body.",
+      "evidence": ["src/lib/http.ts lines 28-35: buildErrorMessage function"]
+    },
+    {
+      "answer": "Yes. process.exit(1) is removed from http.ts. hxFetch throws Error on failure. index.ts wraps the main switch in try/catch that prints the error message and calls process.exit(1).",
+      "evidence": ["grep process.exit in src/: http.ts has 0 occurrences, index.ts has process.exit(1) at line 47"]
+    }
+  ],
+  "statement": "All CLI resilience changes implemented: hxFetch now uses 30s request timeout via AbortSignal.timeout, retries up to 3 times with exponential backoff for retryable status codes (429/5xx) and network errors, detects HTML error responses, and throws errors instead of calling process.exit(1). resolve-repo.ts wraps listRepos in try/catch for better error messages. index.ts has top-level error handler. TypeScript compiles with zero errors. Build succeeds. CLI retry behavior confirmed: 7s total for 3 attempts against a non-responding endpoint.",
+  "followups": []
+}

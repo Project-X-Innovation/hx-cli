@@ -1,0 +1,22 @@
+Scout Log — hx-cli (continuation run)
+======================================
+
+Context: Prior run identified missing retry/timeout in CLI. Hardening was implemented.
+
+1. Verified current http.ts code:
+   - MAX_ATTEMPTS = 3 (line 3) — WAS missing in prior run
+   - BASE_DELAY_MS = 2000 (line 4) — WAS missing
+   - REQUEST_TIMEOUT_MS = 30_000 (line 5) — WAS missing
+   - RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504] (line 6) — WAS missing
+   - AbortSignal.timeout on every fetch (line 72) — WAS missing
+   - HTML error page detection (lines 28-35) — WAS missing
+   ALL hardening from prior run has been implemented.
+
+2. Runtime behavior: CLI correctly retries 504 responses, but all 3 attempts
+   fail for the same gateway-level timeout, resulting in ~96s of waiting
+   followed by the same error.
+
+3. No additional CLI-level changes can resolve a persistent upstream 504.
+   The problem is server/gateway interaction, not CLI error handling.
+
+4. Wrote updated scout artifacts reflecting current hardened state.
