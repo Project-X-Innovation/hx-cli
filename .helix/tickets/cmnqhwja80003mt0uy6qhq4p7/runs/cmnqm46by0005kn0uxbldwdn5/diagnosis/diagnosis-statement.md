@@ -1,48 +1,31 @@
-# Diagnosis Statement — helix-cli
+# Diagnosis Statement: helix-cli
 
 ## Problem Summary
 
-The Helix CLI (`hlx`) has no commands for reading or writing ticket comments. The HTTP client (`hxFetch`) hardcodes `/api/inspect` as the base path, making comment endpoints at `/api/tickets/:id/comments` unreachable. The ticket ID is not available as an environment variable in the sandbox. These gaps prevent agents and external CLI users from participating in ticket discussions.
+The CLI's `hlx comments post` command unconditionally sends `isHelixTagged: true` on every comment (post.ts:32), regardless of who is posting. This means any external user commenting via the CLI wrongly has their comment marked as Helix-tagged.
 
 ## Root Cause Analysis
 
-Three specific gaps in the CLI prevent comment functionality:
-
-### 1. No Comment Commands
-The CLI's command router (index.ts) only handles `login`, `inspect`, and `--version`. No comment-related code exists anywhere in the CLI. New `hlx comments list` and `hlx comments post` commands must be added following the existing subcommand dispatch pattern from `inspect/index.ts`.
-
-### 2. HTTP Client Path Limitation
-`hxFetch` (http.ts line 43) builds URLs as `${config.url}/api/inspect${path}`. Comment endpoints live at `/api/tickets/:ticketId/comments` — a completely different path prefix. The HTTP client needs to support non-inspect API paths, either via a basePath parameter or a parallel function.
-
-### 3. Ticket ID Not Available
-Agents in the sandbox receive `HELIX_INSPECT_TOKEN` and `HELIX_INSPECT_BASE_URL` via env.sh, but no `HELIX_TICKET_ID`. The CLI needs the ticket ID to construct comment API URLs. This is a server-side change (orchestrator must inject the env var) but affects CLI design — the CLI should support both `--ticket` flag and `HELIX_TICKET_ID` env var.
+The hardcoded `isHelixTagged: true` was a shortcut from the initial implementation when the CLI was assumed to be used only by Helix sandbox agents. With the server-side identity fix introducing `isHelixAgent` as a distinct JWT claim, the server will determine `isHelixTagged` and `isAgentAuthored` based on auth identity. The CLI should not override this.
 
 ## Evidence Summary
 
 | Evidence | Source | Finding |
 |----------|--------|---------|
-| CLI command router | `index.ts` lines 24-44 | Only login, inspect, --version; no comments |
-| HTTP base path hardcoded | `http.ts` line 43 | `/api/inspect` prefix; comment endpoints unreachable |
-| Subcommand pattern | `inspect/index.ts` | Reusable dispatch pattern with getFlag/getPositionalArgs |
-| Auth header logic | `http.ts` lines 52-56 | hxi_ → X-API-Key, else → Bearer; works for both endpoint types |
-| Env vars in sandbox | Server `orchestrator.ts` lines 1158-1164 | Only HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL |
-| Config loading | `config.ts` | Env vars take priority over file config |
+| Hardcoded isHelixTagged | `post.ts:31-33` | `body: { content: message, isHelixTagged: true }` |
+| Server defaults isHelixTagged to false | `comment-controller.ts:65-66` | Falls back to false if not provided |
+| Server forces for agents | `comment-controller.ts:77` | `isHelixTagged: isAgentAuthored ? true : isHelixTagged` |
 
 ## Success Criteria
 
-1. `hlx comments list --ticket <id>` returns comments with author, content, timestamp, isHelixTagged
-2. `hlx comments post --ticket <id> "message"` creates a comment via the API
-3. `HELIX_TICKET_ID` env var auto-detected when --ticket flag is omitted
-4. HTTP client supports comment API paths alongside inspect paths
-5. Output is formatted for both human reading (terminal) and agent consumption
+1. `hlx comments post` does not send `isHelixTagged: true` — sends only `{ content: message }`.
+2. `npm run typecheck` passes.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| scout/scout-summary.md (helix-cli) | Map CLI current state | No comment commands; HTTP hardcodes /api/inspect; zero deps |
-| scout/reference-map.json (helix-cli) | Identify relevant files | index.ts, http.ts, config.ts, inspect/index.ts as key files |
-| scout/scout-summary.md (helix-global-server) | Understand server-side constraints | Auth gap on comment routes; env.sh lacks HELIX_TICKET_ID |
-| http.ts | Verify HTTP client implementation | Confirmed /api/inspect hardcoded; auth header logic reusable |
-| index.ts | Verify command router | Confirmed simple switch pattern |
-| inspect/index.ts | Verify subcommand pattern | getFlag/getPositionalArgs pattern for new commands |
+| ticket.md + continuation context | Requirements | External CLI users should not auto-tag as Helix |
+| scout/reference-map.json (CLI) | Map code structure | Identified hardcoded isHelixTagged at post.ts:32 |
+| post.ts (direct read) | Verify CLI behavior | Confirmed hardcoded isHelixTagged: true in POST body |
+| comment-controller.ts (direct read) | Verify server behavior | Server defaults isHelixTagged to false; forces true for agent comments |

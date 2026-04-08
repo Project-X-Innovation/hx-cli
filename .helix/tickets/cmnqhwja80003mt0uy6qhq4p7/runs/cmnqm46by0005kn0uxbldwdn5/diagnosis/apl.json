@@ -1,34 +1,31 @@
 {
   "questions": [
-    "Q1: What new CLI commands are needed and how do they fit the existing command pattern?",
-    "Q2: How does the HTTP client need to change to reach comment API endpoints?",
-    "Q3: How does the CLI know which ticket to read/post comments for?"
+    "Why does the CLI hardcode isHelixTagged: true on every comment?",
+    "What should the CLI send instead?",
+    "Does the CLI need to store or display user identity?"
   ],
   "answers": [
     {
-      "answer": "Two new subcommands under a 'comments' top-level command: 'hlx comments list' (read comments, with --ticket and optional --helix-only and --since flags) and 'hlx comments post' (write a comment, with --ticket and message content). The pattern follows the existing inspect subcommand dispatch in inspect/index.ts, with getFlag/getPositionalArgs helpers reusable or replicable. A new src/comments/index.ts file would dispatch subcommands, with src/comments/list.ts and src/comments/post.ts implementing each.",
+      "answer": "post.ts:32 sends { content: message, isHelixTagged: true } unconditionally. This was likely a shortcut since the CLI was initially designed for sandbox agents that should always be associated with Helix. With the server-side identity fix, this is wrong because external CLI users would also have their comments Helix-tagged.",
       "evidence": [
-        "index.ts lines 24-44: CLI switch router; new 'comments' case needed",
-        "inspect/index.ts: subcommand dispatch pattern with getFlag, getPositionalArgs",
-        "No existing comment commands anywhere in the CLI codebase"
+        "helix-cli/src/comments/post.ts:31-33 — body: { content: message, isHelixTagged: true }"
       ]
     },
     {
-      "answer": "hxFetch (http.ts line 43) hardcodes the URL as config.url + '/api/inspect' + path. Comment endpoints are at /api/tickets/:ticketId/comments which requires /api as the base. The cleanest approach is to add an optional basePath parameter to hxFetch (defaulting to '/api/inspect' for backward compatibility) or create a parallel hxApiFetch that uses '/api' as the base path. The auth header logic (hxi_ detection) can be shared.",
+      "answer": "The CLI should send only { content: message } without isHelixTagged. The server will determine isHelixTagged based on auth identity: for Helix agents (isHelixAgent JWT claim), the server forces isHelixTagged=true and isAgentAuthored=true. For external CLI users (API key auth), the server uses the client-provided value (defaulting to false). This is the simplest and most correct approach — the server is the source of truth for identity.",
       "evidence": [
-        "http.ts line 43: const url = new URL(`${config.url}/api/inspect${path}`)",
-        "http.ts lines 52-56: auth header logic works for both inspect and comment endpoints"
+        "comment-controller.ts:65-66 — isHelixTagged defaults to false if not provided",
+        "comment-controller.ts:77 — server already has logic to force isHelixTagged for agent comments"
       ]
     },
     {
-      "answer": "The ticket ID is not currently available as an environment variable in the sandbox. It is embedded in ticket.md and the artifact path structure. The server orchestrator should inject HELIX_TICKET_ID into env.sh (orchestrator.ts line 1158) alongside HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL. The CLI can then read it via config.ts env var loading, or it can be passed explicitly via --ticket flag.",
+      "answer": "No changes needed to identity storage. The CLI config stores { apiKey, url } which is sufficient. Identity is resolved server-side: API keys map to createdByUserId (the logged-in user), and inspection JWTs map to the JWT subject. The CLI doesn't need to know or display who it is — the server handles all attribution.",
       "evidence": [
-        "orchestrator.ts lines 1158-1164: env.sh only exports HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL",
-        "config.ts: env var loading for HELIX_API_KEY, HELIX_INSPECT_TOKEN, HELIX_URL",
-        "No HELIX_TICKET_ID found in any env var injection"
+        "helix-cli/src/lib/config.ts:5-8 — HxConfig = { apiKey: string; url: string }",
+        "middleware.ts:154-167 — resolveApiKeyAuth maps to createdByUserId"
       ]
     }
   ],
-  "statement": "The Helix CLI needs a new 'comments' command group (list + post subcommands) to enable bidirectional communication between agents/users and the Helix platform. The HTTP client must be generalized beyond the hardcoded /api/inspect base path to reach comment endpoints at /api/tickets/:id/comments. The ticket ID must be made available as HELIX_TICKET_ID environment variable in the sandbox. These changes depend on the server-side auth changes to accept inspection tokens on comment routes.",
+  "statement": "The CLI fix is minimal: remove the hardcoded isHelixTagged: true from post.ts:32 and send only { content: message }. The server determines whether to set isHelixTagged based on the auth identity (Helix agent vs external user). No other CLI changes are needed.",
   "followups": []
 }
