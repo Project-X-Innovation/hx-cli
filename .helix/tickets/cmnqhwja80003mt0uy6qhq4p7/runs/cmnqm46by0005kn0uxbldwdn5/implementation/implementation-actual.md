@@ -2,68 +2,65 @@
 
 ## Summary of Changes
 
-Added `hlx comments list` and `hlx comments post` commands to the Helix CLI, enabling sandbox agents and external CLI users to read and write ticket comments. Generalized the HTTP client to support non-inspect API paths and added HELIX_TICKET_ID env var support.
+Removed the hardcoded `isHelixTagged: true` from the CLI's `hlx comments post` command. The CLI now sends only `{ content: message }` in the POST body, letting the server determine attribution based on the caller's auth identity.
 
 ## Files Changed
 
 | File | Why Changed | Shared/Review Hotspot |
-|------|-------------|----------------------|
-| `src/lib/http.ts` | Added `basePath?: string` option to `hxFetch` (defaults to `/api/inspect` for backward compatibility) | HTTP client: all existing callers unaffected by default |
-| `src/comments/index.ts` | New file: comments command dispatcher with `resolveTicketId` (--ticket flag or HELIX_TICKET_ID env var) | New command group entry point |
-| `src/comments/list.ts` | New file: `hlx comments list` with --helix-only and --since filtering | New command |
-| `src/comments/post.ts` | New file: `hlx comments post` with isHelixTagged=true | New command |
-| `src/index.ts` | Added `comments` case to switch router, imported `runComments`, updated usage text | CLI entry point: command dispatch |
+|------|------------|----------------------|
+| `src/comments/post.ts` | Changed `body: { content: message, isHelixTagged: true }` to `body: { content: message }` on line 33 | **Cross-repo behavior**: This field was overriding server-side attribution. The server now controls isHelixTagged based on auth identity. |
 
 ## Steps Executed
 
-| Plan Step | Status | Notes |
-|-----------|--------|-------|
-| C1: Generalize `hxFetch` with `basePath` parameter | Done | Default `/api/inspect` preserves backward compatibility |
-| C2: Create comments command dispatcher | Done | Ticket ID from --ticket flag or HELIX_TICKET_ID env var |
-| C3: Implement `hlx comments list` | Done | GET with basePath=/api; filters for --helix-only and --since |
-| C4: Implement `hlx comments post` | Done | POST with basePath=/api; always sets isHelixTagged=true |
-| C5: Register `comments` command in CLI entry point | Done | Switch case + usage text updated |
-| C6: Quality gates | Done | typecheck + build pass |
+### Step 1: Remove hardcoded `isHelixTagged: true` from `post.ts`
+- Changed line 33 from `body: { content: message, isHelixTagged: true }` to `body: { content: message }`
+- Typecheck: pass
+
+### Step 2: Verify quality gates
+- `npm run typecheck`: exit 0
+- `npm run build`: exit 0
 
 ## Verification Commands Run + Outcomes
 
-| Command | Result |
-|---------|--------|
-| `npm run typecheck` | Pass: 0 errors |
-| `npm run build` | Pass: compiled successfully |
+| Command | Outcome |
+|---------|---------|
+| `npm run typecheck` | Exit 0, no errors |
+| `npm run build` | Exit 0, dist/ updated |
+| API test via curl with hxi_ key (simulating CLI behavior) | Server returns isHelixTagged: false, isAgentAuthored: false for API key user |
 
 ## Test/Build Results
 
-- TypeScript compilation: 0 errors
-- Build: successful
-- Zero new runtime dependencies maintained
+- TypeScript typecheck: PASS (exit 0)
+- Build: PASS (exit 0)
+- API integration: PASS (server correctly defaults isHelixTagged=false for external CLI users)
 
 ## Deviations from Plan
 
-None. Implementation follows the plan exactly.
+None. Implementation matches the plan exactly.
 
 ## Known Limitations / Follow-ups
 
-- End-to-end testing of `hlx comments list` and `hlx comments post` against the running server requires CLI login or env var configuration, which was not performed in this pass. The server API was verified via curl independently.
+- CHK-03 (CLI end-to-end test) was verified via direct curl API call with an hxi_ API key rather than running the built CLI binary, because the CLI requires interactive login setup. The curl test exercises the same server endpoint and body format that the CLI uses.
 
 ## Verification Plan Results
 
 | Check ID | Outcome | Evidence |
 |----------|---------|----------|
-| CHK-01 | pass | `npm run typecheck` and `npm run build` both exit 0 |
-| CHK-02 | pass | Code inspection: `hxFetch` accepts `basePath` option with default `/api/inspect`; URL uses `${config.url}${base}${path}` |
-| CHK-03 | blocked | Requires running server + CLI login; server API verified via curl separately |
-| CHK-04 | blocked | Requires running server + CLI login; server API verified via curl separately |
+| CHK-01 | pass | `npm run typecheck` exits 0, no type errors |
+| CHK-02 | pass | `npm run build` exits 0, dist/ updated |
+| CHK-03 | pass (via API simulation) | Direct curl POST to /api/tickets/{id}/comments with X-API-Key header and body `{"content":"Test comment from external CLI user"}` returned 201 with isHelixTagged: false, isAgentAuthored: false. This exercises the same endpoint and body format the CLI uses, confirming the server-side behavior matches expectations. |
 
 ## APL Statement Reference
 
-See implementation/apl.json.
+Removed hardcoded isHelixTagged: true from CLI post.ts. The CLI now sends only { content: message }, letting the server determine attribution. Typecheck and build pass.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md | Feature requirements | CLI as comment mechanism; agents and external users both use it |
-| implementation-plan/implementation-plan.md (CLI) | Step-by-step plan | 6 steps: http basePath, dispatcher, list, post, register, gates |
-| scout/reference-map.json (CLI) | File locations | index.ts, http.ts, config.ts, inspect/index.ts |
-| repo-guidance.json | Repo classification | CLI is target for new comment commands |
+| implementation-plan/implementation-plan.md (CLI) | Step-by-step guide | Remove isHelixTagged: true from line 33; no other changes needed |
+| ticket.md | Requirements context | CLI is the communication channel; server determines identity |
+| Continuation context | User clarification | External CLI users must appear as themselves; only Helix agents post as Helix |
+| product/product.md | Product specification | CLI stops overriding Helix tagging |
+| diagnosis/diagnosis-statement.md (CLI) | CLI-specific diagnosis | Remove hardcoded isHelixTagged: true at post.ts:32 |
+| post.ts (direct read) | Verified CLI code before editing | Confirmed body: { content: message, isHelixTagged: true } at line 33 |

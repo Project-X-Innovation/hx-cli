@@ -1,0 +1,12 @@
+{
+  "title": "CLI: Remove hardcoded isHelixTagged",
+  "description": "Stops the CLI from overriding server-side attribution by removing isHelixTagged: true from the POST body.",
+  "steps": [
+    {
+      "file": "src/comments/post.ts",
+      "line": 33,
+      "title": "Send only content in POST body",
+      "description": "Changed from { content: message, isHelixTagged: true } to { content: message }. The server now determines isHelixTagged based on the caller's auth identity."
+    }
+  ]
+}

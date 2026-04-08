@@ -30,7 +30,7 @@ export async function cmdPost(config: HxConfig, ticketId: string, args: string[]
 
   const data = (await hxFetch(config, `/tickets/${ticketId}/comments`, {
     method: "POST",
-    body: { content: message, isHelixTagged: true },
+    body: { content: message },
     basePath: "/api",
   })) as PostCommentResponse;
 
