@@ -1,28 +1,36 @@
 {
   "questions": [
-    "Why does the CLI fail fatally on transient server errors?",
-    "What retry and timeout patterns should the CLI implement?",
-    "How does the CLI's error handling compare to other patterns in the codebase?"
+    "Is the deployed CLI actually running the hardened retry/timeout code?",
+    "Why does the CLI complete in ~310ms for 504 errors when retry backoff should take 6000ms+?",
+    "What changes are needed in the CLI repo to fix the runtime logs problem?"
   ],
   "answers": [
     {
-      "answer": "The CLI's hxFetch function calls process.exit(1) on ANY non-ok HTTP response with no error classification. HTTP 504 (retryable gateway timeout) is treated identically to HTTP 400 (permanent bad request). Combined with no request timeout (fetch has no AbortSignal), the CLI either fails instantly or hangs indefinitely.",
+      "answer": "No. The installed npm package @projectxinnovation/helix-cli@1.2.0 contains the pre-hardening code: single fetch(), no retry loop, no AbortSignal.timeout, process.exit(1) on any non-OK response. The source repo hx-cli has the hardened version at the same version number (1.2.0) but it was never published.",
       "evidence": [
-        "src/lib/http.ts:30 - bare fetch() with no AbortSignal",
-        "src/lib/http.ts:32-36 - on !response.ok: console.error + process.exit(1)",
-        "src/lib/http.ts - no retry loop, no error classification",
-        "src/login.ts:100-103 - login command HAS a 2-minute timeout, showing awareness of the need"
+        "Deployed dist/lib/http.js: bare 'const response = await fetch(url.toString(), { method, headers, body })', no retry loop, no timeout.",
+        "Source src/lib/http.ts: MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES set with 429, 500, 502, 503, 504.",
+        "Both package.json files show version 1.2.0 — version was bumped in source but never republished."
       ]
     },
     {
-      "answer": "The CLI should implement: (1) request timeout via AbortSignal.timeout (e.g., 30s), (2) retry with exponential backoff for retryable status codes (429, 502, 503, 504), (3) distinguish retryable from permanent errors, (4) cache the resolveRepo() result to avoid redundant network calls.",
+      "answer": "The CLI completes in ~310ms (250ms Node startup + 80ms single HTTP request) because the deployed code makes exactly one fetch call and immediately calls process.exit(1) on failure. There is no retry loop in the deployed binary.",
       "evidence": [
-        "Server-side wait-retry.ts pattern uses 3 attempts with exponential backoff and jitter (baseDelay 2000ms)",
-        "Login command uses AbortSignal.timeout(120000) showing the pattern is already in use",
-        "Every inspection command calls resolveRepo() which re-fetches the entire repo list (src/lib/resolve-repo.ts:7)"
+        "hlx inspect db for SELECT 1/0: total 310ms, exit code 1.",
+        "Direct curl for same query: 80ms for 504 response.",
+        "Node startup overhead: ~250ms (difference between hlx total time and curl time).",
+        "Deployed http.js: no retry loop, no sleep/backoff code, just process.exit(1)."
+      ]
+    },
+    {
+      "answer": "The CLI source code changes are already complete — the retry logic, timeouts, and error classification exist in src/lib/http.ts. The only required action is to rebuild and republish the npm package. However, this alone is insufficient because the server-side error handling bug (RC1) means all query errors still produce opaque 502/504 HTML. The server fix must come first.",
+      "evidence": [
+        "Source http.ts has: MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES=[429,500,502,503,504], HTML error page detection, backoff with jitter.",
+        "Deployed http.js has: none of the above.",
+        "Server RC1 means even with CLI retries, all 3 attempts would get 504 for any error query."
       ]
     }
   ],
-  "statement": "The hx-cli contributes to the runtime logs flakiness by providing zero resilience against transient failures. Its fetch implementation has no timeout, no retry, and calls process.exit(1) on any HTTP error. When the server returns 504 (which the DigitalOcean proxy does when intercepting 502 errors), the CLI exits immediately with no recovery path. The fix requires adding retry with exponential backoff for retryable errors, request timeouts, and error classification.",
+  "statement": "The CLI hardening (retry logic, timeouts, error classification) exists in source but was never published to npm. The deployed @projectxinnovation/helix-cli@1.2.0 has the old single-fetch, process.exit(1) code. The source changes are already correct and just need to be published. However, the server must first be fixed (RC1: add try/catch in inspection controllers) — without proper server error responses, CLI retries would just retry the same 504 three times.",
   "followups": []
 }
