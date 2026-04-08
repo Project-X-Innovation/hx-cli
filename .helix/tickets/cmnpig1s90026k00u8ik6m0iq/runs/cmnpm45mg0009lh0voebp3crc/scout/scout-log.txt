@@ -1,11 +1,22 @@
-Scout Log — hx-cli
-==================
+Scout Log — hx-cli (continuation run)
+======================================
 
-1. Explored CLI codebase: 8 source files, zero runtime dependencies, TypeScript-only build
-2. Key finding: hxFetch (src/lib/http.ts:30) has no timeout, no retry, process.exit(1) on any error
-3. Every inspection command makes 2 sequential HTTP calls (repo list + query) with no caching
-4. Reproduced failure: hlx inspect logs and hlx inspect db both returned 504 (5 total attempts)
-5. hlx inspect repos succeeded (2 attempts) — proving lightweight endpoints work
-6. No verbose/debug mode exists for diagnosing failures
-7. Login command has 2-minute timeout but inspection commands have none
-8. Wrote scout artifacts.
+Context: Prior run identified missing retry/timeout in CLI. Hardening was implemented.
+
+1. Verified current http.ts code:
+   - MAX_ATTEMPTS = 3 (line 3) — WAS missing in prior run
+   - BASE_DELAY_MS = 2000 (line 4) — WAS missing
+   - REQUEST_TIMEOUT_MS = 30_000 (line 5) — WAS missing
+   - RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504] (line 6) — WAS missing
+   - AbortSignal.timeout on every fetch (line 72) — WAS missing
+   - HTML error page detection (lines 28-35) — WAS missing
+   ALL hardening from prior run has been implemented.
+
+2. Runtime behavior: CLI correctly retries 504 responses, but all 3 attempts
+   fail for the same gateway-level timeout, resulting in ~96s of waiting
+   followed by the same error.
+
+3. No additional CLI-level changes can resolve a persistent upstream 504.
+   The problem is server/gateway interaction, not CLI error handling.
+
+4. Wrote updated scout artifacts reflecting current hardened state.
