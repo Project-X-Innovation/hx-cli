@@ -1,0 +1,58 @@
+{
+  "problem": "The hx-cli (hlx) is the tool agents use to execute runtime log inspection queries. It has no timeout, no retry logic, and no error classification — a single failed HTTP request causes immediate process.exit(1). When the server returns 504 Gateway Timeout (observed consistently during this scout session), the CLI fails with no opportunity for recovery.",
+  "files": [
+    {
+      "path": "src/lib/http.ts",
+      "why": "Core HTTP layer. fetch() call at line 30 has NO timeout (no AbortSignal), NO retry logic, and exits the process on any non-ok response (line 36: process.exit(1)). Does not distinguish retryable errors (429, 502, 503, 504) from permanent failures (400, 401, 403, 404)."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Log query command. Makes two sequential API calls: resolveRepo() then hxFetch() for logs. No error handling beyond what hxFetch provides (process.exit). No timeout."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Database query command. Same pattern as logs: resolveRepo() + hxFetch() with no retry or timeout."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository resolution. Every query command calls resolveRepo() which fetches the full repo list via GET /api/inspect/repositories first. No caching — this adds a network round-trip to every query. Exits process on failure (line 31)."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Configuration loading. Supports 3 env var names for API key (HELIX_API_KEY, HELIX_INSPECT_TOKEN, HELIX_INSPECT_API_KEY) and 3 for URL (HELIX_URL, HELIX_INSPECT_BASE_URL, HELIX_INSPECT_URL). Falls back to ~/.hlx/config.json."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Inspect command router. Dispatches to repos/db/logs/api subcommands. No retry wrapping at this level."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point. Parses argv and routes to inspect/login commands. No global error handling or retry logic."
+    },
+    {
+      "path": "package.json",
+      "why": "Package metadata. Version 1.2.0. Zero runtime dependencies (uses Node built-in fetch). Build is tsc only."
+    }
+  ],
+  "facts": [
+    "hxFetch (src/lib/http.ts:30) uses bare fetch() with no AbortSignal timeout — requests can hang indefinitely until the server or gateway responds",
+    "Any non-ok HTTP response causes process.exit(1) (src/lib/http.ts:36) — no error classification, no retry opportunity",
+    "Every inspection command (db, logs, api) makes two sequential HTTP calls: resolveRepo() for repo list + the actual query (src/inspect/logs.ts:6-12)",
+    "No caching of the repository list — resolveRepo() fetches it fresh on every invocation (src/lib/resolve-repo.ts:7)",
+    "Config supports 3 env var names for each of API key and URL (src/lib/config.ts:15-16), falling back to ~/.hlx/config.json",
+    "CLI has zero runtime dependencies — uses Node.js built-in fetch (no undici, no node-fetch)",
+    "No debug/verbose logging mode — no way to diagnose what's happening during failures",
+    "The login command has a 2-minute timeout (src/login.ts:100-103) but inspection commands have none",
+    "hlx inspect repos succeeded during testing but hlx inspect logs and hlx inspect db both returned 504 Gateway Timeout (5 total attempts, 0 successes)"
+  ],
+  "unknowns": [
+    "Does Node.js built-in fetch have a default timeout, or does it truly wait indefinitely?",
+    "How do agents invoke the CLI — is it through the runtime-inspection skill, MCP, or direct subprocess?",
+    "Would adding retry with exponential backoff at the CLI level mask server-side issues or genuinely improve reliability?",
+    "Is there a version pinning mechanism for the CLI installed in agent sandboxes?"
+  ],
+  "qualityGates": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  }
+}
