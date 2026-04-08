@@ -1,34 +1,49 @@
 # Verification Actual: helix-cli
 
+## Plan Adaptation
+
+The user's continuation context reinforces the base plan:
+- "When I comment using Claude code and the Helix CLI, it should say me" — directly aligns with CHK-03 (CLI posts without isHelixTagged so server determines identity)
+- "No other agents should be able to masquerade as Helix" — directly aligns with CLI removing hardcoded `isHelixTagged: true`
+
+No checks were added, removed, or modified. The adapted plan is identical to the base plan.
+
+### Adapted Required Checks
+
+- [CHK-01] TypeScript typecheck passes (unchanged)
+- [CHK-02] Build succeeds (unchanged)
+- [CHK-03] CLI posts comment without `isHelixTagged` field (unchanged)
+
 ## Outcome
 
 **pass**
 
 ## Steps Taken
 
-1. [CHK-01] Ran `npm run typecheck` and `npm run build` from helix-cli root. Both commands exited with code 0 and no errors.
+1. [CHK-01] Ran `npm run typecheck` in helix-cli. Exit code 0, no type errors.
 
-2. [CHK-02] Read `src/lib/http.ts` lines 37-50. Confirmed `hxFetch` accepts `basePath?: string` option (line 40). Default is `/api/inspect` (line 43: `const base = options.basePath ?? "/api/inspect"`). URL construction uses `${config.url}${base}${path}` (line 44).
+2. [CHK-02] Ran `npm run build` in helix-cli. Exit code 0, dist/ updated.
 
-3. [CHK-03] Started helix-global-server on port 4000 with .env configured. Used session JWT as API key via env vars (`HELIX_API_KEY`, `HELIX_URL`, `HELIX_TICKET_ID`). Ran `node dist/index.js comments list`. Output: `[2026-04-08T21:59:49.421Z] Cracked [Helix]: Test comment from verification` — correct format with timestamp, author, markers, and content.
-
-4. [CHK-04] With server running, ran `node dist/index.js comments post "Test comment from CLI verification"`. Output: `Comment posted (id: cmnqldfgo0003o8wunb1ewivl)`. Then ran `node dist/index.js comments list` again. Output showed both comments including the newly posted one: `[2026-04-08T22:00:22.920Z] Cracked [Helix]: Test comment from CLI verification`.
+3. [CHK-03] With helix-global-server running on port 4000:
+   - Set env vars: `HELIX_API_KEY=hxi_e8232e15...`, `HELIX_URL=http://localhost:4000`, `HELIX_TICKET_ID=cmnlaeewe0008nkpsl6zuocgi`
+   - Ran `node dist/index.js comments post "CLI verification test comment"`
+   - Output: `Comment posted (id: cmnqo2b2t000fq0z7bsag0ody)`
+   - Verified via API GET: comment has `isHelixTagged: false`, `isAgentAuthored: false`, `author.name: "Cracked"`
+   - Source verification: `post.ts` line 32 shows `body: { content: message }` — no `isHelixTagged` field
 
 ## Findings
 
 | Check ID | Outcome | Evidence |
 |----------|---------|----------|
-| CHK-01 | pass | `npm run typecheck`: 0 errors. `npm run build`: compiled successfully. |
-| CHK-02 | pass | `src/lib/http.ts` line 40: `basePath?: string` option. Line 43: `const base = options.basePath ?? "/api/inspect"`. Line 44: URL uses `${config.url}${base}${path}`. |
-| CHK-03 | pass | `hlx comments list` retrieved comments successfully from running server. Output: `[2026-04-08T21:59:49.421Z] Cracked [Helix]: Test comment from verification` |
-| CHK-04 | pass | `hlx comments post` returned `Comment posted (id: cmnqldfgo0003o8wunb1ewivl)`. Subsequent `hlx comments list` confirmed the comment appeared in the list. |
+| CHK-01 | pass | `npm run typecheck`: exit 0, no errors |
+| CHK-02 | pass | `npm run build`: exit 0, dist/ updated |
+| CHK-03 | pass | CLI posted comment successfully. API verification: `{"id":"cmnqo2b2t000fq0z7bsag0ody","author":{"name":"Cracked","email":"support@projectxinnovation.com"},"isHelixTagged":false,"isAgentAuthored":false}`. Source: `post.ts:32` `body: { content: message }` (no isHelixTagged). |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| implementation-plan/implementation-plan.md (CLI) | Verification Plan with Required Checks | CHK-01 through CHK-04 for CLI verification |
-| implementation/implementation-actual.md (CLI) | Context on what was implemented | 6 steps completed; CHK-03 and CHK-04 were blocked during implementation |
-| code-review/code-review-actual.md (CLI) | Not present for CLI | CLI was not separately reviewed |
-| src/lib/http.ts | basePath parameter verification | Confirmed optional basePath with default /api/inspect |
-| src/lib/config.ts | CLI config env var loading | HELIX_API_KEY + HELIX_URL env vars used for testing |
+| implementation-plan/implementation-plan.md (CLI) | Verification Plan with Required Checks CHK-01 through CHK-03 | 3 checks: typecheck, build, CLI end-to-end |
+| implementation/implementation-actual.md (CLI) | Context on what was implemented | isHelixTagged: true removed from post.ts line 33 |
+| code-review/code-review-actual.md (CLI) | Code review findings | No issues found; no code fixes made |
+| src/comments/post.ts (line 32) | Verified CLI sends only content | `body: { content: message }` confirmed |
