@@ -1,124 +1,78 @@
-# Implementation Plan: hx-cli — Fix CLI Resilience for Runtime Log Inspection
+# Implementation Plan: hx-cli — Rebuild CLI Package with Existing Retry Logic
 
 ## Overview
 
-Fix the CLI's zero-resilience HTTP layer that causes agents to fail fatally on any transient server error. The CLI currently has no request timeout (can hang indefinitely), no retry logic, no error classification, and calls `process.exit(1)` on any non-ok HTTP response. The fix adds a 30s request timeout via `AbortSignal.timeout`, retry with exponential backoff for retryable status codes, error classification, HTML response detection, and moves `process.exit(1)` to the top-level entry point.
+The hx-cli source code already contains complete retry/timeout/error-handling logic (3 attempts, 30s timeout, exponential backoff, HTML detection, error classification). However, the deployed npm package `@projectxinnovation/helix-cli@1.2.0` still has the pre-hardening code (single fetch, no retry, no timeout, `process.exit(1)` on any error). The only action needed is to bump the version and rebuild so the `dist/` output matches the source.
 
-All changes are in the existing `src/lib/http.ts`, `src/lib/resolve-repo.ts`, and `src/index.ts`. Zero new dependencies.
+No source code changes. One file modified (package.json version bump). The built artifacts serve as the deliverable.
 
 ## Implementation Principles
 
-- **Centralized in hxFetch**: All commands (db, logs, api, repos) call `hxFetch`. Centralizing retry ensures all paths benefit.
-- **Follow existing patterns**: Login command already uses `AbortSignal.timeout` (120s). Server's `waitWithRetry` uses 3 attempts, 2s base, exponential backoff + jitter. Apply the same patterns here.
-- **Zero runtime dependencies**: Use only Node.js built-in APIs (`AbortSignal.timeout`, `fetch`, `setTimeout`).
-- **Preserve user-visible behavior**: Exit code 1 on failure is maintained; errors just propagate through retry first.
+- **Ship what's already built**: All retry/timeout/error-handling code exists in source and is correct.
+- **Zero source changes**: Do not modify any `.ts` files. The prior run's plan prescribed extensive rewrites that were already done.
+- **Version clarity**: Bump from 1.2.0 to 1.2.1 so the rebuilt package is distinguishable from the unpublished 1.2.0.
+- **Cross-repo dependency**: The server fix (helix-global-server) must land first or concurrently for retry logic to be useful. Without JSON error responses from the server, CLI retries just repeat the same HTML 502/504.
 
 ## Implementation Steps Summary
 
 | Step | Goal | Deliverable |
 |------|------|-------------|
-| 1 | Add timeout, retry, error classification, and HTML detection to hxFetch | Updated `src/lib/http.ts` |
-| 2 | Update resolve-repo.ts error handling | Updated `src/lib/resolve-repo.ts` |
-| 3 | Add top-level error handler to CLI entry point | Updated `src/index.ts` |
-| 4 | Run quality gates | Passing typecheck and build |
+| 1 | Bump package version | Updated `package.json` (1.2.0 -> 1.2.1) |
+| 2 | Build the CLI | Compiled `dist/` with retry logic |
+| 3 | Verify built output contains retry logic | Confirmed `dist/lib/http.js` has MAX_ATTEMPTS, RETRYABLE_STATUS_CODES |
 
 ## Detailed Implementation Steps
 
-### Step 1: Rewrite hxFetch with timeout, retry, error classification, and HTML detection
+### Step 1: Bump package version
 
-**Goal**: Transform `hxFetch` from a single-shot, exit-on-error function into a resilient HTTP layer with bounded retry and clear error messages.
+**Goal**: Distinguish the rebuilt package from the unpublished 1.2.0.
 
 **What to Build**:
-- In `src/lib/http.ts`:
-  - **Remove `process.exit(1)`** from the error handling path (line 35).
-  - **Add request timeout**: Pass `signal: AbortSignal.timeout(30_000)` to the `fetch()` call (line 30). This prevents indefinite hangs. `AbortSignal.timeout()` is available in Node.js >=18 (matches CLI's `engines` requirement).
-  - **Add retry constants** at module level:
-    ```
-    const MAX_ATTEMPTS = 3;
-    const BASE_DELAY_MS = 2000;
-    const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
-    ```
-  - **Add a `sleep` helper**: `function sleep(ms: number): Promise<void> { return new Promise(r => setTimeout(r, ms)); }`
-  - **Add an `isRetryable` function**: Takes a `Response` or error. Returns `true` for:
-    - HTTP responses with status in `RETRYABLE_STATUS_CODES`
-    - `TypeError` (network failure from fetch)
-    - Errors with `name === "TimeoutError"` or `name === "AbortError"` (from `AbortSignal.timeout`)
-  - **Add retry loop** in `hxFetch`:
-    - Loop up to `MAX_ATTEMPTS`.
-    - On each attempt: call `fetch()` with the timeout signal.
-    - If response is ok: return `response.json()` as before.
-    - If response is not ok and retryable and not last attempt: sleep with exponential backoff (`BASE_DELAY_MS * 2^(attempt-1) + Math.floor(Math.random() * 500)`) then retry.
-    - If response is not ok and not retryable, or it's the last attempt: throw an error with a clear message.
-    - On catch (network error / timeout): if retryable and not last attempt, sleep and retry. Otherwise throw.
-  - **Add HTML response detection**: When building the error message for a non-ok response, check `response.headers.get("content-type")`. If it contains `text/html`, use the message: `"Server returned an HTML error page (HTTP ${response.status}). The request may have timed out or the service may be temporarily unavailable."` instead of dumping raw HTML. If content-type is JSON or text, include the first 500 chars of the body.
-  - **Throw instead of exit**: `hxFetch` throws `new Error(message)` on exhausted retries or permanent failures. It no longer calls `process.exit(1)`.
-  - **Handle 429 Retry-After**: On HTTP 429, check for `Retry-After` header. If present (as seconds), use that as the sleep duration instead of the exponential backoff formula. Cap at 60s.
+- In `package.json`, change `"version": "1.2.0"` to `"version": "1.2.1"`.
 
 **Verification (AI Agent Runs)**:
-- `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc --noEmit` should pass.
+- `grep '"version"' /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/package.json` — shows `1.2.1`.
 
 **Success Criteria**:
-- `hxFetch` includes `AbortSignal.timeout(30_000)` on the fetch call.
-- Retry loop with 3 attempts and exponential backoff.
-- Error classification: retryable (429, 500, 502, 503, 504, network errors, timeouts) vs permanent (4xx).
-- HTML detection: non-HTML error bodies show content, HTML bodies show a clear message.
-- No `process.exit` calls in `http.ts`.
+- Version is 1.2.1 in package.json.
+- No other changes to package.json.
 
 ---
 
-### Step 2: Update resolve-repo.ts error handling
+### Step 2: Build the CLI
 
-**Goal**: Ensure `resolveRepo` works correctly with the new throwing `hxFetch` while preserving the explicit exit for "repo not found" (a usage error, not a transient failure).
+**Goal**: Compile TypeScript source to dist/ so the built output matches source.
 
 **What to Build**:
-- In `src/lib/resolve-repo.ts`:
-  - The `listRepos` function (line 7) calls `hxFetch` which now throws on failure instead of exiting. No change needed to `listRepos` — the thrown error propagates up naturally.
-  - The `resolveRepo` function (line 11) still has its own `process.exit(1)` at line 32 for the "repo not found" case. **Keep this** — it's a usage error (wrong repo name), not a transient failure. The user should see the available repos and the process should exit.
-  - Wrap the `listRepos` call in a try/catch. On error, re-throw with a more descriptive message: `throw new Error("Failed to fetch repository list: " + (error instanceof Error ? error.message : String(error)))`.
+- Run `npm run build` (which runs `tsc`).
 
 **Verification (AI Agent Runs)**:
-- `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc --noEmit` should pass.
+- `cd /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli && npm run build` — exit code 0.
+- `ls /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/dist/lib/http.js` — file exists.
+- `ls /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/dist/index.js` — file exists.
 
 **Success Criteria**:
-- Network errors from `listRepos` propagate as thrown errors (not `process.exit`).
-- "Repo not found" still shows available repos and exits (line 32).
+- Build succeeds with zero errors.
+- `dist/lib/http.js` and `dist/index.js` exist.
 
 ---
 
-### Step 3: Add top-level error handler to CLI entry point
+### Step 3: Verify built output contains retry logic
 
-**Goal**: Catch errors thrown by command handlers (from the new throwing `hxFetch`) and exit with code 1, preserving the same user-visible behavior.
+**Goal**: Confirm the compiled JavaScript in dist/ contains the retry, timeout, and error-handling code that was missing from the deployed package.
 
-**What to Build**:
-- In `src/index.ts`:
-  - Wrap the `switch` statement (lines 24-43) in a `try/catch` block.
-  - In the catch block: `console.error(error instanceof Error ? error.message : String(error)); process.exit(1);`
-  - This ensures any unhandled error from command execution prints a clean message and exits with code 1, matching the previous behavior where `hxFetch` called `process.exit(1)` directly.
+**What to Build**: No code changes. Verify the built output.
 
 **Verification (AI Agent Runs)**:
-- `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc --noEmit` should pass.
-- `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc` (build) should pass.
+- `grep 'MAX_ATTEMPTS' /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/dist/lib/http.js` — should match.
+- `grep 'RETRYABLE_STATUS_CODES' /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/dist/lib/http.js` — should match.
+- `grep 'AbortSignal.timeout' /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/dist/lib/http.js` — should match.
+- `grep 'process.exit' /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli/dist/lib/http.js` — should NOT match (process.exit removed from http.ts in prior run).
 
 **Success Criteria**:
-- Top-level try/catch in `src/index.ts` catches errors from all command paths.
-- Error messages are printed cleanly to stderr.
-- Process exits with code 1 on error.
-
----
-
-### Step 4: Run quality gates
-
-**Goal**: Verify the changes compile correctly.
-
-**What to Build**: No code changes. Run verification commands.
-
-**Verification (AI Agent Runs)**:
-- `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc --noEmit` — must pass (typecheck).
-- `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc` — must pass (build).
-
-**Success Criteria**:
-- TypeScript compiles with zero errors.
-- Build produces output in `dist/`.
+- `dist/lib/http.js` contains `MAX_ATTEMPTS`, `RETRYABLE_STATUS_CODES`, `AbortSignal.timeout`.
+- `dist/lib/http.js` does NOT contain `process.exit`.
+- The built CLI is ready for npm publish (publishing itself requires npm credentials/CI and is outside this ticket's code changes).
 
 ---
 
@@ -128,66 +82,45 @@ All changes are in the existing `src/lib/http.ts`, `src/lib/resolve-repo.ts`, an
 
 | Dependency | Status | Source/Evidence | Affects checks |
 |------------|--------|-----------------|----------------|
-| Node.js >=18 available | available | hx-cli package.json `engines: ">=18"` | CHK-01, CHK-02, CHK-03, CHK-04, CHK-05 |
-| npm dependencies installed | available | `npm install` in hx-cli | CHK-01, CHK-02, CHK-03, CHK-04, CHK-05 |
+| Node.js >=18 available | available | hx-cli package.json `engines: ">=18"` | CHK-01, CHK-02, CHK-03 |
+| npm dependencies installed | available | node_modules exists in hx-cli | CHK-01, CHK-02, CHK-03 |
 | TypeScript compiler (tsc) | available | devDependency in package.json | CHK-01, CHK-02 |
-| helix-global-server running on port 4000 | available | Dev setup config provides server startup command and .env | CHK-03, CHK-04, CHK-05 |
-| Inspection API credentials configured (API key or token) | available | Dev setup login credentials can generate inspection token | CHK-03, CHK-04, CHK-05 |
-| helix-global-server changes deployed (Step 3 of server plan) | unknown | Server plan must complete first for full integration testing; CLI tests still meaningful against current server | CHK-04, CHK-05 |
 
 ### Required Checks
 
 [CHK-01] TypeScript compilation passes with zero errors.
-- Action: Run `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc --noEmit`.
+- Action: Run `cd /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli && npx tsc --noEmit`.
 - Expected Outcome: Exit code 0 with no error output.
 - Required Evidence: Command output showing successful compilation (no errors printed).
 
 [CHK-02] Build produces dist/ output successfully.
-- Action: Run `cd /vercel/sandbox/workspaces/cmnpiptcg002jk00uz8u72215/hx-cli && npx tsc`.
-- Expected Outcome: Exit code 0. The `dist/` directory contains compiled JS files including `dist/lib/http.js`, `dist/index.js`.
+- Action: Run `cd /vercel/sandbox/workspaces/cmnpm45mg0009lh0voebp3crc/hx-cli && npm run build`.
+- Expected Outcome: Exit code 0. The `dist/` directory contains compiled JS files including `dist/lib/http.js` and `dist/index.js`.
 - Required Evidence: Command output (no errors) plus file listing of `dist/lib/http.js` and `dist/index.js`.
 
-[CHK-03] CLI does not hang indefinitely on a non-responding endpoint.
-- Action: Run the built CLI (`node dist/index.js inspect repos`) against a non-existing server URL (e.g., set `HELIX_URL=http://localhost:19999`). Time the execution.
-- Expected Outcome: The CLI exits with an error within ~35 seconds (30s timeout + retry backoff overhead). It does NOT hang indefinitely.
-- Required Evidence: Command output showing error message and the elapsed wall-clock time (must be under 60 seconds).
-
-[CHK-04] CLI retries on transient failure and shows clear error message.
-- Action: Start the helix-global-server on port 4000. Configure the CLI to point at `http://localhost:4000`. Run `node dist/index.js inspect db --repo <repoName> "SELECT * FROM \"NonExistentTable\""` (a query that will fail server-side). Observe the output.
-- Expected Outcome: The CLI shows a clear JSON error message from the server (not raw HTML). The error message includes the failure reason. The process exits with code 1.
-- Required Evidence: Full CLI output showing the error message. If the server returns HTML (because server-side fix not yet deployed), the CLI should show the HTML detection message ("Server returned an HTML error page...") instead of raw HTML tags.
-
-[CHK-05] CLI retries on server 5xx and eventually reports failure clearly.
-- Action: Start the helix-global-server on port 4000. Run `node dist/index.js inspect logs --repo <repoName> "SELECT dt FROM remote('nonexistent._logs') LIMIT 1"` which is expected to fail. Observe timing and output.
-- Expected Outcome: The CLI retries (observable by the ~4-8 second delay before the error appears, compared to the previous instant failure). After retries are exhausted, it shows a clear error message and exits with code 1.
-- Required Evidence: CLI output showing the error message and approximate wall-clock time demonstrating retry delay (at least 2 seconds, indicating at least one retry occurred).
+[CHK-03] Built dist/lib/http.js contains retry logic and does not contain process.exit.
+- Action: Search the built `dist/lib/http.js` for `MAX_ATTEMPTS`, `RETRYABLE_STATUS_CODES`, `AbortSignal.timeout`, and verify `process.exit` is absent.
+- Expected Outcome: `MAX_ATTEMPTS`, `RETRYABLE_STATUS_CODES`, and `AbortSignal.timeout` are all present in the built file. `process.exit` is NOT present in `dist/lib/http.js`.
+- Required Evidence: grep output showing the presence of retry constants and the absence of process.exit.
 
 ## Success Metrics
 
-1. `hxFetch` uses `AbortSignal.timeout(30_000)` — no indefinite hangs.
-2. Retry loop with 3 attempts and exponential backoff for retryable errors.
-3. Error classification: 429/5xx and network errors retried; 4xx fails immediately.
-4. HTML responses detected and surfaced as clear messages.
-5. `process.exit(1)` only in `resolve-repo.ts` (repo-not-found) and `index.ts` (top-level handler).
-6. TypeScript compiles with zero errors.
-7. Build succeeds.
+1. Package version bumped to 1.2.1 in package.json.
+2. `npm run build` succeeds with zero errors.
+3. `dist/lib/http.js` contains retry loop (MAX_ATTEMPTS=3), timeout (AbortSignal.timeout), and error classification (RETRYABLE_STATUS_CODES).
+4. `dist/lib/http.js` does NOT contain `process.exit`.
+5. Built package is ready for npm publish.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md (hx-cli) | Problem statement | Runtime logs intermittently fail; flaky behavior across CLI and server |
-| scout/scout-summary.md (hx-cli) | CLI architecture analysis | No timeout, no retry, process.exit(1) on any error; login has 2-min timeout |
-| scout/reference-map.json (hx-cli) | File-level code map | Bare fetch at line 30, process.exit(1) at line 36, uncached resolveRepo |
-| diagnosis/diagnosis-statement.md (hx-cli) | CLI root cause | Zero resilience; login has timeout pattern not applied to inspection |
-| diagnosis/apl.json (hx-cli) | Structured evidence | process.exit(1) prevents retry; pattern exists in login.ts |
-| product/product.md (hx-cli) | Product requirements | CLI timeout, retry with backoff, error classification, meaningful output; preserve zero deps |
-| tech-research/tech-research.md (hx-cli) | Technical decisions | Centralized in hxFetch; 30s timeout; 3 attempts; status-code classification; HTML detection |
-| tech-research/apl.json (hx-cli) | Q&A decisions | Include 500 in retryable set (server will return 500 for external failures) |
-| src/lib/http.ts | Source code | Bare fetch, no signal, process.exit(1) on !response.ok — 39 lines total |
-| src/lib/resolve-repo.ts | Source code | Own process.exit(1) at line 32 for repo-not-found (keep) |
-| src/index.ts | Source code | CLI entry point with switch; no top-level error handling |
-| src/inspect/logs.ts, db.ts, api.ts | Source code | Simple call-through to hxFetch + resolveRepo; no error handling of their own |
-| package.json (hx-cli) | CLI config | engines >=18, zero runtime deps, tsc-only build |
-| tsconfig.json (hx-cli) | Build config | target ES2022, module Node16 — AbortSignal.timeout in type defs |
-| tech-research/tech-research.md (helix-global-server) | Cross-repo context | Server will change 502→500; CLI should retry 500 |
+| ticket.md (hx-cli) | Problem statement | Runtime logs flaky; CLI or server could be the problem |
+| diagnosis/diagnosis-statement.md (hx-cli) | CLI root cause | Deployed package has old pre-hardening code; source is correct; never published |
+| diagnosis/apl.json (hx-cli) | CLI evidence | Deployed http.js: single fetch, process.exit(1), 310ms = no retry |
+| product/product.md (hx-cli) | Product scope | Rebuild and republish only; no source changes |
+| tech-research/tech-research.md (hx-cli) | Technical direction | All source changes already made; only rebuild needed; version bump recommended |
+| tech-research/apl.json (hx-cli) | Decision rationale | RETRYABLE_STATUS_CODES already excludes 422 (server's new deterministic error code) |
+| hx-cli/package.json | Build configuration | version 1.2.0, build script is tsc, zero runtime deps |
+| hx-cli/src/lib/http.ts | Source code verification (via tech-research) | Full retry logic present: MAX_ATTEMPTS=3, 30s timeout, HTML detection |
+| repo-guidance.json | Repo intent | hx-cli=target (rebuild only), no source changes needed |

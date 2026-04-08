@@ -1,46 +1,26 @@
 {
   "questions": [
-    "What changes are needed in hx-cli to fix the CLI's zero-resilience HTTP layer?",
-    "Where should retry logic be centralized in the CLI?",
-    "What timeout value is appropriate for CLI fetch calls?",
-    "How should process.exit(1) be restructured to allow retry?"
+    "Does the hx-cli source code need any changes?",
+    "What is the correct action for the hx-cli in this ticket?"
   ],
   "answers": [
     {
-      "answer": "Four changes: (1) Add AbortSignal.timeout(30_000) to fetch in hxFetch. (2) Add retry loop with 3 attempts and exponential backoff for retryable status codes (429, 500, 502, 503, 504) and network errors. (3) Detect HTML responses and show clear messages instead of raw HTML. (4) Move process.exit(1) from hxFetch to the top-level entry point in index.ts.",
+      "answer": "No. The source code already has complete retry logic (MAX_ATTEMPTS=3, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES=[429,500,502,503,504], HTML error detection, exponential backoff with jitter, 429 Retry-After support, error classification). The deployed npm package has the old code. Only a rebuild and version bump are needed.",
       "evidence": [
-        "src/lib/http.ts:30 — bare fetch with no AbortSignal",
-        "src/lib/http.ts:35 — process.exit(1) prevents any retry",
-        "src/login.ts:100-103 — login command already uses AbortSignal.timeout (120s)",
-        "wait-retry.ts (server) — 3 attempts, 2000ms base, exponential backoff + jitter pattern"
+        "hx-cli/src/lib/http.ts: Full retry logic with MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000.",
+        "Diagnosis: deployed dist/lib/http.js has bare fetch() + process.exit(1), no retry.",
+        "Both package.json files show version 1.2.0 — source bumped but never published."
       ]
     },
     {
-      "answer": "Centralized in hxFetch (src/lib/http.ts). Every command (db, logs, api, repos) calls hxFetch via either direct call or resolveRepo → listRepos. Centralizing ensures all paths benefit automatically with consistent behavior.",
+      "answer": "Bump the version from 1.2.0 to 1.2.1 in package.json, then run npm run build (tsc) to compile the source to dist/. The built dist/lib/http.js will contain the retry/timeout/error-handling code. Publishing to npm requires credentials/CI and is a deployment concern outside this ticket's code changes.",
       "evidence": [
-        "src/inspect/logs.ts:9 — calls hxFetch",
-        "src/inspect/db.ts:7 — calls hxFetch",
-        "src/inspect/api.ts:7 — calls hxFetch",
-        "src/lib/resolve-repo.ts:7 — listRepos calls hxFetch"
-      ]
-    },
-    {
-      "answer": "30 seconds. The server has a 15s external query timeout and will add retry (up to ~25s total for 3 attempts). 30s allows the server to complete its retry cycle before the CLI times out. Login uses 120s (includes human interaction) which is too long for queries.",
-      "evidence": [
-        "inspection-proxy-service.ts:228 — 15s AbortSignal.timeout for ClickHouse",
-        "Server retry: 3 attempts with 2s+4s backoff = ~21s worst case",
-        "src/login.ts:100 — 120s timeout (includes browser auth flow)"
-      ]
-    },
-    {
-      "answer": "Move process.exit(1) from hxFetch to the top-level CLI entry point (src/index.ts). hxFetch throws errors instead. Add try/catch in index.ts around the switch statement. Keep the process.exit(1) in resolve-repo.ts line 32 for the 'repo not found' case (usage error, not transient).",
-      "evidence": [
-        "src/lib/http.ts:35 — process.exit(1) prevents retry at any level",
-        "src/index.ts — CLI entry point, natural place for top-level error handling",
-        "src/lib/resolve-repo.ts:31 — own process.exit(1) for repo-not-found (keep)"
+        "package.json: version 1.2.0, build script is 'tsc'.",
+        "Tech-research: 'The source code is already correct and complete. The dist/lib/http.js in the published package simply needs to match the source.'",
+        "Tech-research: 'Version bump to distinguish from unpublished 1.2.0.'"
       ]
     }
   ],
-  "statement": "The hx-cli implementation plan has 4 steps: (1) rewrite hxFetch with timeout, retry, error classification, and HTML detection, (2) update resolve-repo.ts error handling, (3) add top-level error handler in index.ts, (4) run quality gates. Zero new dependencies; all APIs available in Node.js >=18.",
+  "statement": "The hx-cli requires no source code changes. Bump version to 1.2.1 and rebuild (npm run build) so the dist/ output contains the retry/timeout/error-handling logic already present in source. Three verification checks: typecheck passes, build succeeds, and dist/lib/http.js contains retry constants (MAX_ATTEMPTS, RETRYABLE_STATUS_CODES, AbortSignal.timeout) without process.exit.",
   "followups": []
 }
