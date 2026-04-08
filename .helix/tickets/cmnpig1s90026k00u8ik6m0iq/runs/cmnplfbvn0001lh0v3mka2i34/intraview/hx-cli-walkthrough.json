@@ -1,0 +1,79 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "hx-cli: Add Timeout, Retry, and Error Classification to HTTP Layer",
+  "description": "This tour walks through a resilience overhaul of the hx-cli HTTP layer. The CLI previously called bare fetch() with no timeout, no retry, and called process.exit(1) on any non-ok HTTP response — meaning a single transient 504 from the DigitalOcean proxy would permanently kill an agent's inspection command. The fix adds a 30s AbortSignal.timeout, a 3-attempt retry loop with exponential backoff and jitter (matching the server-side waitWithRetry pattern), error classification (retryable: 429/500/502/503/504 and network errors; permanent: other 4xx), HTML response detection, and moves process.exit(1) from hxFetch to the top-level CLI entry point so retries are possible.",
+  "steps": [
+    {
+      "file": "src/lib/http.ts",
+      "line": 1,
+      "description": "This file is the core of the change. Previously hxFetch was a single-shot function: bare fetch() with no AbortSignal, and process.exit(1) on any non-ok response. There was no distinction between a transient 504 and a permanent 400. The rewrite transforms hxFetch into a resilient HTTP layer. Key constants are declared at the top: MAX_ATTEMPTS=3, RETRYABLE_STATUS_CODES=[429,500,502,503,504], and BASE_DELAY_MS=2000.",
+      "title": "Overview: hxFetch before and after"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 5,
+      "description": "MAX_ATTEMPTS=3 and BASE_DELAY_MS=2000 mirror the server-side waitWithRetry pattern. RETRYABLE_STATUS_CODES includes 500 (in addition to the gateway codes) because the server now returns 500 for external failures that may be transient. These constants are defined once and referenced throughout the retry loop and error classification logic below.",
+      "title": "Constants: retry budget and retryable status codes"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 12,
+      "description": "A helper classifies caught exceptions from fetch() into retryable vs permanent. TypeError (network failure), and errors named 'TimeoutError' or 'AbortError' (from AbortSignal.timeout) are retryable — the request should be attempted again. Any other thrown value is a permanent error and is rethrown immediately without consuming retry attempts.",
+      "title": "Error classification: isRetryableError"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 28,
+      "description": "When the DigitalOcean App Platform proxy intercepts an Express 502, it replaces the JSON error body with generic HTML. buildErrorMessage checks the response Content-Type header for 'text/html' and returns a clear human-readable message instead of dumping raw HTML into the agent's terminal. For non-HTML error responses, it includes the first 500 characters of the body for diagnostics.",
+      "title": "HTML response detection: buildErrorMessage"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 66,
+      "description": "The retry loop runs up to MAX_ATTEMPTS (3) times. Each fetch() call passes AbortSignal.timeout(30_000), which prevents requests from hanging indefinitely (the previous bare fetch() had no timeout at all). The 30s value is chosen because the server's own retry cycle for a ClickHouse query takes up to ~25s, so 30s gives the server time to resolve before the CLI gives up.",
+      "title": "Retry loop with exponential backoff and AbortSignal.timeout"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 80,
+      "description": "When the server responds with 429 Too Many Requests, the retry loop reads the Retry-After header and waits that many seconds (capped at 60s) before the next attempt. This is important for rate-limited API endpoints and prevents the CLI from hammering a throttled server.",
+      "title": "429 Retry-After header handling"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 91,
+      "description": "After receiving a non-ok response, the code checks RETRYABLE_STATUS_CODES. If the status is retryable and there are attempts remaining, it computes exponential backoff with jitter (matching the server's waitWithRetry pattern: baseDelay * 2^attempt + random jitter) and sleeps before the next attempt. If the status is permanent (e.g., 400, 401, 403, 404), buildErrorMessage is called and the error is thrown immediately — no retry wasted on a request that will never succeed.",
+      "title": "Retryable vs permanent HTTP error branching"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 111,
+      "description": "The catch block handles exceptions thrown by fetch() itself (network failures, timeouts, aborts). isRetryableError() determines whether to sleep-and-retry or rethrow. On the final attempt, a special user-friendly 'Request timed out after 30s' message is generated for TimeoutError/AbortError so the agent sees actionable output rather than a raw exception.",
+      "title": "Network error retry path"
+    },
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 13,
+      "description": "Previously listRepos errors would propagate as raw fetch errors with no context about which operation failed. The updated code wraps listRepos() in a try/catch and rethrows with a descriptive message ('Failed to fetch repository list: ...') so the agent's error output identifies the failing step. The repo-not-found path still calls process.exit(1) directly — this is a usage error (wrong repo name), not a transient network failure, so retry would be wrong.",
+      "title": "resolve-repo.ts: wrap listRepos errors with context"
+    },
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 36,
+      "description": "When the requested repository name is not found in the list, process.exit(1) is called directly. This is intentional: a missing repo is a permanent user error (wrong argument), not a transient network condition. It should not be retried and should exit immediately with a clear message.",
+      "title": "resolve-repo.ts: repo-not-found still exits directly"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 24,
+      "description": "Moving process.exit(1) from hxFetch to the top-level entry point is what makes retry possible. Previously, hxFetch called process.exit(1) on any non-ok response, which terminated the process before any retry loop could run. Now hxFetch throws errors, and the top-level handler in index.ts catches them, prints the message, and calls process.exit(1). The retry loop in hxFetch can complete all attempts before the error reaches this handler.",
+      "title": "Top-level try/catch: the new home of process.exit(1)"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 44,
+      "description": "The full data flow is now: hxFetch (timeout + retry + error classification) → resolveRepo (context wrapping) → command handler (logs/db/api/repos) → index.ts top-level catch (print + exit 1). Every command benefits from retry automatically because all commands call hxFetch either directly or via resolveRepo → listRepos. Exit code 1 on failure is preserved. No new dependencies were introduced — only Node.js built-in APIs (AbortSignal.timeout, fetch, setTimeout) are used.",
+      "title": "Summary: clean error propagation end-to-end"
+    }
+  ]
+}
