@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { requireConfig } from "./lib/config.js";
+import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
 
@@ -17,6 +18,8 @@ Usage:
   hlx inspect db --repo <name> "<sql>"
   hlx inspect logs --repo <name> "<query>"
   hlx inspect api --repo <name> <path>
+  hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
+  hlx comments post [--ticket <id>] <message>
   hlx --version                 Show version`);
   process.exit(1);
 }
@@ -30,6 +33,12 @@ try {
     case "inspect": {
       const config = requireConfig();
       await runInspect(config, args.slice(1));
+      break;
+    }
+
+    case "comments": {
+      const config = requireConfig();
+      await runComments(config, args.slice(1));
       break;
     }
 

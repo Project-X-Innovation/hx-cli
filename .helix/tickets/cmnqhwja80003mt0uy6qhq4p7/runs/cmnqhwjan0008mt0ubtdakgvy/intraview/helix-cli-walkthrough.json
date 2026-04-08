@@ -1,0 +1,11 @@
+{
+  "title": "CLI: Comment Commands",
+  "description": "Walkthrough of CLI changes adding hlx comments list and hlx comments post commands.",
+  "steps": [
+    { "file": "src/lib/http.ts", "line": 40, "title": "HTTP client: basePath parameter", "description": "Added optional basePath to hxFetch options. Defaults to '/api/inspect' for backward compatibility. Comment commands use basePath: '/api'." },
+    { "file": "src/comments/index.ts", "line": 11, "title": "Ticket ID resolution", "description": "resolveTicketId checks --ticket flag first, then HELIX_TICKET_ID env var. Exits with clear error if neither is available." },
+    { "file": "src/comments/list.ts", "line": 23, "title": "hlx comments list", "description": "GET comments via /api path. Supports --helix-only (filter isHelixTagged) and --since (filter by date). Displays in [timestamp] Author [markers]: content format." },
+    { "file": "src/comments/post.ts", "line": 9, "title": "hlx comments post", "description": "POST comment via /api path. Always sets isHelixTagged: true. Collects message from positional args." },
+    { "file": "src/index.ts", "line": 39, "title": "CLI entry point: comments case", "description": "Added 'comments' case to the switch router, importing runComments. Usage text updated with comment command descriptions." }
+  ]
+}
