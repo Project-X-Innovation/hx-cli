@@ -1,0 +1,11 @@
+Scout Log — hx-cli
+==================
+
+1. Explored CLI codebase: 8 source files, zero runtime dependencies, TypeScript-only build
+2. Key finding: hxFetch (src/lib/http.ts:30) has no timeout, no retry, process.exit(1) on any error
+3. Every inspection command makes 2 sequential HTTP calls (repo list + query) with no caching
+4. Reproduced failure: hlx inspect logs and hlx inspect db both returned 504 (5 total attempts)
+5. hlx inspect repos succeeded (2 attempts) — proving lightweight endpoints work
+6. No verbose/debug mode exists for diagnosing failures
+7. Login command has 2-minute timeout but inspection commands have none
+8. Wrote scout artifacts.

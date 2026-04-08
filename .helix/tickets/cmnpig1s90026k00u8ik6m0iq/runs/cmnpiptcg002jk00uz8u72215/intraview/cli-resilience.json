@@ -1,0 +1,42 @@
+{
+  "title": "CLI Resilience: Timeout, Retry, and Error Classification",
+  "description": "Walkthrough of CLI changes to add request timeout, retry with exponential backoff, HTML error detection, and proper error propagation.",
+  "steps": [
+    {
+      "file": "src/lib/http.ts",
+      "line": 3,
+      "title": "Retry and timeout constants",
+      "description": "MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES=[429,500,502,503,504]. These match the server's retry pattern and add 500 to the retryable set since the server now returns 500 for external failures."
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 28,
+      "title": "HTML error response detection",
+      "description": "buildErrorMessage checks content-type for text/html and returns a clear message instead of dumping raw HTML. For non-HTML responses, includes the first 500 chars of the body."
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 66,
+      "title": "Main retry loop with timeout",
+      "description": "Each fetch call uses AbortSignal.timeout(30_000). On retryable responses (429/5xx), sleeps with exponential backoff before retrying. On network errors (TypeError, TimeoutError), also retries. Non-retryable errors (4xx) fail immediately."
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 80,
+      "title": "429 Retry-After handling",
+      "description": "On HTTP 429, checks the Retry-After header. If present, uses that as the sleep duration (capped at 60s). Otherwise falls back to exponential backoff."
+    },
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 13,
+      "title": "Error wrapping for network failures",
+      "description": "listRepos call wrapped in try/catch. Network errors get a descriptive prefix ('Failed to fetch repository list: ...'). The repo-not-found process.exit(1) at line 36 is intentionally kept — it's a usage error, not a transient failure."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 24,
+      "title": "Top-level error handler",
+      "description": "The command switch is wrapped in try/catch. Catches all errors thrown by command handlers (including the new throwing hxFetch), prints a clean error message to stderr, and exits with code 1. This replaces the scattered process.exit(1) calls."
+    }
+  ]
+}

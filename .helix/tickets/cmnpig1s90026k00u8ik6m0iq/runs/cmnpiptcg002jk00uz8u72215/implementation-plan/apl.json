@@ -1,0 +1,46 @@
+{
+  "questions": [
+    "What changes are needed in hx-cli to fix the CLI's zero-resilience HTTP layer?",
+    "Where should retry logic be centralized in the CLI?",
+    "What timeout value is appropriate for CLI fetch calls?",
+    "How should process.exit(1) be restructured to allow retry?"
+  ],
+  "answers": [
+    {
+      "answer": "Four changes: (1) Add AbortSignal.timeout(30_000) to fetch in hxFetch. (2) Add retry loop with 3 attempts and exponential backoff for retryable status codes (429, 500, 502, 503, 504) and network errors. (3) Detect HTML responses and show clear messages instead of raw HTML. (4) Move process.exit(1) from hxFetch to the top-level entry point in index.ts.",
+      "evidence": [
+        "src/lib/http.ts:30 — bare fetch with no AbortSignal",
+        "src/lib/http.ts:35 — process.exit(1) prevents any retry",
+        "src/login.ts:100-103 — login command already uses AbortSignal.timeout (120s)",
+        "wait-retry.ts (server) — 3 attempts, 2000ms base, exponential backoff + jitter pattern"
+      ]
+    },
+    {
+      "answer": "Centralized in hxFetch (src/lib/http.ts). Every command (db, logs, api, repos) calls hxFetch via either direct call or resolveRepo → listRepos. Centralizing ensures all paths benefit automatically with consistent behavior.",
+      "evidence": [
+        "src/inspect/logs.ts:9 — calls hxFetch",
+        "src/inspect/db.ts:7 — calls hxFetch",
+        "src/inspect/api.ts:7 — calls hxFetch",
+        "src/lib/resolve-repo.ts:7 — listRepos calls hxFetch"
+      ]
+    },
+    {
+      "answer": "30 seconds. The server has a 15s external query timeout and will add retry (up to ~25s total for 3 attempts). 30s allows the server to complete its retry cycle before the CLI times out. Login uses 120s (includes human interaction) which is too long for queries.",
+      "evidence": [
+        "inspection-proxy-service.ts:228 — 15s AbortSignal.timeout for ClickHouse",
+        "Server retry: 3 attempts with 2s+4s backoff = ~21s worst case",
+        "src/login.ts:100 — 120s timeout (includes browser auth flow)"
+      ]
+    },
+    {
+      "answer": "Move process.exit(1) from hxFetch to the top-level CLI entry point (src/index.ts). hxFetch throws errors instead. Add try/catch in index.ts around the switch statement. Keep the process.exit(1) in resolve-repo.ts line 32 for the 'repo not found' case (usage error, not transient).",
+      "evidence": [
+        "src/lib/http.ts:35 — process.exit(1) prevents retry at any level",
+        "src/index.ts — CLI entry point, natural place for top-level error handling",
+        "src/lib/resolve-repo.ts:31 — own process.exit(1) for repo-not-found (keep)"
+      ]
+    }
+  ],
+  "statement": "The hx-cli implementation plan has 4 steps: (1) rewrite hxFetch with timeout, retry, error classification, and HTML detection, (2) update resolve-repo.ts error handling, (3) add top-level error handler in index.ts, (4) run quality gates. Zero new dependencies; all APIs available in Node.js >=18.",
+  "followups": []
+}

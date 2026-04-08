@@ -21,23 +21,28 @@ Usage:
   process.exit(1);
 }
 
-switch (command) {
-  case "login":
-    await runLogin(args.slice(1));
-    break;
+try {
+  switch (command) {
+    case "login":
+      await runLogin(args.slice(1));
+      break;
 
-  case "inspect": {
-    const config = requireConfig();
-    await runInspect(config, args.slice(1));
-    break;
+    case "inspect": {
+      const config = requireConfig();
+      await runInspect(config, args.slice(1));
+      break;
+    }
+
+    case "--version":
+    case "-v":
+      console.log("0.1.0");
+      break;
+
+    default:
+      if (command) console.error(`Unknown command: ${command}`);
+      usage();
   }
-
-  case "--version":
-  case "-v":
-    console.log("0.1.0");
-    break;
-
-  default:
-    if (command) console.error(`Unknown command: ${command}`);
-    usage();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }

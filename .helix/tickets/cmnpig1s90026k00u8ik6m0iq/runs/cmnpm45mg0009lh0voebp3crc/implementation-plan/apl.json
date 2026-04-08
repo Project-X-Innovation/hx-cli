@@ -1,0 +1,26 @@
+{
+  "questions": [
+    "Does the hx-cli source code need any changes?",
+    "What is the correct action for the hx-cli in this ticket?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The source code already has complete retry logic (MAX_ATTEMPTS=3, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES=[429,500,502,503,504], HTML error detection, exponential backoff with jitter, 429 Retry-After support, error classification). The deployed npm package has the old code. Only a rebuild and version bump are needed.",
+      "evidence": [
+        "hx-cli/src/lib/http.ts: Full retry logic with MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000.",
+        "Diagnosis: deployed dist/lib/http.js has bare fetch() + process.exit(1), no retry.",
+        "Both package.json files show version 1.2.0 — source bumped but never published."
+      ]
+    },
+    {
+      "answer": "Bump the version from 1.2.0 to 1.2.1 in package.json, then run npm run build (tsc) to compile the source to dist/. The built dist/lib/http.js will contain the retry/timeout/error-handling code. Publishing to npm requires credentials/CI and is a deployment concern outside this ticket's code changes.",
+      "evidence": [
+        "package.json: version 1.2.0, build script is 'tsc'.",
+        "Tech-research: 'The source code is already correct and complete. The dist/lib/http.js in the published package simply needs to match the source.'",
+        "Tech-research: 'Version bump to distinguish from unpublished 1.2.0.'"
+      ]
+    }
+  ],
+  "statement": "The hx-cli requires no source code changes. Bump version to 1.2.1 and rebuild (npm run build) so the dist/ output contains the retry/timeout/error-handling logic already present in source. Three verification checks: typecheck passes, build succeeds, and dist/lib/http.js contains retry constants (MAX_ATTEMPTS, RETRYABLE_STATUS_CODES, AbortSignal.timeout) without process.exit.",
+  "followups": []
+}

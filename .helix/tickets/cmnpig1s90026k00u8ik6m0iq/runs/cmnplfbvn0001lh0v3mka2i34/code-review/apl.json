@@ -1,0 +1,28 @@
+{
+  "questions": [
+    "Does hxFetch correctly implement request timeout, retry with exponential backoff, and error classification?",
+    "Does the HTML response detection work correctly?",
+    "Is the error propagation correct after removing process.exit(1) from http.ts?",
+    "Does the retry include the right set of retryable status codes?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. AbortSignal.timeout(30_000) prevents hangs. Retry loop runs up to 3 attempts with exponential backoff (2s base + jitter). Network errors (TypeError, TimeoutError, AbortError) are classified as retryable; formatted errors from non-retryable responses are thrown immediately.",
+      "evidence": ["src/lib/http.ts:5-6 (constants)", "src/lib/http.ts:66-72 (retry loop + timeout)", "src/lib/http.ts:91-93 (retryable response handling)", "src/lib/http.ts:111-113 (network error retry)"]
+    },
+    {
+      "answer": "Yes. buildErrorMessage checks content-type for text/html and returns a clear message instead of raw HTML. Non-HTML responses include the first 500 chars of the body.",
+      "evidence": ["src/lib/http.ts:28-35"]
+    },
+    {
+      "answer": "Yes. Errors thrown by hxFetch propagate to the top-level try/catch in index.ts, which prints the message and calls process.exit(1). resolve-repo.ts wraps listRepos errors with descriptive context. The repo-not-found path still uses process.exit(1) directly (correct for usage errors).",
+      "evidence": ["src/index.ts:24-48 (top-level try/catch)", "src/lib/resolve-repo.ts:13-17 (listRepos error wrapping)", "src/lib/resolve-repo.ts:36 (repo-not-found exit)"]
+    },
+    {
+      "answer": "Yes. RETRYABLE_STATUS_CODES includes [429, 500, 502, 503, 504]. The inclusion of 500 is correct because the server now returns 500 instead of 502 for external failures, and 500 can represent transient conditions. This was explicitly decided in tech-research.",
+      "evidence": ["src/lib/http.ts:6", "tech-research/tech-research.md (hx-cli) recommends including 500"]
+    }
+  ],
+  "statement": "Reviewed all 3 changed files in hx-cli. No issues found. The implementation correctly adds timeout, retry, error classification, HTML detection, and top-level error handling per the product spec. TypeScript compiles with zero errors.",
+  "followups": []
+}

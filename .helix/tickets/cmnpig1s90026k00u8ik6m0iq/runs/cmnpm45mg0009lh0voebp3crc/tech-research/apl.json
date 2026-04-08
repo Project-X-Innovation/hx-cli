@@ -1,0 +1,28 @@
+{
+  "questions": [
+    "Does the hx-cli source code need any changes for this ticket?",
+    "What is the relationship between CLI retry logic and the server's 422 status code?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The source code already has complete retry logic (MAX_ATTEMPTS=3, REQUEST_TIMEOUT_MS=30000, RETRYABLE_STATUS_CODES=[429,500,502,503,504], HTML error detection, exponential backoff with jitter, 429 Retry-After support). The deployed npm package @projectxinnovation/helix-cli@1.2.0 has the old pre-hardening code. The only action needed is to rebuild and republish the package.",
+      "evidence": [
+        "hx-cli/src/lib/http.ts: Full retry logic with MAX_ATTEMPTS=3, BASE_DELAY_MS=2000, REQUEST_TIMEOUT_MS=30000.",
+        "hx-cli/src/lib/http.ts:6: RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]).",
+        "hx-cli/src/lib/http.ts:28-34: buildErrorMessage checks content-type for text/html and provides clear message.",
+        "hx-cli/src/lib/http.ts:66-125: Full retry loop with backoff, error classification, timeout.",
+        "Diagnosis: deployed dist/lib/http.js has bare fetch() + process.exit(1), no retry, no timeout."
+      ]
+    },
+    {
+      "answer": "The server will use HTTP 422 for deterministic query errors (bad SQL, missing table). The CLI's RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504] already excludes 422, so deterministic errors will fail fast without wasted retry attempts. This alignment works without any CLI code changes. HTTP 500 (unexpected server errors, potentially transient) IS retried by the CLI, which is correct behavior.",
+      "evidence": [
+        "hx-cli/src/lib/http.ts:6: RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]) — 422 is not included.",
+        "helix-global-server tech-research (this run): Decision 2 directs HTTP 422 for deterministic query errors.",
+        "hx-cli/src/lib/http.ts:91-94: isRetryableResponse(response) check controls retry — 422 will be false, triggering immediate error."
+      ]
+    }
+  ],
+  "statement": "The hx-cli requires no source code changes. All retry, timeout, and error handling logic already exists in source but was never published to npm. The only action is to rebuild and republish the package. The CLI's existing RETRYABLE_STATUS_CODES already aligns with the server's planned 422 status code for deterministic query errors (422 is not retried), achieving correct fail-fast behavior without modification.",
+  "followups": []
+}
