@@ -2,73 +2,59 @@
 
 ## Review Scope
 
-Reviewed all CLI changes for the bidirectional mid-run discussion feature: HTTP client generalization with `basePath` parameter, `comments list` and `comments post` commands, ticket ID resolution, and CLI entry point registration.
+Reviewed the single changed file (`post.ts`) for correct removal of hardcoded `isHelixTagged: true`. Cross-referenced against ticket requirements, product spec, and implementation plan.
 
 ## Files Reviewed
 
-| File | Review Focus |
-|------|-------------|
-| `src/lib/http.ts` (line 40-44) | `basePath` option with `/api/inspect` default; URL construction |
-| `src/comments/index.ts` | `runComments` dispatcher; `resolveTicketId` (--ticket flag or HELIX_TICKET_ID env) |
-| `src/comments/list.ts` | GET request, --helix-only and --since client-side filtering, output formatting |
-| `src/comments/post.ts` | POST request with isHelixTagged=true, positional arg extraction |
-| `src/index.ts` | `comments` case in switch router, usage text update |
+| File | Verdict | Notes |
+|------|---------|-------|
+| `src/comments/post.ts` (line 32) | Correct | `body: { content: message, isHelixTagged: true }` changed to `body: { content: message }`. The CLI now sends only the comment content, letting the server determine attribution based on auth identity. |
 
 ## Missed Requirements & Issues Found
 
 ### Requirements Gaps
+None found. The CLI no longer overrides Helix tagging, matching product spec feature 5.
 
-None. All product spec MVP features targeted at the CLI are implemented: `hlx comments list` and `hlx comments post` with ticket ID from flag or env var.
-
-### Correctness/Behavior Issues
-
-None found. The implementation is correct:
-- `basePath` parameter in `hxFetch` defaults to `/api/inspect` for backward compatibility.
-- `resolveTicketId` correctly prioritizes --ticket flag, then HELIX_TICKET_ID env var, then exits with error.
-- `cmdList` correctly fetches, filters, and formats comments.
-- `cmdPost` correctly extracts the message from positional args, skipping known flags.
-- CLI entry point routes `comments` subcommand correctly.
+### Correctness / Behavior Issues
+None found.
 
 ### Regression Risks
+None found. The change is safe regardless of deployment order:
+- With new server: Server correctly determines `isHelixTagged` and `isAgentAuthored` from auth identity.
+- With old server: `isHelixTagged` defaults to `false` on the server side; external CLI users no longer incorrectly tagged as Helix.
 
-None. The `basePath` parameter is additive with a backward-compatible default. Existing `inspect` commands are unaffected.
+### Code Quality / Robustness
+No issues.
 
-### Code Quality/Robustness
-
-- `post.ts` skips `--since` flag in its positional arg parser (line 13) even though `--since` is a `list`-only flag. This is harmless — it prevents a hypothetical misuse from breaking the message, but it's an unnecessary guard. Not worth changing.
-- Zero new runtime dependencies maintained. Good.
-
-### Verification/Test Gaps
-
-- End-to-end testing of `hlx comments list` and `hlx comments post` against the running server was blocked (requires CLI login). Documented as known limitation. The server API was verified via curl independently.
+### Verification / Test Gaps
+None.
 
 ## Changes Made by Code Review
 
-None. No issues requiring fixes were found in the CLI code.
+None. No code fixes were needed.
 
 ## Remaining Risks / Deferred Items
 
-1. `hlx comments post` always sets `isHelixTagged: true`. External CLI users cannot post non-Helix-tagged comments via CLI. Acceptable for MVP since the primary CLI use case is agent responses.
+None.
 
 ## Verification Impact Notes
 
-No verification checks are affected. CHK-01 through CHK-04 from the CLI verification plan remain valid.
+No verification checks are affected by Code Review. All checks remain valid:
+- CHK-01 (typecheck): Still valid
+- CHK-02 (build): Still valid
+- CHK-03 (CLI end-to-end): Still valid
 
 ## APL Statement Reference
 
-See code-review/apl.json.
+Reviewed post.ts for removal of hardcoded isHelixTagged. Correct. No issues found. No code fixes made. Typecheck and build pass.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md | Feature requirements | CLI as two-for-one mechanism for agents and external users |
-| product/product.md | Product scope | hlx comments list and hlx comments post; HELIX_TICKET_ID env var |
-| implementation-plan/implementation-plan.md (CLI) | Plan reference | 6 steps: http, dispatcher, list, post, register, gates |
-| implementation/implementation-actual.md (CLI) | Scope map | 5 files changed; all steps completed |
-| implementation/apl.json (CLI) | Implementation evidence | Confirmed basePath backward compatibility |
-| src/lib/http.ts | HTTP client review | basePath default correct; URL construction correct |
-| src/comments/index.ts | Dispatcher review | Ticket ID resolution correct |
-| src/comments/list.ts | List command review | Filtering and formatting correct |
-| src/comments/post.ts | Post command review | Message extraction and API call correct |
-| src/index.ts | Entry point review | Command routing correct |
+| implementation/implementation-actual.md (CLI) | Scope map | 1 file changed; isHelixTagged removed from body |
+| implementation-plan/implementation-plan.md (CLI) | Cross-check | Single line change at post.ts:33 |
+| product/product.md | Requirements validation | "CLI stops overriding Helix tagging" |
+| ticket.md | Original requirements | Server determines identity; CLI is communication channel |
+| Continuation context | User clarification | External CLI users must appear as themselves |
+| src/comments/post.ts (direct read) | Verify the change | body now contains only { content: message } |

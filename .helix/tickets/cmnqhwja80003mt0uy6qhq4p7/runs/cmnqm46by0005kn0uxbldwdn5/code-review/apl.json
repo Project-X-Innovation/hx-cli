@@ -1,26 +1,13 @@
 {
   "questions": [
-    "Q1: Are all CLI changes correct and backward-compatible?",
-    "Q2: Does the ticket ID resolution work for both agents and external users?"
+    "Is the hardcoded isHelixTagged: true removed from the CLI POST body?"
   ],
   "answers": [
     {
-      "answer": "Yes. hxFetch basePath defaults to /api/inspect preserving backward compatibility. Comments list and post commands correctly use basePath: /api. CLI entry point routes the comments subcommand. Typecheck and build pass.",
-      "evidence": [
-        "src/lib/http.ts line 43: const base = options.basePath ?? '/api/inspect'",
-        "src/comments/list.ts line 26: basePath: '/api'",
-        "src/comments/post.ts line 34: basePath: '/api'",
-        "src/index.ts lines 39-43: case 'comments' dispatches to runComments"
-      ]
-    },
-    {
-      "answer": "Yes. resolveTicketId in src/comments/index.ts checks --ticket flag first, then HELIX_TICKET_ID env var, then exits with a clear error message. Agents in sandboxes will have HELIX_TICKET_ID set by the orchestrator; external users can pass --ticket explicitly.",
-      "evidence": [
-        "src/comments/index.ts lines 11-19: resolveTicketId checks flag, then env var, then exits",
-        "src/helix-workflow/orchestrator.ts line 1166: export HELIX_TICKET_ID in sandbox env.sh"
-      ]
+      "answer": "Yes. The body at line 32 now contains only { content: message }. The isHelixTagged field is no longer sent by the CLI.",
+      "evidence": ["src/comments/post.ts:31-33"]
     }
   ],
-  "statement": "CLI code review complete. All changes are correct: hxFetch generalization, comments list/post commands, ticket ID resolution. No issues found; no changes needed.",
+  "statement": "CLI review complete. Hardcoded isHelixTagged correctly removed. No issues found. No code fixes needed. Typecheck and build pass.",
   "followups": []
 }
