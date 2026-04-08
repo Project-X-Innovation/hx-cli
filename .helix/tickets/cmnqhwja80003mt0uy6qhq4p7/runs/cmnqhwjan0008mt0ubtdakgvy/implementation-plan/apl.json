@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Q1: What is the correct implementation sequence for CLI changes?",
+    "Q2: How should the HTTP client be generalized without breaking existing callers?",
+    "Q3: How should ticket ID resolution work in both sandbox and external contexts?"
+  ],
+  "answers": [
+    {
+      "answer": "HTTP client generalization (C1) must come first since comment commands depend on it. Command dispatcher (C2) next since list and post commands reference it. List (C3) and post (C4) commands can be implemented in parallel. CLI entry point registration (C5) depends on the dispatcher existing. Quality gates (C6) run last.",
+      "evidence": [
+        "src/lib/http.ts line 43: hxFetch URL construction must be updated before comment commands can use it",
+        "src/index.ts lines 24-44: switch router needs the comments dispatcher imported",
+        "src/inspect/index.ts: subcommand pattern provides the template for C2"
+      ]
+    },
+    {
+      "answer": "Add an optional basePath parameter to hxFetch's options object, defaulting to '/api/inspect'. This is a one-line change to URL construction. All existing callers (inspect commands) pass no basePath and get the default behavior. Comment commands pass basePath: '/api' to target /api/tickets/:id/comments endpoints.",
+      "evidence": [
+        "src/lib/http.ts line 40: options object already exists with method, body, queryParams",
+        "src/lib/http.ts line 43: URL is constructed as config.url + '/api/inspect' + path",
+        "tech-research/tech-research.md: Option A chosen for HTTP client"
+      ]
+    },
+    {
+      "answer": "Ticket ID resolution priority: (1) --ticket flag value, (2) HELIX_TICKET_ID environment variable, (3) error message and exit. In sandboxes, the server orchestrator injects HELIX_TICKET_ID into env.sh, so agents never need to pass --ticket. External CLI users always pass --ticket explicitly. The resolution function is implemented in the comments dispatcher, not in the config system.",
+      "evidence": [
+        "src/lib/config.ts: env var loading pattern for auth; ticket ID follows same pattern but stays in comments module",
+        "Server orchestrator.ts lines 1158-1164: env.sh will be updated to include HELIX_TICKET_ID",
+        "tech-research/tech-research.md: Option A chosen (flag + env var)"
+      ]
+    }
+  ],
+  "statement": "The CLI implementation plan covers 6 ordered steps: generalize hxFetch with basePath parameter, create comments command dispatcher with ticket ID resolution, implement list and post subcommands, register in CLI entry point, and verify quality gates. All changes maintain zero runtime dependencies and follow existing subcommand patterns.",
+  "followups": []
+}
