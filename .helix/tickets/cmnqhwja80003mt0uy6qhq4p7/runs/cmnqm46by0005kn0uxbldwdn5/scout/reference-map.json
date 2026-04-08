@@ -1,57 +1,50 @@
 {
-  "problem": "The Helix CLI currently has no commands for reading or writing ticket comments/discussion. The ticket requires adding CLI capabilities so that both sandbox agents and external CLI users can read @Helix-tagged comments and respond. The CLI must also support identity-aware commenting (Helix agent vs logged-in user).",
+  "problem": "The CLI's 'hlx comments post' command unconditionally sets isHelixTagged=true on every comment (post.ts:33), regardless of who is posting. This means any external user commenting via the CLI wrongly has their comment marked as Helix-tagged. Additionally, the CLI stores no user identity information — only apiKey and url — so there is no local signal to determine whether the current user is a Helix sandbox agent or an external human user.",
   "files": [
     {
-      "path": "src/index.ts",
-      "why": "Main CLI entry point and command router. New comment commands (e.g., hlx comments read, hlx comments write) must be registered here via the switch statement on process.argv[2].",
-      "lines": "1-48"
+      "path": "src/comments/post.ts",
+      "why": "Line 33: hardcoded { content: message, isHelixTagged: true } — always tags comments as Helix regardless of who posts."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Comment list display: isAgentAuthored → shows 'Helix' as author (line 48-49). Filters: --helix-only (isHelixTagged), --since (date)."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comments subcommand router — dispatches to list/post, resolves ticketId from args or HELIX_TICKET_ID env var."
     },
     {
       "path": "src/lib/config.ts",
-      "why": "Configuration loading (env vars HELIX_API_KEY / HELIX_INSPECT_TOKEN / HELIX_URL, plus ~/.hlx/config.json). Agents in sandboxes receive HELIX_INSPECT_TOKEN + HELIX_INSPECT_BASE_URL. New comment commands need config to authenticate.",
-      "lines": "1-47"
+      "why": "Auth config: env vars HELIX_API_KEY/HELIX_INSPECT_TOKEN take priority over ~/.hlx/config.json. Stores only { apiKey, url } — no user identity."
     },
     {
       "path": "src/lib/http.ts",
-      "why": "HTTP client (hxFetch) that all server calls route through. Currently hardcodes base path to /api/inspect. Comment endpoints are at /api/tickets/:ticketId/comments which is a different path prefix. The hxFetch function or a new HTTP helper will need to support non-inspect API paths.",
-      "lines": "37-44"
+      "why": "HTTP client: hxi_ keys sent via X-API-Key header, others via Bearer. Supports configurable basePath parameter."
     },
     {
       "path": "src/login.ts",
-      "why": "OAuth and manual login flow. Determines how external CLI users authenticate. The identity of the caller (user vs Helix agent) is tied to the auth method: env var HELIX_INSPECT_TOKEN (sandbox agent) vs ~/.hlx/config.json (logged-in user)."
+      "why": "OAuth browser flow + manual mode. Saves { apiKey, url } to ~/.hlx/config.json. No user ID, name, or agent type stored."
     },
     {
-      "path": "src/inspect/index.ts",
-      "why": "Inspect command dispatcher with getFlag/getPositionalArgs utilities. The new comment commands may follow a similar pattern or be a sibling top-level command."
-    },
-    {
-      "path": "package.json",
-      "why": "Package metadata, scripts (build: tsc, typecheck: tsc --noEmit). No test or lint scripts. Version 1.2.0. Zero runtime dependencies."
-    },
-    {
-      "path": "tsconfig.json",
-      "why": "TypeScript config (ES2022, Node16 modules). Build target for new command files."
+      "path": "src/index.ts",
+      "why": "CLI entry point — routes 'comments' subcommand with ticketId from HELIX_TICKET_ID env var or --ticket flag."
     }
   ],
   "facts": [
-    "CLI version 1.2.0, published as @projectxinnovation/helix-cli",
-    "CLI binary is 'hlx', registered in package.json bin field",
-    "Command routing uses simple process.argv switch (no framework like commander/yargs)",
-    "hxFetch() hardcodes base path as /api/inspect — comment endpoints at /api/tickets/:id/comments are outside this prefix",
-    "Authentication priority: env vars (HELIX_API_KEY or HELIX_INSPECT_TOKEN or HELIX_INSPECT_API_KEY) > file (~/.hlx/config.json)",
-    "API key detection: keys starting with 'hxi_' use X-API-Key header; others use Bearer token",
-    "Sandbox agents get HELIX_INSPECT_TOKEN (scoped JWT with aud='helix-inspect') and HELIX_INSPECT_BASE_URL via /tmp/helix-inspect/env.sh",
-    "CLI is installed in sandbox at /vercel/sandbox/helix-workflow-step-agent/node_modules/@projectxinnovation/helix-cli and symlinked to PATH",
-    "Zero runtime dependencies; only devDependencies are typescript and @types/node",
-    "No test framework or lint tooling configured",
-    "No existing comment/discussion/mention commands — all must be added",
-    "HTTP client has retry (3 attempts), timeout (30s), and exponential backoff"
+    "hlx comments post hardcodes isHelixTagged: true (post.ts:33) — every CLI-posted comment is Helix-tagged regardless of who posts.",
+    "hlx comments list already supports --helix-only and --since filters (list.ts:31-39).",
+    "CLI config stores only { apiKey, url } (config.ts:6-8) — no user identity, no agent type flag.",
+    "Env var priority: HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for apiKey (config.ts:15).",
+    "Sandbox agents get HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL env vars from orchestrator (config.ts:15-16 reads these).",
+    "HELIX_TICKET_ID env var is available in sandbox and used by comments/index.ts to resolve ticketId.",
+    "hxFetch supports configurable basePath — comment commands use basePath: '/api' (post.ts:34, list.ts:26).",
+    "hxi_ keys use X-API-Key header; other tokens use Authorization: Bearer header (http.ts).",
+    "Build/quality: npm run build (tsc), npm run typecheck (tsc --noEmit). No lint or test commands.",
+    "Zero runtime dependencies; CLI binary is 'hlx'."
   ],
   "unknowns": [
-    "Whether the scoped inspection JWT (aud='helix-inspect') will be accepted by the comment API endpoints, or if a new token type/scope is needed",
-    "Whether hxFetch should be generalized to support non-/api/inspect paths, or if a separate HTTP function should be created for comment endpoints",
-    "What ticket ID context is available to agents in sandboxes (ticket ID is in run artifacts at ticket.md but not currently exposed as an env var)",
-    "Whether comment commands should support filtering (e.g., only @Helix-tagged, only since a timestamp)",
-    "How the CLI should identify itself as 'Helix' vs a specific user when posting comments from the sandbox"
+    "Whether isHelixTagged on post should be conditionally set based on some signal (e.g., detecting sandbox agent context via HELIX_INSPECT_TOKEN env var, or server-side determination).",
+    "Whether the CLI should stop sending isHelixTagged entirely and let the server determine it based on the auth identity.",
+    "Whether the CLI login flow should store user identity (name/email/id) in config so it can be displayed or sent with requests."
   ]
 }
