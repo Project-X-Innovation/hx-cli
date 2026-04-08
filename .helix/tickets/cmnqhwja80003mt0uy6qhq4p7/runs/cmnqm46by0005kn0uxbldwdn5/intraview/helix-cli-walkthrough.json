@@ -1,0 +1,31 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Remove Hardcoded isHelixTagged from CLI Post Command",
+  "description": "This tour walks through the removal of the hardcoded `isHelixTagged: true` field from the CLI's comment-posting command. Previously, every comment posted via `hlx comments post` was unconditionally marked as Helix-tagged, regardless of who the caller was. This was incorrect for external CLI users whose comments were wrongly attributed as Helix-originated. The fix delegates attribution entirely to the server, which determines `isHelixTagged` and `isAgentAuthored` based on the caller's auth identity (JWT claim `isHelixAgent` for sandbox agents, API key resolution for external users).",
+  "steps": [
+    {
+      "file": "src/comments/post.ts",
+      "line": 31,
+      "description": "This is the `hlx comments post` command handler that constructs and sends the HTTP POST request to the Helix comments API. Before this change, line 33 included `isHelixTagged: true` unconditionally in the request body. This meant any caller — whether a Helix sandbox agent or an ordinary external developer using the CLI — would have their comments flagged as Helix-tagged on the server. The root cause was a shortcut from the CLI's initial design when it was assumed to be used only by sandbox agents.",
+      "title": "Overview: The POST body before the fix"
+    },
+    {
+      "file": "src/comments/post.ts",
+      "line": 32,
+      "description": "The body sent to the server is now `{ content: message }` — the `isHelixTagged: true` field has been removed entirely. This is the single-line change that resolves the bug. Data flow after this change: (1) CLI sends only the comment text. (2) Server receives the request and inspects the auth credential — inspection JWTs with `isHelixAgent: true` cause the server to force `isHelixTagged=true` and `isAgentAuthored=true`; API key auth causes the server to default both fields to `false`. The server is now the sole source of truth for attribution, which is correct by design.",
+      "title": "The Fix: Send only { content: message }"
+    },
+    {
+      "file": "src/comments/post.ts",
+      "line": 33,
+      "description": "This change is safe to deploy independently of the server-side identity fix. If the CLI change ships first: the server defaults `isHelixTagged` to `false` when the field is absent (server-side fallback), so external users' comments correctly lose the Helix tag immediately. Sandbox agents' comments still receive `isHelixTagged=true` because the old server treats all inspection auth as agent-authored and forces the flag on line 77 of the server controller. There is no functional breakage in either deployment order. Typecheck and build both pass (exit 0) with this change in place.",
+      "title": "Deployment Safety: No breaking order dependency"
+    },
+    {
+      "file": "src/comments/post.ts",
+      "line": 32,
+      "description": "After this change the major code path through `hlx comments post` is clean: the CLI collects the user's message, authenticates via stored API key or inspection JWT, and POSTs `{ content: message }` to the configured Helix URL. All attribution logic (isHelixTagged, isAgentAuthored, createdByUserId) is resolved server-side from the auth credential. No CLI flags, no local identity storage, and no new commands were needed. TypeScript typecheck passes, the build is clean, and an integration curl test confirmed the server returns `isHelixTagged: false, isAgentAuthored: false` for an external API key caller — exactly the intended behavior.",
+      "title": "Summary: Clean code path confirmed"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "questions": [
+    "Is the hardcoded isHelixTagged: true removed from the CLI POST body?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The body at line 32 now contains only { content: message }. The isHelixTagged field is no longer sent by the CLI.",
+      "evidence": ["src/comments/post.ts:31-33"]
+    }
+  ],
+  "statement": "CLI review complete. Hardcoded isHelixTagged correctly removed. No issues found. No code fixes needed. Typecheck and build pass.",
+  "followups": []
+}

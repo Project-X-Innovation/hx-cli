@@ -1,0 +1,50 @@
+{
+  "problem": "The CLI's 'hlx comments post' command unconditionally sets isHelixTagged=true on every comment (post.ts:33), regardless of who is posting. This means any external user commenting via the CLI wrongly has their comment marked as Helix-tagged. Additionally, the CLI stores no user identity information — only apiKey and url — so there is no local signal to determine whether the current user is a Helix sandbox agent or an external human user.",
+  "files": [
+    {
+      "path": "src/comments/post.ts",
+      "why": "Line 33: hardcoded { content: message, isHelixTagged: true } — always tags comments as Helix regardless of who posts."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Comment list display: isAgentAuthored → shows 'Helix' as author (line 48-49). Filters: --helix-only (isHelixTagged), --since (date)."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comments subcommand router — dispatches to list/post, resolves ticketId from args or HELIX_TICKET_ID env var."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Auth config: env vars HELIX_API_KEY/HELIX_INSPECT_TOKEN take priority over ~/.hlx/config.json. Stores only { apiKey, url } — no user identity."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client: hxi_ keys sent via X-API-Key header, others via Bearer. Supports configurable basePath parameter."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "OAuth browser flow + manual mode. Saves { apiKey, url } to ~/.hlx/config.json. No user ID, name, or agent type stored."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point — routes 'comments' subcommand with ticketId from HELIX_TICKET_ID env var or --ticket flag."
+    }
+  ],
+  "facts": [
+    "hlx comments post hardcodes isHelixTagged: true (post.ts:33) — every CLI-posted comment is Helix-tagged regardless of who posts.",
+    "hlx comments list already supports --helix-only and --since filters (list.ts:31-39).",
+    "CLI config stores only { apiKey, url } (config.ts:6-8) — no user identity, no agent type flag.",
+    "Env var priority: HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for apiKey (config.ts:15).",
+    "Sandbox agents get HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL env vars from orchestrator (config.ts:15-16 reads these).",
+    "HELIX_TICKET_ID env var is available in sandbox and used by comments/index.ts to resolve ticketId.",
+    "hxFetch supports configurable basePath — comment commands use basePath: '/api' (post.ts:34, list.ts:26).",
+    "hxi_ keys use X-API-Key header; other tokens use Authorization: Bearer header (http.ts).",
+    "Build/quality: npm run build (tsc), npm run typecheck (tsc --noEmit). No lint or test commands.",
+    "Zero runtime dependencies; CLI binary is 'hlx'."
+  ],
+  "unknowns": [
+    "Whether isHelixTagged on post should be conditionally set based on some signal (e.g., detecting sandbox agent context via HELIX_INSPECT_TOKEN env var, or server-side determination).",
+    "Whether the CLI should stop sending isHelixTagged entirely and let the server determine it based on the auth identity.",
+    "Whether the CLI login flow should store user identity (name/email/id) in config so it can be displayed or sent with requests."
+  ]
+}
