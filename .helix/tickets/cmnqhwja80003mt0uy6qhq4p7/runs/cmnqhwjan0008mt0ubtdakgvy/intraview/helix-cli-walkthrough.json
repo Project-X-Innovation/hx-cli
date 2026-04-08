@@ -1,0 +1,55 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "helix-cli: Add Comments Commands (hlx comments list/post)",
+  "description": "This tour walks through the addition of bidirectional mid-run discussion support to the Helix CLI. The changes add two new commands — `hlx comments list` and `hlx comments post` — enabling sandbox agents and external CLI users to read and write ticket comments. The implementation required generalizing the HTTP client to support non-inspect API paths (via an optional `basePath` parameter), creating a new `comments` command group following the existing `inspect` subcommand dispatch pattern, adding ticket ID resolution from either a `--ticket` flag or the `HELIX_TICKET_ID` environment variable, and registering the new command group in the CLI entry point. Zero new runtime dependencies were introduced.",
+  "steps": [
+    {
+      "file": "src/lib/http.ts",
+      "line": 43,
+      "description": "OVERVIEW STOP — Before any comment commands could exist, the HTTP client needed surgery. `hxFetch` previously hardcoded `/api/inspect` in its URL construction, making every comment endpoint (which live under `/api/tickets/:id/comments`) completely unreachable. This is the root blocker identified in the diagnosis. The fix is a single-line change: extract `basePath` from the options object (defaulting to `'/api/inspect'`) and interpolate it instead of the literal string. All existing `inspect` callers are unaffected because they never pass `basePath` and therefore always get the original default. Comment commands pass `basePath: '/api'` to reach the correct endpoints. This change had to land first because every subsequent step depends on it.",
+      "title": "Overview: Why HTTP Client Had to Change First"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 40,
+      "description": "The `basePath?: string` field is added to the options parameter of `hxFetch`. Data flow: the caller (e.g. `cmdList` or `cmdPost`) passes `basePath: '/api'` inside the options object → `hxFetch` reads `options.basePath ?? '/api/inspect'` → the resolved base is concatenated with `config.url` and the route `path` to form the final URL. Because the field is optional with a backward-compatible default, all pre-existing `inspect` commands continue to work without modification. The auth-header logic (`hxi_` token detection) is unchanged and works for both inspect and comment endpoints.",
+      "title": "C1: basePath Option Added to hxFetch"
+    },
+    {
+      "file": "src/comments/index.ts",
+      "line": 11,
+      "description": "`resolveTicketId` is the gatekeeper for every comment command. It implements a strict priority chain: (1) check the `--ticket` CLI flag, (2) fall back to the `HELIX_TICKET_ID` environment variable injected by the server orchestrator into the sandbox `env.sh`, (3) print a clear error and exit if neither is present. This dual-resolution design means sandbox agents never need to pass `--ticket` (the orchestrator sets the env var automatically), while external CLI users always pass it explicitly. The function exits early with a user-friendly message rather than propagating an undefined value into URL construction.",
+      "title": "C2: resolveTicketId — Flag, Env Var, or Exit"
+    },
+    {
+      "file": "src/comments/index.ts",
+      "line": 1,
+      "description": "The `runComments` function is the top-level dispatcher for the `comments` command group, mirroring the existing `inspect/index.ts` pattern. It reads the subcommand from `args[0]`, calls `resolveTicketId` to obtain the ticket ID, then delegates to `cmdList` or `cmdPost` accordingly. Unrecognized subcommands print usage and exit. This single dispatcher is what the CLI entry point (`src/index.ts`) imports — keeping the router clean and the comments logic fully encapsulated in its own directory.",
+      "title": "C2: Comments Subcommand Dispatcher"
+    },
+    {
+      "file": "src/comments/list.ts",
+      "line": 26,
+      "description": "`cmdList` issues a GET request to `/tickets/:ticketId/comments` by passing `basePath: '/api'` to `hxFetch`. This is where the HTTP client generalization pays off: the same `hxFetch` function that inspect commands use now targets a completely different path prefix. After fetching, the response is filtered client-side: `--helix-only` keeps only comments where `isHelixTagged === true`, and `--since` drops comments older than the provided ISO timestamp. Results are formatted and printed to stdout. Data flow: `resolveTicketId` → ticket ID in URL → `hxFetch` with `basePath: '/api'` → filter → print.",
+      "title": "C3: hlx comments list — Fetching with basePath '/api'"
+    },
+    {
+      "file": "src/comments/post.ts",
+      "line": 34,
+      "description": "`cmdPost` extracts the comment message from positional arguments (skipping known flag names) and issues a POST to `/tickets/:ticketId/comments` with `isHelixTagged: true` in the request body. The `basePath: '/api'` option is passed to `hxFetch` identically to `cmdList`. Hardcoding `isHelixTagged: true` ensures that comments posted by the CLI (both by agents and external users invoking `hlx`) are always identifiable as Helix-originated, which is necessary for the `--helix-only` filter in `cmdList` to work correctly.",
+      "title": "C4: hlx comments post — Writing Comments as Helix-Tagged"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 39,
+      "description": "The main CLI switch router gains a `case 'comments':` branch that imports and calls `runComments(args.slice(1))`. This is the last wiring step: `hlx comments list` and `hlx comments post` are now reachable from the top-level CLI. The usage text is also updated to document the new command group. No existing cases (`login`, `inspect`, `--version`) were modified — the change is purely additive, confirming zero regression risk to existing command paths.",
+      "title": "C5: CLI Entry Point Registers the 'comments' Command"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 43,
+      "description": "SUMMARY STOP — The implementation is complete and clean. The HTTP client generalization is backward-compatible (default `'/api/inspect'` unchanged). The `inspect` command family is untouched. The `comments` command group is fully encapsulated in `src/comments/`. Ticket ID resolution handles both sandbox (env var) and external (flag) contexts with a clear error for the missing-both case. The CLI router addition is a single new `case` with no side effects on existing cases. TypeScript typecheck and build pass. Zero new runtime dependencies were introduced throughout.",
+      "title": "Summary: All Major Code Paths Remain Clean"
+    }
+  ]
+}

@@ -37,10 +37,11 @@ async function buildErrorMessage(response: Response): Promise<string> {
 export async function hxFetch(
   config: HxConfig,
   path: string,
-  options: { method?: string; body?: Record<string, unknown>; queryParams?: Record<string, string> } = {},
+  options: { method?: string; body?: Record<string, unknown>; queryParams?: Record<string, string>; basePath?: string } = {},
 ): Promise<unknown> {
   const method = options.method ?? "GET";
-  const url = new URL(`${config.url}/api/inspect${path}`);
+  const base = options.basePath ?? "/api/inspect";
+  const url = new URL(`${config.url}${base}${path}`);
 
   if (options.queryParams) {
     for (const [key, value] of Object.entries(options.queryParams)) {

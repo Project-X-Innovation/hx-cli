@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Q1: What new CLI commands are needed and how do they fit the existing command pattern?",
+    "Q2: How does the HTTP client need to change to reach comment API endpoints?",
+    "Q3: How does the CLI know which ticket to read/post comments for?"
+  ],
+  "answers": [
+    {
+      "answer": "Two new subcommands under a 'comments' top-level command: 'hlx comments list' (read comments, with --ticket and optional --helix-only and --since flags) and 'hlx comments post' (write a comment, with --ticket and message content). The pattern follows the existing inspect subcommand dispatch in inspect/index.ts, with getFlag/getPositionalArgs helpers reusable or replicable. A new src/comments/index.ts file would dispatch subcommands, with src/comments/list.ts and src/comments/post.ts implementing each.",
+      "evidence": [
+        "index.ts lines 24-44: CLI switch router; new 'comments' case needed",
+        "inspect/index.ts: subcommand dispatch pattern with getFlag, getPositionalArgs",
+        "No existing comment commands anywhere in the CLI codebase"
+      ]
+    },
+    {
+      "answer": "hxFetch (http.ts line 43) hardcodes the URL as config.url + '/api/inspect' + path. Comment endpoints are at /api/tickets/:ticketId/comments which requires /api as the base. The cleanest approach is to add an optional basePath parameter to hxFetch (defaulting to '/api/inspect' for backward compatibility) or create a parallel hxApiFetch that uses '/api' as the base path. The auth header logic (hxi_ detection) can be shared.",
+      "evidence": [
+        "http.ts line 43: const url = new URL(`${config.url}/api/inspect${path}`)",
+        "http.ts lines 52-56: auth header logic works for both inspect and comment endpoints"
+      ]
+    },
+    {
+      "answer": "The ticket ID is not currently available as an environment variable in the sandbox. It is embedded in ticket.md and the artifact path structure. The server orchestrator should inject HELIX_TICKET_ID into env.sh (orchestrator.ts line 1158) alongside HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL. The CLI can then read it via config.ts env var loading, or it can be passed explicitly via --ticket flag.",
+      "evidence": [
+        "orchestrator.ts lines 1158-1164: env.sh only exports HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL",
+        "config.ts: env var loading for HELIX_API_KEY, HELIX_INSPECT_TOKEN, HELIX_URL",
+        "No HELIX_TICKET_ID found in any env var injection"
+      ]
+    }
+  ],
+  "statement": "The Helix CLI needs a new 'comments' command group (list + post subcommands) to enable bidirectional communication between agents/users and the Helix platform. The HTTP client must be generalized beyond the hardcoded /api/inspect base path to reach comment endpoints at /api/tickets/:id/comments. The ticket ID must be made available as HELIX_TICKET_ID environment variable in the sandbox. These changes depend on the server-side auth changes to accept inspection tokens on comment routes.",
+  "followups": []
+}
