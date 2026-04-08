@@ -1,205 +1,110 @@
-# Tech Research: helix-cli
+# Tech Research: Remove Hardcoded `isHelixTagged` — helix-cli
 
 ## Technology Foundation
 
 - **Runtime**: Node.js + TypeScript (ES2022, Node16 modules)
-- **Dependencies**: Zero runtime dependencies (only devDependencies: typescript, @types/node)
-- **CLI framework**: None — manual `process.argv` switch routing
-- **HTTP client**: Custom `hxFetch` with retry (3 attempts), timeout (30s), exponential backoff
-- **Auth**: Env vars (HELIX_API_KEY, HELIX_INSPECT_TOKEN) > file config (~/.hlx/config.json); hxi_ keys use X-API-Key header, others use Bearer
-- **Quality gates**: `npm run build` (tsc), `npm run typecheck` (tsc --noEmit); no test or lint scripts
-- **Package**: `@projectxinnovation/helix-cli`, binary name `hlx`
+- **Build**: `tsc` (via `npm run typecheck`)
+- **HTTP client**: Custom `hxFetch` wrapper in `src/lib/http.ts`
+
+No new dependencies required.
 
 ## Architecture Decision
 
-### Decision 1: HTTP Client Generalization
+### Problem
 
-**Options considered:**
+The CLI's `hlx comments post` command unconditionally sends `isHelixTagged: true` in the POST body (post.ts:32), regardless of who is posting. This means any external user commenting via the CLI wrongly has their comment marked as Helix-tagged.
 
-| Option | Description | Pros | Cons |
-|--------|-------------|------|------|
-| A. Add basePath parameter to hxFetch | Optional parameter defaulting to '/api/inspect' | Single HTTP function; backward-compatible; minimal change | Slightly broader function signature |
-| B. Create parallel hxApiFetch function | New function with '/api' base path | Zero impact on existing code | Code duplication; two functions doing the same thing |
-| C. Remove base path entirely | Callers provide full path including /api/inspect or /api | Most flexible | Breaking change to all existing callers |
+### Options Considered
 
-**Chosen: Option A** — Add optional `basePath` parameter to `hxFetch`.
+| # | Option | Pros | Cons |
+|---|--------|------|------|
+| 1 | **Remove `isHelixTagged` from body; send only `{ content: message }`** | Server decides attribution; simplest change; correct for both agent and user paths | External CLI users can't Helix-tag from CLI (MVP limitation) |
+| 2 | **Add `--helix` flag to CLI post command** | External users could opt-in to Helix-tagging | Extra complexity; server should be source of truth; not needed for MVP |
+| 3 | **Detect agent vs user from stored config and set accordingly** | CLI could self-identify | Config only stores `{ apiKey, url }`; no identity info; spoofing risk |
 
-**Rationale**: The existing `hxFetch` is well-implemented with retry, timeout, and backoff logic. Duplicating it (Option B) wastes code and creates maintenance burden. Option C is a breaking change. Adding `basePath?: string` (defaulting to `'/api/inspect'`) is a one-line URL construction change. All existing callers (inspect commands) continue working unchanged. Comment commands pass `basePath: '/api'` and construct paths like `/tickets/${ticketId}/comments`. The auth header logic already works generically.
+### Chosen: Option 1 — Remove `isHelixTagged`, send only content
 
-### Decision 2: Command Structure
-
-**Options considered:**
-
-| Option | Description | Pros | Cons |
-|--------|-------------|------|------|
-| A. Top-level 'comments' command group | `hlx comments list` / `hlx comments post` | Matches inspect pattern; clear namespace | New top-level command |
-| B. Subcommands under 'inspect' | `hlx inspect comments list` | Groups with existing inspect commands | Comments are not "inspection"; confusing semantics |
-| C. Flat commands | `hlx list-comments` / `hlx post-comment` | Simple | Doesn't scale; inconsistent with inspect subcommand pattern |
-
-**Chosen: Option A** — Top-level 'comments' command group.
-
-**Rationale**: Comments are a distinct capability from inspection. The ticket explicitly describes "the Helix CLI through which sandbox agents communicate" — comments are a communication mechanism, not an inspection tool. The top-level command group mirrors the `inspect` pattern: `hlx comments list` parallels `hlx inspect repos`. The subcommand dispatch pattern from inspect/index.ts (getFlag, getPositionalArgs) is directly replicable.
-
-### Decision 3: Ticket ID Resolution
-
-**Options considered:**
-
-| Option | Description | Pros | Cons |
-|--------|-------------|------|------|
-| A. --ticket flag + HELIX_TICKET_ID env var | Flag takes priority; env var as fallback | Works for both sandbox and external CLI | Needs server-side env var injection |
-| B. Parse from ticket.md path | Extract ticket ID from artifact directory structure | No new env var needed | Fragile; depends on path structure; not available to external users |
-| C. --ticket flag only | Always require explicit flag | Simple | Agents must always pass the flag; can't leverage env auto-detection |
-
-**Chosen: Option A** — `--ticket` flag with `HELIX_TICKET_ID` env var fallback.
-
-**Rationale**: In sandboxes, agents should get the ticket ID automatically without parsing paths. The HELIX_TICKET_ID env var follows the established pattern (HELIX_INSPECT_TOKEN, HELIX_INSPECT_BASE_URL). External CLI users always specify `--ticket`. The resolution order is: `--ticket` flag > `HELIX_TICKET_ID` env var > error message.
+**Rationale**: The server is the source of truth for attribution. After the server-side fix:
+- For Helix sandbox agents (JWT with `isHelixAgent: true`): the server forces `isHelixTagged=true` and `isAgentAuthored=true` regardless of what the client sends.
+- For external CLI users (API key auth): the server defaults `isHelixTagged` to `false` (comment-controller.ts:65-66), which is correct — external users should not auto-tag as Helix.
 
 ## Core API/Methods
 
-### Modified: hxFetch (src/lib/http.ts)
+### `cmdPost` (post.ts:8-38)
 
-Add optional `basePath` parameter:
-
+**Current** (line 31-32):
 ```typescript
-export async function hxFetch(
-  config: HxConfig,
-  path: string,
-  options: { method?: string; body?: Record<string, unknown>; queryParams?: Record<string, string>; basePath?: string } = {},
-): Promise<unknown> {
-  const method = options.method ?? "GET";
-  const base = options.basePath ?? "/api/inspect";
-  const url = new URL(`${config.url}${base}${path}`);
-  // ... rest unchanged
-}
+body: { content: message, isHelixTagged: true },
 ```
 
-### New: src/comments/index.ts
-
-Dispatch function following inspect/index.ts pattern:
-
-- Parse subcommand from args[0]
-- Route 'list' to cmdList, 'post' to cmdPost
-- Resolve ticketId from --ticket flag or HELIX_TICKET_ID env var
-- Print usage on unknown subcommand
-
-### New: src/comments/list.ts
-
-`hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]`
-
-- GET /api/tickets/:ticketId/comments via hxFetch with basePath='/api'
-- Optional --helix-only: filter comments where isHelixTagged=true (client-side filter)
-- Optional --since: filter comments after given ISO date (client-side filter)
-- Output format: `[timestamp] author (helix-tagged|agent): content` — human-readable and agent-parseable
-
-### New: src/comments/post.ts
-
-`hlx comments post [--ticket <id>] <message>`
-
-- POST /api/tickets/:ticketId/comments via hxFetch with basePath='/api'
-- Body: `{ content: message, isHelixTagged: true }` (agent comments are always Helix-tagged)
-- Print confirmation with comment ID on success
-- Print clear error on failure
-
-### Modified: src/index.ts
-
-Add 'comments' case to the switch router:
-
+**Change**:
 ```typescript
-case "comments": {
-  const config = requireConfig();
-  await runComments(config, args.slice(1));
-  break;
-}
+body: { content: message },
 ```
 
-Update usage() to include comment commands.
+This is the only change in the CLI repo.
 
 ## Technical Decisions
 
-### Ticket ID from Environment
+### CLI does not need to know who it is
 
-The CLI will read `HELIX_TICKET_ID` from `process.env` directly in the comments dispatch function, not through the config system. This keeps it separate from the existing config loading (which is auth-focused) and avoids adding ticket context to HxConfig (which is a server connection config type).
+The CLI config stores `{ apiKey: string; url: string }` (config.ts:5-8). The server resolves identity from the API key (mapping to `createdByUserId` via middleware.ts:154-167) or from the inspection JWT (extracting `isHelixAgent` claim). The CLI does not need local identity storage or display.
 
-```typescript
-function resolveTicketId(args: string[]): string {
-  const flagValue = getFlag(args, "--ticket");
-  if (flagValue) return flagValue;
-  const envValue = process.env.HELIX_TICKET_ID;
-  if (envValue) return envValue;
-  console.error("Error: --ticket <id> flag or HELIX_TICKET_ID env var is required.");
-  process.exit(1);
-}
-```
+**Rejected alternative**: Storing user identity in CLI config after login. Rejected because: (a) it's unnecessary — the server handles all attribution; (b) it would be a stale copy that could become inconsistent.
 
-### Rejected Alternative: Commander.js / Yargs
+### No `--helix` flag for MVP
 
-The CLI has zero runtime dependencies by design. Adding a CLI framework would break this constraint. The manual argv routing is simple and sufficient for the small command set.
+External CLI users who want to @mention Helix can use the web UI. The server doesn't parse @mentions from plain text. A `--helix` flag is a future consideration.
 
-### Output Format
-
-Comment list output is designed for dual consumption (human terminal + agent parsing):
-
-```
-[2026-04-08T10:30:00Z] Jane Doe [Helix]: Can you also check the migration file?
-[2026-04-08T10:35:00Z] Helix [Agent]: I'll review the migration file as part of my analysis.
-```
-
-The `[Agent]` marker on agent-authored comments helps agents identify their own prior responses.
+**Rejected alternative**: Adding the flag now for completeness. Rejected per product scope — MVP focuses on correct attribution, not new CLI features.
 
 ## Cross-Platform Considerations
 
-Not applicable — CLI runs in Node.js environments (sandbox and developer terminals).
+This change can deploy before or after the server change:
+- **If CLI deploys first**: The CLI no longer sends `isHelixTagged: true`. The server's existing logic defaults it to `false` for non-agent comments (correct) and forces `true` for agent comments via the `isAgentAuthored ? true : isHelixTagged` override (correct).
+- **If server deploys first**: The CLI still sends `isHelixTagged: true`, but the server overrides it for agent comments and respects it for user comments. External CLI user comments will still be Helix-tagged until the CLI updates, but this is a temporary state.
 
 ## Performance Expectations
 
-| Operation | Expected Latency | Notes |
-|-----------|-----------------|-------|
-| `hlx comments list` | <200ms | Single HTTP GET with retry logic |
-| `hlx comments post` | <200ms | Single HTTP POST with retry logic |
-| Ticket ID resolution | <1ms | Env var read or flag parse |
+No performance impact. The POST body is marginally smaller (one fewer field).
 
 ## Dependencies
 
-| Dependency | Type | Status |
-|------------|------|--------|
-| Server comment auth changes | Cross-repo | Must be deployed first — comment routes must accept inspection tokens |
-| HELIX_TICKET_ID env var | Cross-repo | Server orchestrator must inject into env.sh |
-| hxFetch retry/timeout logic | Internal | Exists, reusable with basePath parameter |
-| getFlag/getPositionalArgs helpers | Internal | Exist in inspect/index.ts; can be duplicated or extracted |
+No new dependencies. The `hxFetch` wrapper and config system are unchanged.
+
+## Risks
+
+| # | Risk | Mitigation |
+|---|------|-----------|
+| 1 | External CLI users lose ability to Helix-tag comments | Not available before this change either (it was forced to true for everyone). For MVP, @Helix tagging from CLI is out of scope. Can add `--helix` flag later. |
 
 ## Deferred to Round 2
 
-- **Comment streaming/watching**: A `hlx comments watch` that polls for new comments (not needed for MVP — agents check at step boundaries)
-- **Rich formatting in CLI output**: Markdown rendering in terminal (MVP uses plain text)
-- **Comment deletion via CLI**: Only list and post needed for MVP
-- **Shared arg parsing utilities**: Extracting getFlag/getPositionalArgs to lib/args.ts (fine to duplicate for now given small codebase)
+- `--helix` flag on `hlx comments post` for external CLI users
+- `--mention` flag to specify mentioned user IDs
+- CLI display of commenter identity in `hlx comments list` output
 
 ## Summary Table
 
-| Area | Decision | Key File(s) |
-|------|----------|-------------|
-| HTTP client | Add basePath parameter to hxFetch (default '/api/inspect') | src/lib/http.ts |
-| Command structure | Top-level 'comments' group with list/post subcommands | src/index.ts, src/comments/index.ts |
-| List command | GET comments with optional --helix-only and --since filters | src/comments/list.ts |
-| Post command | POST comment with auto isHelixTagged=true | src/comments/post.ts |
-| Ticket ID | --ticket flag > HELIX_TICKET_ID env var > error | src/comments/index.ts |
-| Output format | Human-readable + agent-parseable timestamp-author-content lines | src/comments/list.ts |
+| Aspect | Decision |
+|--------|----------|
+| **Change scope** | 1 file: post.ts |
+| **Lines changed** | 1 line (remove `isHelixTagged: true` from body object) |
+| **New dependencies** | None |
+| **Deployment dependency** | None — safe in any order |
 
 ## APL Statement Reference
 
-The CLI needs three changes: (1) Generalize hxFetch with an optional basePath parameter (default '/api/inspect') so comment commands can target /api/tickets/:id/comments. (2) Add hlx comments list and hlx comments post subcommands following the existing inspect command pattern. (3) Support HELIX_TICKET_ID env var for automatic ticket resolution in sandboxes, with --ticket flag as override. Zero new runtime dependencies; existing zero-dep philosophy preserved.
+See tech-research/apl.json. All questions resolved; no followups.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| diagnosis/diagnosis-statement.md (CLI) | Identify three CLI gaps | No comment commands, HTTP path limitation, ticket ID not available |
-| diagnosis/apl.json (CLI) | Detailed Q&A for each gap | hxFetch hardcodes /api/inspect; subcommand pattern reusable; HELIX_TICKET_ID needed |
-| product/product.md (client) | CLI feature requirements | hlx comments list and hlx comments post as MVP features; HELIX_TICKET_ID env var |
-| scout/reference-map.json (CLI) | File inventory | index.ts, http.ts, config.ts, inspect/index.ts as key files |
-| scout/scout-summary.md (CLI) | CLI current state | Zero deps, argv routing, hxFetch hardcoded path, auth priority chain |
-| src/index.ts (lines 1-48) | CLI entry point | Switch router with login, inspect, --version; pattern for adding comments |
-| src/lib/http.ts (lines 37-44) | HTTP client implementation | Hardcoded /api/inspect base path; auth header logic generic |
-| src/lib/config.ts (lines 1-47) | Config loading | Env var priority; HxConfig type (apiKey + url) |
-| src/inspect/index.ts (all) | Subcommand dispatch pattern | getFlag, getPositionalArgs helpers; switch-based routing |
-| repo-guidance.json | Repo intent classification | CLI is target for net-new comment commands |
+| ticket.md | Understand requirements | CLI should not override server decisions; Helix identity must be verified |
+| Continuation context | Clarify refined requirements | External CLI users must appear as themselves; only Helix agents post as Helix |
+| diagnosis/diagnosis-statement.md (CLI) | CLI-specific diagnosis | Remove hardcoded isHelixTagged; let server determine |
+| diagnosis/apl.json (CLI) | Investigation findings | CLI should send only { content: message }; server defaults isHelixTagged to false |
+| product/product.md (CLI) | Product specification | CLI stops overriding Helix tagging; server decides based on auth identity |
+| post.ts (direct read) | Verify CLI behavior | Confirmed hardcoded `isHelixTagged: true` at line 32 |
+| comment-controller.ts (direct read) | Verify server handling | Server defaults isHelixTagged to false (line 65-66); forces true for agents (line 77) |
