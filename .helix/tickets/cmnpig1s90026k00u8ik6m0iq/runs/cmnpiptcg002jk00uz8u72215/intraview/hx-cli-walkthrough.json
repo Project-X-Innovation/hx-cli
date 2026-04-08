@@ -1,0 +1,79 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "hx-cli: Add HTTP Resilience (Timeout, Retry, Error Classification)",
+  "description": "This tour walks through the changes that transformed hx-cli's zero-resilience HTTP layer into a robust, retry-capable fetch utility. Previously, hxFetch called bare fetch() with no timeout, no retry, and called process.exit(1) on any non-ok HTTP response — meaning a single 504 from the DigitalOcean proxy would kill the CLI immediately. The fix adds a 30s AbortSignal.timeout, retry with exponential backoff (3 attempts, 2s base + jitter) for retryable status codes (429, 500, 502, 503, 504), HTML response detection for meaningful error messages, and moves process.exit(1) to the top-level entry point so that retry can actually run. All changes are in src/lib/http.ts, src/lib/resolve-repo.ts, and src/index.ts with zero new dependencies.",
+  "steps": [
+    {
+      "file": "src/lib/http.ts",
+      "line": 1,
+      "description": "This file is the core of the change. Before: hxFetch was a ~10-line function that called bare fetch() with no AbortSignal, then called process.exit(1) on any !response.ok. After: it is a fully resilient HTTP layer with timeout, retry, error classification, and HTML detection. Every command (db, logs, api, repos) calls hxFetch, so centralizing here means all paths benefit automatically.",
+      "title": "Overview: hxFetch before and after"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 5,
+      "description": "Two constants define retry policy. MAX_RETRIES = 3 matches the server's own waitWithRetry pattern. RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504] covers gateway timeouts, rate limits, and transient server errors. 500 is included because the server now returns 500 (not 502) for external failures that can be transient. These were explicitly validated in tech-research and the APL review confirmed the set is correct.",
+      "title": "Constants: MAX_RETRIES and RETRYABLE_STATUS_CODES"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 12,
+      "description": "A type union and helper distinguish retryable network-level errors (TypeError, TimeoutError, AbortError) from permanent HTTP errors. This classification is what allows the retry loop to decide: network errors always retry; non-retryable HTTP status codes (e.g. 400, 401, 403, 404) throw immediately without consuming retry budget. This was the key missing piece — previously all errors were treated identically.",
+      "title": "Error classification: retryable vs permanent"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 28,
+      "description": "The DigitalOcean App Platform proxy intercepts HTTP 502 responses from Express and replaces the JSON error body with generic HTML. buildErrorMessage checks the Content-Type header: if it contains 'text/html', it returns a clear user-facing message ('Server returned an HTML error page') instead of dumping raw HTML to the terminal. For non-HTML responses, it includes the first 500 chars of the body for actionable diagnostics.",
+      "title": "HTML response detection: buildErrorMessage"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 66,
+      "description": "The core retry loop runs up to MAX_RETRIES (3) attempts. Each call to fetch() includes AbortSignal.timeout(30_000), preventing indefinite hangs. The 30s value was chosen because the server has a 15s external query timeout and up to ~25s total for its own retry cycle — 30s lets the server finish before the CLI times out. On a retryable status, the loop sleeps with exponential backoff (2^attempt * 2000ms + random jitter up to 1000ms), matching the server-side waitWithRetry pattern.",
+      "title": "Retry loop with exponential backoff"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 80,
+      "description": "When the server returns HTTP 429 (Too Many Requests), hxFetch reads the Retry-After response header and waits that many seconds before retrying, capped at 60s to prevent excessive waits. This is the correct behavior per RFC 7231 and was listed as a product spec requirement.",
+      "title": "429 Retry-After header handling"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 91,
+      "description": "After computing the delay (either from Retry-After or exponential backoff), the loop sleeps and then continues to the next attempt. On the last attempt, instead of sleeping, it throws a user-friendly message: 'Request failed after N attempts'. This gives agents a clear signal that the server is persistently unavailable, not just a one-time glitch.",
+      "title": "Retryable response: sleep and continue"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 111,
+      "description": "The catch block at the bottom of the retry loop handles network-level errors (TypeError from DNS/connection failure, AbortError and TimeoutError from the AbortSignal). These are retried just like retryable HTTP status codes. The critical distinction: errors thrown by hxFetch itself (non-retryable HTTP responses formatted by buildErrorMessage) are re-thrown immediately here without consuming retry budget, preventing accidental retry of permanent errors.",
+      "title": "Network error retry path"
+    },
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 13,
+      "description": "Previously, if listRepos (which calls hxFetch) threw, the error would propagate raw with no context about what operation failed. Now a try/catch wraps the call and re-throws with a descriptive message like 'Failed to fetch repository list: <original message>'. This makes it immediately clear to an agent reading the error which step in the command pipeline failed.",
+      "title": "resolve-repo.ts: wrap listRepos errors with context"
+    },
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 36,
+      "description": "When the requested repo name is not found in the list, process.exit(1) is called directly. This is intentional and correct: a missing repo is a usage error (wrong argument), not a transient failure, so retry would never help. The APL review confirmed this exit path should remain as-is.",
+      "title": "resolve-repo.ts: repo-not-found still uses process.exit(1)"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 24,
+      "description": "The key structural change enabling retry: process.exit(1) was removed from hxFetch and moved here. The top-level command handler wraps execution in a try/catch. If hxFetch exhausts all retries and throws, or if any other unhandled error occurs, the catch block prints the error message to stderr and calls process.exit(1). This means process.exit(1) now only fires after the retry loop has been fully exhausted — agents get up to 3 attempts before the CLI terminates.",
+      "title": "Top-level try/catch: the new home for process.exit(1)"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 48,
+      "description": "The observable behavior for callers is unchanged: the CLI still exits with code 1 on failure and code 0 on success. The difference is that transient failures now trigger up to 3 retry attempts with exponential backoff before failing. The error propagation chain is: hxFetch throws → resolveRepo wraps with context and re-throws → top-level catch prints and exits. No process.exit(1) calls remain inside the HTTP or repo-resolution layer, so the retry loop can run uninterrupted.",
+      "title": "Summary: exit code behavior is preserved end-to-end"
+    }
+  ]
+}
