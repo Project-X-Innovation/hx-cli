@@ -1,0 +1,28 @@
+{
+  "questions": [
+    "Why does the CLI fail fatally on transient server errors?",
+    "What retry and timeout patterns should the CLI implement?",
+    "How does the CLI's error handling compare to other patterns in the codebase?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI's hxFetch function calls process.exit(1) on ANY non-ok HTTP response with no error classification. HTTP 504 (retryable gateway timeout) is treated identically to HTTP 400 (permanent bad request). Combined with no request timeout (fetch has no AbortSignal), the CLI either fails instantly or hangs indefinitely.",
+      "evidence": [
+        "src/lib/http.ts:30 - bare fetch() with no AbortSignal",
+        "src/lib/http.ts:32-36 - on !response.ok: console.error + process.exit(1)",
+        "src/lib/http.ts - no retry loop, no error classification",
+        "src/login.ts:100-103 - login command HAS a 2-minute timeout, showing awareness of the need"
+      ]
+    },
+    {
+      "answer": "The CLI should implement: (1) request timeout via AbortSignal.timeout (e.g., 30s), (2) retry with exponential backoff for retryable status codes (429, 502, 503, 504), (3) distinguish retryable from permanent errors, (4) cache the resolveRepo() result to avoid redundant network calls.",
+      "evidence": [
+        "Server-side wait-retry.ts pattern uses 3 attempts with exponential backoff and jitter (baseDelay 2000ms)",
+        "Login command uses AbortSignal.timeout(120000) showing the pattern is already in use",
+        "Every inspection command calls resolveRepo() which re-fetches the entire repo list (src/lib/resolve-repo.ts:7)"
+      ]
+    }
+  ],
+  "statement": "The hx-cli contributes to the runtime logs flakiness by providing zero resilience against transient failures. Its fetch implementation has no timeout, no retry, and calls process.exit(1) on any HTTP error. When the server returns 504 (which the DigitalOcean proxy does when intercepting 502 errors), the CLI exits immediately with no recovery path. The fix requires adding retry with exponential backoff for retryable errors, request timeouts, and error classification.",
+  "followups": []
+}
