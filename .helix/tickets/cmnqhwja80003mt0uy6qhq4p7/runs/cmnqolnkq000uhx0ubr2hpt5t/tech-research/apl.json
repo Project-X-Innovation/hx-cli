@@ -1,0 +1,32 @@
+{
+  "questions": [
+    "What should the CLI send instead of hardcoded isHelixTagged: true?",
+    "Does the CLI need to store or display user identity?",
+    "Is a --helix flag needed for external CLI users?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI should send only { content: message } without isHelixTagged. The server determines isHelixTagged based on auth identity: for Helix agents (isHelixAgent JWT claim), the server forces isHelixTagged=true. For external CLI users (API key auth), the server defaults to false. This is the simplest and most correct approach.",
+      "evidence": [
+        "comment-controller.ts:65-66 — isHelixTagged defaults to false if not provided",
+        "comment-controller.ts:77 — server forces isHelixTagged=true for agent comments"
+      ]
+    },
+    {
+      "answer": "No. The CLI config stores { apiKey, url } which is sufficient. Identity is resolved server-side: API keys map to createdByUserId (the logged-in user), and inspection JWTs map to the JWT subject. The CLI does not need to know or display who it is.",
+      "evidence": [
+        "helix-cli/src/lib/config.ts:5-8 — HxConfig = { apiKey: string; url: string }",
+        "middleware.ts:154-167 — resolveApiKeyAuth maps to createdByUserId"
+      ]
+    },
+    {
+      "answer": "Not for MVP. External CLI users who want to @mention Helix can use the web UI. The server does not parse @mentions from plain text. A --helix flag is a future consideration, not MVP scope.",
+      "evidence": [
+        "product/product.md: Out of scope: 'Rich formatting or attachments in CLI comments'",
+        "product/product.md: 'CLI stops overriding Helix tagging: The CLI sends only the comment content and lets the server decide attribution'"
+      ]
+    }
+  ],
+  "statement": "The CLI fix is minimal: remove the hardcoded isHelixTagged: true from post.ts:32 and send only { content: message }. The server determines whether to set isHelixTagged based on the auth identity. No other CLI changes are needed. Safe to deploy in any order relative to server/client changes.",
+  "followups": []
+}

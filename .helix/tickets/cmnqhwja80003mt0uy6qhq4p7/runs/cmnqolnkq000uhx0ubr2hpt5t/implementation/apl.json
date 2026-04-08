@@ -1,0 +1,13 @@
+{
+  "questions": [
+    "Does removing isHelixTagged: true from the CLI POST body break comment posting?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The server defaults isHelixTagged to false when not provided (comment-controller.ts line 65-66). For Helix sandbox agents, the server forces isHelixTagged=true based on the isHelixAgent JWT claim. For external CLI users, comments correctly get isHelixTagged=false unless @Helix was mentioned.",
+      "evidence": ["API test with hxi_ key returned isHelixTagged: false, isAgentAuthored: false", "CLI typecheck and build both pass"]
+    }
+  ],
+  "statement": "Removed hardcoded isHelixTagged: true from CLI post.ts. The CLI now sends only { content: message }, letting the server determine attribution. Typecheck and build pass.",
+  "followups": []
+}
