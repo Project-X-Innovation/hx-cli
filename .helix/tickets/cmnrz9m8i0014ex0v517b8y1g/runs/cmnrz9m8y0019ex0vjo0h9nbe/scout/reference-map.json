@@ -1,0 +1,45 @@
+{
+  "problem": "The ticket proposes extending helix-cli as an alternative walkthrough channel — allowing devs to review AI-generated changes directly in their coding agent (e.g., Claude Code) via the CLI. Currently, helix-cli has no walkthrough or review commands. It supports: login, inspect (db/logs/api/repos), and comments (list/post).",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI router (57 lines). Switch on command: login, inspect, comments, --version. No walkthrough or review command exists."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comments subcommand router — the closest existing pattern to a potential walkthrough command. Routes to list.ts and post.ts."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Example of data-fetching CLI command pattern with --ticket flag, --since flag, and JSON output."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Inspect subcommand router — another pattern for a potential walkthrough subcommand."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client with retry/resilience. Any new walkthrough command would use this to call server APIs."
+    },
+    {
+      "path": "package.json",
+      "why": "v1.2.0, Node 18+, CLI binary at dist/index.js. Quality gates: build = tsc, typecheck = tsc --noEmit. No lint or test scripts."
+    }
+  ],
+  "facts": [
+    "helix-cli has no walkthrough, review, or changes-related commands today",
+    "CLI version is 1.2.0 with three top-level commands: login, inspect, comments",
+    "The comments command pattern (list/post subcommands, --ticket flag, server API calls) is the closest analog to a potential walkthrough command",
+    "HTTP client supports retry with exponential backoff, 30s timeout, and Retry-After handling",
+    "The CLI can resolve ticket IDs from environment context (HELIX_TICKET_ID) — established pattern in comments/list.ts",
+    "No existing CodeTour file reading or rendering capability in the CLI",
+    "The .helix/tickets/*/runs/*/intraview/*.json tour files exist on GitHub branches — a CLI command could fetch and display them",
+    "CLI quality gates: npm run build (tsc), npm run typecheck (tsc --noEmit). No lint or test scripts."
+  ],
+  "unknowns": [
+    "Whether extending the CLI for walkthrough delivery is the chosen direction (ticket is brainstorming, no decision made)",
+    "What a CLI walkthrough UX would look like — terminal-based step navigation, piped output to coding agents, or something else",
+    "Whether the server API needs new endpoints to support a CLI walkthrough flow or existing /walkthrough endpoints suffice",
+    "How a CLI-based walkthrough would integrate with Claude Code or other coding agents — auto-pull mechanism is undefined"
+  ]
+}
