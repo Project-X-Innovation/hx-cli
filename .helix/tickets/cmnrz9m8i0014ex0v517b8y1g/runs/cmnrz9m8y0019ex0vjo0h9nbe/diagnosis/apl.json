@@ -1,0 +1,27 @@
+{
+  "questions": [
+    "What would be needed to add a walkthrough command to helix-cli?",
+    "Can the existing server API surface support a CLI walkthrough flow?"
+  ],
+  "answers": [
+    {
+      "answer": "helix-cli needs: (1) a new top-level 'walkthrough' subcommand in src/index.ts following the comments/inspect pattern, (2) subcommands for listing available walkthroughs (by ticket/run) and displaying walkthrough content, (3) terminal rendering of step-by-step tour data — either formatted output or structured JSON suitable for piping to coding agents. The existing HTTP client (src/lib/http.ts) and HELIX_TICKET_ID env pattern (src/comments/list.ts) are directly reusable.",
+      "evidence": [
+        "src/index.ts: 3 commands (login, inspect, comments), switch-based routing",
+        "src/comments/list.ts: --ticket flag with HELIX_TICKET_ID fallback pattern",
+        "src/lib/http.ts: HTTP client with retry/backoff",
+        "package.json: v1.2.0, Node 18+, tsc build"
+      ]
+    },
+    {
+      "answer": "Partially. The existing POST /walkthrough endpoint returns full walkthrough data including tour steps, and POST /walkthrough/files returns file contents. However: (1) the findRunOrThrow bug (server-side) would need to be fixed first; (2) there is no GET endpoint for discovering which runs have walkthroughs; (3) the POST method for read operations is semantically awkward for CLI consumption — a GET-based endpoint would be more natural. The walkthroughData JSONB stored in SandboxRun could also be served directly without re-generation.",
+      "evidence": [
+        "Server routes/api.ts lines 189-190: POST /walkthrough and POST /walkthrough/files",
+        "walkthrough-service.ts findRunOrThrow: blocks non-current runs",
+        "SandboxRun.walkthroughData: pre-computed JSONB available for direct serving"
+      ]
+    }
+  ],
+  "statement": "helix-cli has no walkthrough capability today but has the right structural patterns (commands, HTTP client, env-based ticket resolution) to support one. The CLI alternative proposed in the ticket is feasible — it would require a new walkthrough subcommand, minor server API additions (GET-based walkthrough retrieval, fix findRunOrThrow), and a decision on terminal rendering format (interactive steps vs JSON output for coding agents).",
+  "followups": []
+}
