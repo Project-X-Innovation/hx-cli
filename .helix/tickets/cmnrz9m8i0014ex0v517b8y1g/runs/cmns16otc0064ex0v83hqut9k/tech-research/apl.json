@@ -1,0 +1,36 @@
+{
+  "questions": [
+    "What command structure should the CLI walkthrough feature use?",
+    "What output format should the CLI produce for both terminal users and coding agents?",
+    "Which server endpoint should the CLI call to fetch walkthrough data?"
+  ],
+  "answers": [
+    {
+      "answer": "A single top-level command: `hlx walkthrough [--ticket <id>] [--run <id>] [--format json|text]`. No subcommands needed — walkthrough consumption is a single read-only action. Follows existing patterns: --ticket flag with HELIX_TICKET_ID env fallback (from comments/index.ts), --run defaults to 'latest'. Code organized as a module directory (walkthrough/index.ts + show.ts) matching comments/inspect patterns.",
+      "evidence": [
+        "src/index.ts: 3 commands with switch-based routing — adding a 4th is trivial",
+        "src/comments/index.ts: resolveTicketId pattern with --ticket flag and HELIX_TICKET_ID env",
+        "Product spec: 'CLI walkthrough command (hlx walkthrough): Fetch and display walkthrough data'",
+        "Product spec defers interactive TUI: 'MVP can output formatted markdown or JSON'"
+      ]
+    },
+    {
+      "answer": "Dual format via --format flag. Default 'text' renders a human-readable step-by-step walkthrough (title, summary stats, then each stop with file:line and description). '--format json' outputs the raw WalkthroughResult JSON for coding agent consumption. No ANSI escape codes or TUI in MVP.",
+      "evidence": [
+        "Product spec: 'Output must be readable both as terminal text and as structured data pipeable to coding agents'",
+        "Product spec: 'Structured output for agents: CLI output must be machine-readable (JSON)'",
+        "src/comments/list.ts: existing text output pattern for terminal display"
+      ]
+    },
+    {
+      "answer": "The new GET /tickets/:ticketId/runs/:runId/walkthrough endpoint (designed in server tech-research). This reads pre-computed walkthroughData JSONB from the DB. The existing POST /walkthrough endpoint triggers expensive Claude API generation (~60s, costs money) and is semantically wrong for a read operation. The CLI calls hxFetch with basePath '/api' following the comments pattern.",
+      "evidence": [
+        "SandboxRun.walkthroughData: pre-computed JSONB available for 45.7% of completed runs",
+        "Existing POST /walkthrough triggers generateWalkthrough which calls Claude API with 60s timeout",
+        "src/comments/list.ts line 25: hxFetch(config, path, { basePath: '/api' }) — proven pattern for CLI API calls"
+      ]
+    }
+  ],
+  "statement": "The CLI needs a new `hlx walkthrough` command that fetches pre-computed walkthrough data via the new server GET endpoint and renders it as text (default) or JSON (for coding agents). The command follows existing CLI patterns (--ticket flag, HELIX_TICKET_ID env, hxFetch with /api basePath, module directory structure). No new dependencies are needed. The MVP is a simple fetch-and-display flow without interactive TUI.",
+  "followups": []
+}

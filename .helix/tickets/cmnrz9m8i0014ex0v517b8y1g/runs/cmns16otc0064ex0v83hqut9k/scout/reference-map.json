@@ -1,0 +1,60 @@
+{
+  "problem": "The helix-cli currently has NO walkthrough command. This is the second prong of the dual-pronged approach: letting developers review AI-generated changes from their coding agent (e.g., Claude Code). The user envisions this potentially replacing the current 'Continue with Claude Code' clipboard-copy feature in the UI. The CLI would need to fetch pre-computed walkthrough data, display it in terminal-friendly format, and optionally output JSON for coding agent consumption. Existing command patterns (comments, inspect) provide structural templates.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point (57 lines). Switch/case router: login, inspect, comments, --version. This is where 'walkthrough' would be registered as a new top-level command. Uses requireConfig() for authenticated commands."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Best template for walkthrough command (50 lines). resolveTicketId() (lines 11-19) supports --ticket flag with HELIX_TICKET_ID env var fallback. Subcommand router pattern with usage(). This pattern would be reused."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Data-fetching pattern: hxFetch with basePath '/api', formatted terminal output, --helix-only and --since flags. Walkthrough show would follow this for text output."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "POST request pattern for API interactions. Shows how to send request body and handle response."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Alternative subcommand pattern: repos, db, logs, api subcommands. Read-only data retrieval with multiple output formats."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "Core HTTP client (130 lines). hxFetch with retry (3 attempts, 2s base delay, 30s timeout). Supports basePath '/api'. This would be used to call walkthrough endpoints."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config loading from ~/.hlx/config.json or env vars (HELIX_API_KEY, HELIX_URL). Authentication boundary."
+    },
+    {
+      "path": "package.json",
+      "why": "v1.2.0, Node 18+. Build: tsc. Typecheck: tsc --noEmit. No lint or test scripts. Binary: dist/index.js."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "ES2022 target, Node16 modules, dist/ output, strict mode. Defines compilation boundary."
+    }
+  ],
+  "facts": [
+    "No walkthrough, review, continue, or change-inspection commands exist in the CLI. Only: login, inspect, comments, --version.",
+    "The comments command resolves ticketId from --ticket flag or HELIX_TICKET_ID env var (set automatically by Helix workflow). This is the established pattern for ticket-scoped commands.",
+    "hxFetch (src/lib/http.ts) supports basePath '/api' parameter, retry with exponential backoff, 30s timeout. Ready for walkthrough API calls.",
+    "The server currently only has POST endpoints for walkthrough (generate + files). No GET endpoint exists for reading pre-computed data. The CLI would need a way to read stored walkthroughData without triggering expensive re-generation.",
+    "The CLI has no interactive TUI capabilities. All output is plain text to stdout. Walkthrough display would be text-formatted (step-by-step with file:line and descriptions).",
+    "The 'Continue with Claude Code' feature in the client UI generates a 'claude -p' command. The CLI walkthrough could complement or replace this with structured walkthrough data piped directly to coding agents.",
+    "Existing tech-research artifacts for this ticket propose: hlx walkthrough [--ticket <id>] [--run <id>] [--format json|text] with text as default.",
+    "The CLI has no test infrastructure (no test script, no test files). No lint script either.",
+    "CLI quality gates: npm run build (tsc), npm run typecheck (tsc --noEmit)"
+  ],
+  "unknowns": [
+    "Whether a new GET /tickets/:ticketId/runs/:runId/walkthrough endpoint will be added, or if the CLI will use the ticket detail API (which may include walkthroughData in run objects) to avoid re-generation.",
+    "How --run 'latest' resolution would work - the CLI needs to discover the latest completed run for a ticket.",
+    "Whether JSON output (--format json) is sufficient for Claude Code integration, or if a structured prompt format (markdown with architectural annotations) would be more effective.",
+    "How the CLI handles walkthroughData being null (not yet generated) - trigger generation, wait, or advise user?",
+    "Whether the 'auto-pull finished tickets' concept (extending Helix line to auto-surface walkthroughs) is in scope or deferred.",
+    "Whether the CLI walkthrough should also provide diff context alongside the tour steps, or just the CodeTour data."
+  ]
+}

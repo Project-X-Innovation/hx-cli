@@ -25,18 +25,3 @@ These are two ideas. Feel free to brainstorm other ones; you can come up with so
 
 ## Attachments
 - (none)
-
-## Continuation Context
-I like the general direction of the dual-pronged approach:
-1. In the UI for users that are already in the UI, cleaned up, hardened, sharpened to the point, really getting the point across
-2. A part two with the Helix CLI in their favorite code header, maybe replacing the current Continue with Claude Code
-
-
-Go through both of these. I think we need to do both. Go through both of them, sharpen them, harden them. What would they look like? What would be amazing? What would be the most optimal, cool experience?
-
-I'll be very straight with you: there are users in both. The current walkthrough is not very good. It doesn't really get the point that we're trying to get across, but if it did, I think it would be helpful. 
-
-What are some ways to make the current UI better, more to the point, more impactful, more slick, more weight and information per click? Really getting those major arteries covered in the UI. Then think of the same questions for the CLI, let's say with Claude Code. How would you do this? How would you make it easy, impactful, smooth? 
-
-
-The Generate walkthrough is not relevant. That's a relic of something old.
