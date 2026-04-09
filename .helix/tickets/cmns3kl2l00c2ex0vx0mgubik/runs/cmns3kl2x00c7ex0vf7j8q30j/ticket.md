@@ -1,6 +1,7 @@
 # Ticket Context
 
 - ticket_id: cmns3kl2l00c2ex0vx0mgubik
+- short_id: RSH-193
 - run_id: cmns3kl2x00c7ex0vf7j8q30j
 - run_branch: helix/ticket/cmns3kl2l00c2ex0vx0mgubik
 - repo_key: helix-cli
