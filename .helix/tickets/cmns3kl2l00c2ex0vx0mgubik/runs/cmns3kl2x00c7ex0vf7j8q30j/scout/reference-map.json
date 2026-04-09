@@ -1,0 +1,54 @@
+{
+  "problem": "The Helix CLI currently has no ticket creation capability. For the Side Quests feature, agents running inside Vercel Sandbox need a mechanism to programmatically create child tickets. The CLI may need a 'tickets create' command, or the orchestrator may create side quests server-side based on step output — the mechanism is a design decision. The CLI's current command surface (comments, inspect, login) does not support ticket lifecycle management.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point with manual switch-case command dispatcher. Currently handles: login, inspect, comments, --version. Extension point for new 'tickets' subcommand if CLI-based side quest creation is chosen.",
+      "lines": "1-53"
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Example of CLI→server API communication: POST /api/tickets/{ticketId}/comments. Pattern for implementing ticket creation API call.",
+      "lines": "1-40"
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Subcommand dispatch pattern: parses args[0] for subcommand ('list', 'post'), delegates to handlers. Template for 'tickets' subcommand structure.",
+      "lines": "1-50"
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch) with retry logic, 3 max attempts, exponential backoff. Shared across all API interactions.",
+      "lines": "1-130"
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Auth config loading from env vars (HELIX_INSPECT_TOKEN, HELIX_INSPECT_BASE_URL) or ~/.hlx/config.json. Already supports sandbox environment injection.",
+      "lines": "entry"
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository ID resolution utility. May be needed for specifying target repos when creating side quest tickets.",
+      "lines": "entry"
+    },
+    {
+      "path": "package.json",
+      "why": "Build: tsc. No test or lint scripts. Zero runtime dependencies — only TypeScript dev dependency.",
+      "lines": "scripts"
+    }
+  ],
+  "facts": [
+    "CLI has 3 top-level commands: login, inspect, comments. No ticket lifecycle commands exist.",
+    "Command dispatch is manual switch-case on process.argv (src/index.ts:8-53). No framework — adding commands means extending the switch.",
+    "HELIX_TICKET_ID env var is supported by comments commands for sandbox context (auto-resolves current ticket when --ticket not provided).",
+    "HTTP client (hxFetch) supports auth via HELIX_INSPECT_TOKEN env var injected by orchestrator in sandbox. Same auth mechanism would be used for programmatic ticket creation.",
+    "CLI has zero runtime dependencies — pure Node.js with TypeScript compilation only.",
+    "No test scripts or lint configuration exist for this repo."
+  ],
+  "unknowns": [
+    "Should agents create side quests via the CLI (hlx tickets create) or via a new field in HelixWorkflowStepResult that the orchestrator processes server-side?",
+    "If CLI-based, should the ticket creation use the same auth as comments (inspection token) or need elevated permissions?",
+    "Should the CLI support a 'tickets status' command for agents to check if a side quest they spawned has completed?",
+    "Is the CLI the right boundary for side quest spawning, or should the orchestrator handle it entirely server-side based on step output?"
+  ]
+}
