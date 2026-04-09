@@ -1,174 +1,248 @@
-# Tech Research: Walkthrough Feature Rework — helix-cli
+# Tech Research: Walkthrough Feature Overhaul — helix-cli
 
 ## Technology Foundation
 
-- **Runtime**: Node.js 18+ with TypeScript
+- **Runtime**: Node.js 18+ with TypeScript (strict mode)
 - **CLI Framework**: Manual switch-based routing (no framework dependency)
-- **HTTP Client**: Custom `hxFetch` with retry/backoff (src/lib/http.ts)
-- **Auth**: `X-API-Key` header for hxi_ keys, `Authorization: Bearer` for others
+- **HTTP Client**: Custom `hxFetch` with retry/backoff (src/lib/http.ts, 130 lines)
+- **Auth**: `X-API-Key` header for hxi_ keys, `Authorization: Bearer` for others (http.ts:53-54)
 - **Package**: v1.2.0, binary at `dist/index.js`
 - **Quality gates**: `npm run build` (tsc), `npm run typecheck` (tsc --noEmit). No lint or test scripts.
 
-## Architecture Decisions
+This is Prong 2: the CLI walkthrough that lets developers review AI-generated changes from their coding agent (e.g., Claude Code) or terminal. It replaces/enhances the current generic "Continue with Claude Code" clipboard feature.
 
-### AD-1: Single `hlx walkthrough` command (no subcommands)
+## Architecture Decision 1: Single `hlx walkthrough` Command (No Subcommands)
 
-**Options considered**:
-1. **Subcommand pattern like comments**: `hlx walkthrough show`, `hlx walkthrough list`. The comments command has list/post because it's bidirectional (read + write). Walkthrough is read-only.
-2. **Single command**: `hlx walkthrough [--ticket <id>] [--run <id>] [--format json|text]`. Simpler, matches the read-only nature. Default shows the latest completed run's walkthrough.
-3. **Inspect-style nesting**: `hlx inspect walkthrough`. Breaks semantic expectations — walkthrough isn't a production inspection tool.
+### Options Considered
 
-**Chosen**: Option 2 — Single command.
+| Option | Description | Pros | Cons |
+|--------|-------------|------|------|
+| **A: Subcommands like comments** | `hlx walkthrough show`, `hlx walkthrough list` | Consistent with comments pattern; extensible | Over-engineered — walkthrough is read-only, single action |
+| **B: Single command** | `hlx walkthrough [--ticket <id>] [--run <id>] [--format json\|text]` | Simple; matches read-only nature; minimal learning curve | Less extensible if write operations added later |
+| **C: Inspect-style nesting** | `hlx inspect walkthrough` | Groups with inspection | Breaks semantics — walkthrough isn't production inspection |
 
-**Rationale**: Walkthrough consumption is a single action (fetch and display). There's no creation, deletion, or listing operation that justifies subcommands. The `--run` flag provides run selection when needed, and `--format` provides output control. This minimizes the CLI surface and learning curve.
+### Chosen: Option B — Single command
 
-### AD-2: Dual output format — text (default) and JSON
+**Rationale**: Walkthrough consumption is a single read action: fetch and display. No creation, deletion, or listing operation justifies subcommands. The `--run` flag provides run selection, `--format` provides output control. Minimizes CLI surface area and learning curve. Can add subcommands later without breaking changes if needed.
 
-**Options considered**:
-1. **JSON only** — Machine-readable for coding agents but poor terminal experience for humans.
-2. **Text only** — Human-readable but not consumable by coding agents (Claude Code, Cursor, etc.).
-3. **Both via `--format` flag** — Default `text` for terminal use; `--format json` for coding agents. The comments list command already outputs text by default.
+## Architecture Decision 2: Dual Output Format — Text (Default) and JSON
 
-**Chosen**: Option 3 — Dual format with `--format` flag.
+### Options Considered
 
-**Rationale**: The product spec requires output "readable both as terminal text and as structured data pipeable to coding agents." A `--format json` flag outputs the raw `WalkthroughResult` JSON. The default text format renders a human-readable step-by-step walkthrough with file paths, line numbers, and descriptions. This directly serves both use cases (UC1: terminal reading, UC2: coding agent piping).
+| Option | Description | Pros | Cons |
+|--------|-------------|------|------|
+| **A: JSON only** | Machine-readable for coding agents | Single format | Poor terminal experience for humans |
+| **B: Text only** | Human-readable terminal output | Simple | Not consumable by coding agents |
+| **C: Both via `--format` flag** | Default `text` for terminal; `--format json` for coding agents | Serves both use cases | Two rendering paths |
 
-### AD-3: Use new GET endpoint, not existing POST endpoint
+### Chosen: Option C — Dual format
 
-**Options considered**:
-1. **Call existing POST /walkthrough** — Triggers Claude API generation (expensive, ~60s). Semantically wrong for a read operation.
-2. **Call new GET /walkthrough** — Reads pre-computed data from DB. Fast (< 50ms). Semantically correct.
-3. **Fetch .tour files directly from GitHub** — Requires GitHub token management in CLI; tour files are optionally committed (org flag-gated); adds coupling to GitHub.
+**Rationale**: The product spec requires "output readable both as terminal text and as structured data pipeable to coding agents." The `--format json` flag outputs the full `WalkthroughResult` JSON. The default text format renders a high-density step-by-step walkthrough.
 
-**Chosen**: Option 2 — New GET endpoint.
+### Text output format
 
-**Rationale**: Walkthrough data is already pre-computed and stored in the DB (45.7% of completed runs). The CLI should read this data, not regenerate it. The GET endpoint (designed in server tech-research) returns `{ walkthrough: WalkthroughResult | null }` with `latest` run resolution. One HTTP call, fast response.
+```
+Walkthrough: <title>
+Generated: <timestamp>
+<totalStops> stops across <filesCovered> files in <reposIncluded> repos
+Areas touched: API Surface, UI Components, Tests
 
-### AD-4: Follow the comments module pattern for code structure
+━━━ <repoKey> ━━━
 
-**Options considered**:
-1. **Single file**: `src/walkthrough.ts` containing all logic. Simple but may grow if subcommands are added later.
-2. **Module directory**: `src/walkthrough/index.ts` (router) + `src/walkthrough/show.ts` (display logic). Matches comments and inspect patterns. Easy to extend.
+[1/N] <step.title>  [API Surface]
+  File: <step.file>:<step.line>
+  <step.description>
+  
+  Diff:
+  + added line
+  - removed line
+    context line
 
-**Chosen**: Option 2 — Module directory.
+[2/N] <step.title>  [UI Components]
+  File: <step.file>:<step.line>
+  <step.description>
+  ...
+```
 
-**Rationale**: Consistency with existing CLI code structure (comments has index.ts + list.ts + post.ts; inspect has index.ts + subcommand files). Even though MVP has no subcommands, the router file is a natural extension point. The actual display/fetch logic lives in a separate file for clarity.
+**Key design decisions for text format**:
+- **Architectural category labels** per step (`[API Surface]`, `[Tests]`, etc.) — uses the same `categorizeFile()` pattern matching as the client (merge-analysis-service.ts:71-126)
+- **Diff excerpts** inline when `fileDiffs` data is available — shows the first ~20 lines of each file's diff per step
+- **Summary header** with areas touched — gives immediate high-level framing
+- **No ANSI escape codes** in MVP — ensures compatibility across all terminals and piped output
+- **Falls back gracefully** when diffs unavailable (older walkthroughs)
+
+### JSON output format
+
+```json
+{
+  "ticket": "<ticketId>",
+  "run": "<runId>",
+  "walkthrough": {
+    "title": "...",
+    "generatedAt": "...",
+    "repos": [
+      {
+        "repoKey": "...",
+        "repoUrl": "...",
+        "branch": "...",
+        "tour": { "title": "...", "steps": [...] },
+        "fileDiffs": { "path/to/file.ts": "unified diff..." }
+      }
+    ],
+    "summary": { "totalStops": 10, "filesCovered": 8, "reposIncluded": 2 }
+  }
+}
+```
+
+The JSON format is the full `WalkthroughResult` wrapped with ticket/run metadata. Claude Code or other agents can consume this programmatically for interactive review — e.g., navigating steps, asking questions about specific changes, suggesting improvements.
+
+## Architecture Decision 3: Use New GET Endpoint (Not Existing POST)
+
+### Chosen: New GET `/tickets/:ticketId/runs/:runId/walkthrough`
+
+**Rationale**: The existing POST endpoint triggers expensive Claude API regeneration (~60s, costs money). The CLI needs to READ pre-computed walkthrough data. The new GET endpoint (see server tech-research) returns stored `walkthroughData` JSONB with `latest` run resolution. One HTTP call, fast response (< 200ms).
+
+The CLI calls `hxFetch(config, /tickets/${ticketId}/runs/${runId}/walkthrough, { basePath: "/api" })` following the exact pattern of `comments/list.ts`.
+
+## Architecture Decision 4: Module Directory Structure
+
+### Chosen: `src/walkthrough/index.ts` + `src/walkthrough/show.ts`
+
+**Rationale**: Consistent with comments (`src/comments/index.ts` + `list.ts` + `post.ts`) and inspect (`src/inspect/index.ts` + subcommand files`) patterns. Even though MVP has no subcommands, the module directory provides a natural extension point. Router logic in `index.ts`, display/fetch logic in `show.ts`.
 
 ## Core API/Methods
 
 ### New: `src/walkthrough/index.ts`
-- Router function `runWalkthrough(config: HxConfig, args: string[])`
-- Resolves `--ticket` from flag or `HELIX_TICKET_ID` env (existing pattern from comments/index.ts)
+
+```typescript
+// Router function registered in main src/index.ts
+export async function runWalkthrough(config: HxConfig, args: string[]): Promise<void>
+```
+
+- Resolves `--ticket` from flag or `HELIX_TICKET_ID` env (reuses `resolveTicketId` pattern from comments/index.ts:11-19)
 - Resolves `--run` from flag or defaults to `"latest"`
 - Resolves `--format` from flag or defaults to `"text"`
 - Delegates to `cmdShow(config, ticketId, runId, format)`
+- Prints usage if no valid flags found
 
 ### New: `src/walkthrough/show.ts`
-- `cmdShow(config, ticketId, runId, format)` — Fetches walkthrough via GET, outputs formatted result
+
+```typescript
+export async function cmdShow(
+  config: HxConfig,
+  ticketId: string,
+  runId: string,
+  format: "text" | "json"
+): Promise<void>
+```
+
 - Calls `hxFetch(config, /tickets/${ticketId}/runs/${runId}/walkthrough, { basePath: "/api" })`
-- If `format === "json"`: `console.log(JSON.stringify(walkthrough, null, 2))`
-- If `format === "text"`: Renders step-by-step text output (title, summary, then each stop with file:line and description)
+- Handles null walkthrough: prints "No walkthrough available" (text) or `{ "walkthrough": null }` (json)
+- Text format: renders step-by-step with file:line, descriptions, categories, diff excerpts
+- JSON format: `console.log(JSON.stringify({ ticket: ticketId, run: runId, walkthrough }, null, 2))`
+
+### New: `src/lib/categorize-file.ts`
+
+- ~30 lines of file-path pattern matching (same logic as client version)
+- Returns category string for architectural labeling in text output
+- Shared with text formatter
 
 ### Modified: `src/index.ts`
-- Add `case "walkthrough":` to the switch (import `runWalkthrough`, call with args)
+
+- Add `case "walkthrough":` to the switch router
+- Import `runWalkthrough` from `./walkthrough/index.js`
 - Add usage line: `hlx walkthrough [--ticket <id>] [--run <id>] [--format json|text]`
 
 ## Technical Decisions
 
-### TD-1: Text output format for terminal display
+### TD-1: Text output optimized for "scan in 2 minutes"
+The text format is designed for a developer to scan in under 2 minutes and answer: "Did this change respect the codebase's major arteries?" The summary header shows which architectural areas are touched. Each step shows the category label, file path, description, and diff excerpt. A developer can quickly identify if major areas (API Surface, Schema) are affected and drill into those steps.
 
-The text format renders walkthroughs as readable terminal output:
-```
-Walkthrough: <title>
-Generated: <timestamp>
-<summary.totalStops> stops across <summary.filesCovered> files in <summary.reposIncluded> repos
-
---- <repoKey> ---
-
-[1/N] <step.title or "Step 1">
-  File: <step.file>:<step.line>
-  <step.description>
-
-[2/N] ...
-```
-
-**Rejected alternative**: Interactive TUI with arrow-key navigation and syntax highlighting. Product spec explicitly defers this: "Interactive terminal step-through navigation: A rich TUI is a nice-to-have. MVP can output formatted markdown or JSON."
-
-### TD-2: Error handling for missing walkthroughs
-
-When the GET endpoint returns `{ walkthrough: null }`:
-- Text format: Print "No walkthrough available for this run." and exit 0.
-- JSON format: Print `{ "walkthrough": null }` and exit 0.
-
-When the endpoint returns a non-200 status (ticket not found, auth failure):
-- The existing `hxFetch` error handling (http.ts) throws with a clear message. The top-level catch in index.ts prints it and exits 1.
-
-No special error handling needed beyond existing patterns.
+### TD-2: Diff excerpts in text format limited to ~20 lines per step
+For long diffs, the text format shows the first ~20 lines of the relevant file's diff (from `fileDiffs`). This keeps output scannable. The JSON format includes the full diff for coding agent consumption.
 
 ### TD-3: No HELIX_RUN_ID environment variable
+The `latest` default is correct for ~90% of CLI usage. When a specific run is needed, `--run <id>` is explicit. Adding env vars increases implicit configuration surface without clear benefit.
 
-The CLI resolves `HELIX_TICKET_ID` from env for ticket context. We considered adding `HELIX_RUN_ID` for run context but decided against it because:
-- The `latest` default is the right behavior for 90% of CLI usage
-- When a specific run is needed, `--run <id>` is explicit and clear
-- Adding env vars increases the implicit configuration surface without clear benefit
+### TD-4: Error handling follows existing patterns
+- **Null walkthrough**: Print clear message and exit 0 (not an error — data may not be generated yet)
+- **Non-200 response**: `hxFetch` throws with clear error message → top-level catch in index.ts prints and exits 1
+- **Network failure**: `hxFetch` retries 3 times with exponential backoff (existing behavior)
+
+### TD-5: No ANSI escape codes in MVP
+Ensures output works in all contexts: terminals, piped output, CI logs, coding agent input. Future enhancement can add color gated behind TTY detection (`process.stdout.isTTY`).
+
+### TD-6: Replaces generic "Continue with Claude Code" for CLI users
+The `hlx walkthrough --format json` output gives Claude Code (or any coding agent) the complete walkthrough context: step descriptions, file paths, architectural rationale, and diff data. This replaces the generic "find repos, checkout branches, analyze changes" prompt that the current clipboard feature provides. The client-side `buildClaudeCodeCommand()` will also be enhanced to include the `hlx walkthrough` command (see client tech-research).
 
 ## Cross-Platform Considerations
 
-The CLI runs on macOS, Linux, and Windows (Node.js). The text output format uses no ANSI escape codes or terminal-specific features in the MVP, ensuring compatibility across all platforms. Future enhancements (color, interactive TUI) can be gated behind TTY detection.
+- **macOS, Linux, Windows**: Node.js CLI. No ANSI codes in MVP ensures compatibility.
+- **Coding agents**: JSON output is universally parseable by Claude Code, Cursor, Windsurf, etc.
+- **CI/CD**: Text output works in CI logs for automated review pipelines.
+- **Pipe-friendly**: Both formats work with shell pipes (`hlx walkthrough --format json | jq '.walkthrough.summary'`).
 
 ## Performance Expectations
 
-- **Network**: Single GET request to server. Expected < 50ms server-side (DB read). Total with network varies by deployment.
-- **Rendering**: Text formatting is synchronous string concatenation over the tour steps array. Negligible CPU cost.
-- **CLI startup**: Node.js cold start (~100-200ms). Consistent with existing commands.
+| Concern | Expected | Notes |
+|---------|----------|-------|
+| Network latency | < 500ms total | Single GET request; server < 200ms; network varies |
+| Text rendering | < 10ms | Synchronous string concatenation |
+| JSON rendering | < 5ms | Single JSON.stringify call |
+| CLI startup | ~100-200ms | Node.js cold start; consistent with existing commands |
 
 ## Dependencies
 
-| Dependency | Version | Purpose | Risk |
-|------------|---------|---------|------|
-| Node.js | 18+ | Runtime | None — existing requirement |
-| TypeScript | existing | Build toolchain | None |
-| hxFetch (internal) | existing | HTTP client with retry | None — proven for comments/inspect |
+| Dependency | Type | Status | Risk |
+|------------|------|--------|------|
+| Node.js 18+ | Runtime | Existing | None |
+| TypeScript | Build | Existing | None |
+| hxFetch (internal) | HTTP client | Existing | None — proven for comments/inspect |
 
 No new external dependencies required.
 
 ## Deferred to Round 2
 
-- **Interactive terminal step-through**: Arrow-key navigation, syntax highlighting via Shiki in terminal. Requires TUI library (e.g., ink, blessed). Product explicitly defers this.
-- **Auto-pull of finished tickets**: Automatically surfacing walkthrough data when a dev opens their coding agent. Requires deeper integration with third-party tools.
-- **`hlx walkthrough --regenerate` flag**: Trigger re-generation via POST endpoint when stored data is stale or missing. MVP only reads pre-computed data.
-- **Lint and test scripts**: The CLI has no lint or test configuration. Adding these is valuable but orthogonal to the walkthrough feature.
+- **Interactive terminal TUI**: Arrow-key navigation between steps, syntax-highlighted diffs, scrollable panes. Requires TUI library (e.g., ink). Product explicitly defers this.
+- **Auto-pull of finished tickets**: Automatically surfacing walkthroughs when a dev opens their coding agent session. Requires deeper third-party integration.
+- **`hlx walkthrough --regenerate`**: Trigger re-generation via POST endpoint when stored data is stale or missing. MVP only reads pre-computed data.
+- **ANSI color output**: Color-coded diffs (green/red) and category badges in terminal. Gated behind TTY detection. Enhancement, not MVP.
+- **Lint and test scripts**: CLI has no lint or test configuration. Valuable but orthogonal.
 
 ## Summary Table
 
 | Decision | Choice | Key Rationale |
 |----------|--------|---------------|
-| Command structure | Single `hlx walkthrough` command | Read-only; no need for subcommands |
+| Command structure | Single `hlx walkthrough` command | Read-only; single action; minimal learning curve |
 | Output format | `--format json\|text`, default text | Serves both terminal users and coding agents |
-| Server endpoint | New GET /walkthrough (not existing POST) | Reads pre-computed data; avoids expensive re-generation |
+| Server endpoint | New GET /walkthrough (not POST) | Reads pre-computed data; avoids expensive re-generation |
 | Code structure | Module directory (walkthrough/index.ts + show.ts) | Consistent with comments/inspect patterns |
-| Run resolution | `--run <id>` flag; default `latest` | Server resolves `latest` to most recent completed run |
-| Error handling | Existing hxFetch patterns | No special error handling needed |
+| Run resolution | `--run <id>` flag; default `latest` | Server resolves `latest` — avoids double round-trip |
+| Diff excerpts | First ~20 lines per step in text; full in JSON | Scannable text; complete data for agents |
+| Architectural labels | Per-step category from file-path matching | Instant artery identification; same pattern as client |
 
 ## APL Statement Reference
 
-See `tech-research/apl.json` for the investigation trail. Key findings from diagnosis APL carried forward:
-- helix-cli has zero walkthrough capability today (src/index.ts: 3 commands only)
-- Comments command pattern (--ticket flag, HELIX_TICKET_ID env, hxFetch) is directly reusable
-- Existing POST endpoints are semantically wrong for CLI read operations
+See `tech-research/apl.json` for the investigation trail. Diagnosis APL findings carried forward:
+- CLI has zero walkthrough capability (src/index.ts: only login, inspect, comments)
+- Comments command pattern is directly reusable
+- Server POST endpoint is semantically wrong for CLI reads
+- buildClaudeCodeCommand in client passes zero walkthrough context
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| diagnosis/diagnosis-statement.md (CLI) | Feasibility assessment for CLI walkthrough | CLI has right patterns; needs new subcommand + minor server additions |
-| diagnosis/apl.json (CLI) | CLI evidence | Existing patterns reusable; server endpoints partially sufficient |
-| product/product.md (client) | Product requirements for CLI walkthrough | MVP: fetch and display, structured JSON output, --format flag |
-| scout/reference-map.json (CLI) | Map CLI structure and patterns | 3 commands, HTTP client, HELIX_TICKET_ID env pattern |
-| scout/scout-summary.md (CLI) | CLI extension surface analysis | comments is closest analog; HTTP client ready |
-| src/index.ts (source) | Verify command routing structure | Switch-based routing, 57 lines, easy to extend |
-| src/comments/index.ts (source) | Verify subcommand router pattern | resolveTicketId, router function, delegates to subcommands |
-| src/comments/list.ts (source) | Verify data-fetching CLI pattern | hxFetch with basePath '/api', formatted console output |
-| src/lib/http.ts (source) | Verify HTTP client capabilities | Retry, backoff, auth headers, 30s timeout |
-| tech-research/tech-research.md (server) | Server-side GET endpoint design | GET /walkthrough with 'latest' resolution, attachInspectionAuth |
-| repo-guidance.json | Repo intent from product step | CLI is target for new walkthrough command |
+| diagnosis/diagnosis-statement.md (CLI) | Feasibility assessment | CLI has right patterns; needs new command + server GET endpoint |
+| diagnosis/apl.json (CLI) | CLI evidence | Existing patterns reusable; server dependency confirmed |
+| product/product.md (client) | Product requirements | `hlx walkthrough`; dual format; replace Claude Code handoff |
+| scout/reference-map.json (CLI) | CLI file inventory | 3 commands, HTTP client with retry, HELIX_TICKET_ID pattern |
+| scout/scout-summary.md (CLI) | CLI analysis | comments is closest analog; HTTP client ready |
+| repo-guidance.json | Repo intent | CLI is target for new walkthrough command |
+| src/index.ts (source) | Command routing structure | Switch-based; 57 lines; trivial to extend |
+| src/comments/index.ts (source) | Template pattern | resolveTicketId with --ticket + HELIX_TICKET_ID env var |
+| src/comments/list.ts (source) | Data-fetching pattern | hxFetch with basePath '/api'; formatted console output |
+| src/lib/http.ts (source) | HTTP client capabilities | Retry 3x, exponential backoff, basePath, auth headers |
+| ticket-detail.tsx (source, lines 582-628) | Current Claude Code handoff | Generic prompt, zero walkthrough data — the gap CLI fills |
+| Server tech-research | Server-side GET endpoint design | GET /walkthrough with 'latest' resolution; attachInspectionAuth |
+| merge-analysis-service.ts (source, lines 71-126) | categorizeFile() pattern | File-path categorization for architectural labels |
