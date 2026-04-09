@@ -1,0 +1,42 @@
+{
+  "questions": [
+    "What is the correct implementation order for the CLI walkthrough command?",
+    "How should the CLI fetch walkthrough data?",
+    "What does the text output format look like?",
+    "What does the JSON output format look like?"
+  ],
+  "answers": [
+    {
+      "answer": "Order: (1) categorizeFile utility, (2) show command with fetch + render logic, (3) router with flag parsing, (4) register in main index.ts, (5) quality gates. The utility comes first because the show command imports it. The show command comes before the router because the router delegates to it. The main router registration comes last because it imports the walkthrough module.",
+      "evidence": [
+        "src/comments/index.ts: router delegates to list.ts/post.ts — same pattern for walkthrough",
+        "src/index.ts: switch-based routing imports module index files",
+        "categorizeFile is imported by show.ts for text format labels"
+      ]
+    },
+    {
+      "answer": "The CLI calls GET /tickets/:ticketId/runs/:runId/walkthrough via hxFetch(config, path, { basePath: '/api' }). The --run flag defaults to 'latest', which the server resolves to the most recent completed run with non-empty walkthrough data. Auth uses the existing X-API-Key mechanism via hxFetch (http.ts:53-54). The server endpoint uses attachInspectionAuth middleware compatible with CLI auth.",
+      "evidence": [
+        "src/comments/list.ts line 25: hxFetch(config, path, { basePath: '/api' }) — proven CLI API call pattern",
+        "Server tech-research: GET /walkthrough with 'latest' resolution and attachInspectionAuth",
+        "src/lib/http.ts lines 53-54: X-API-Key header for hxi_ keys"
+      ]
+    },
+    {
+      "answer": "Summary header with title, timestamp, stats, areas touched. Per-repo separator. Per-step: [1/N] title [category], file:line, description, and first ~20 lines of diff if fileDiffs available. No ANSI escape codes for universal compatibility. Optimized for 2-minute scan.",
+      "evidence": [
+        "Tech research text format specification with step-by-step layout",
+        "Product spec: 'Dual output format: --format text (default) for human-readable terminal output'"
+      ]
+    },
+    {
+      "answer": "Full WalkthroughResult JSON wrapped with ticket and run metadata: { ticket, run, walkthrough: { title, generatedAt, repos: [{ repoKey, repoUrl, branch, tour, fileDiffs }], summary } }. Pretty-printed with 2-space indent. Consumable by Claude Code or other coding agents for interactive review.",
+      "evidence": [
+        "Product spec: '--format json for structured data consumable by coding agents like Claude Code'",
+        "Tech research JSON format specification"
+      ]
+    }
+  ],
+  "statement": "The CLI implementation plan has 5 ordered steps: categorizeFile utility, show command with text/JSON rendering, router with flag parsing, main index registration, and quality gates. The command follows established CLI patterns (comments module) and depends on the server GET /walkthrough endpoint. No new external dependencies. Text output is optimized for developer scanning; JSON output is structured for coding agent consumption.",
+  "followups": []
+}
