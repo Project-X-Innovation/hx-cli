@@ -1,27 +1,35 @@
 {
   "questions": [
-    "What would be needed to add a walkthrough command to helix-cli?",
-    "Can the existing server API surface support a CLI walkthrough flow?"
+    "What is needed in the CLI to provide a walkthrough experience that replaces or enhances 'Continue with Claude Code'?",
+    "What existing CLI patterns can be reused for the new walkthrough command?",
+    "What server-side dependencies does the CLI walkthrough have?"
   ],
   "answers": [
     {
-      "answer": "helix-cli needs: (1) a new top-level 'walkthrough' subcommand in src/index.ts following the comments/inspect pattern, (2) subcommands for listing available walkthroughs (by ticket/run) and displaying walkthrough content, (3) terminal rendering of step-by-step tour data — either formatted output or structured JSON suitable for piping to coding agents. The existing HTTP client (src/lib/http.ts) and HELIX_TICKET_ID env pattern (src/comments/list.ts) are directly reusable.",
+      "answer": "A new `hlx walkthrough` command that fetches pre-computed walkthrough data and renders it in two formats: human-readable text (step-by-step with file:line, descriptions, architectural context) and JSON (for piping to Claude Code or other agents). The text format should deliver a compressed, high-density summary that lets a developer assess changes in under 2 minutes. The JSON format should include enough context that a coding agent can provide an interactive review session.",
       "evidence": [
-        "src/index.ts: 3 commands (login, inspect, comments), switch-based routing",
-        "src/comments/list.ts: --ticket flag with HELIX_TICKET_ID fallback pattern",
-        "src/lib/http.ts: HTTP client with retry/backoff",
-        "package.json: v1.2.0, Node 18+, tsc build"
+        "User continuation context: 'CLI in their favorite code editor, maybe replacing the current Continue with Claude Code'",
+        "ticket-detail.tsx:582-628: current buildClaudeCodeCommand generates generic prompt with zero walkthrough context",
+        "helix-cli/src/index.ts: only login, inspect, comments — no walkthrough capability"
       ]
     },
     {
-      "answer": "Partially. The existing POST /walkthrough endpoint returns full walkthrough data including tour steps, and POST /walkthrough/files returns file contents. However: (1) the findRunOrThrow bug (server-side) would need to be fixed first; (2) there is no GET endpoint for discovering which runs have walkthroughs; (3) the POST method for read operations is semantically awkward for CLI consumption — a GET-based endpoint would be more natural. The walkthroughData JSONB stored in SandboxRun could also be served directly without re-generation.",
+      "answer": "The `comments` module provides the closest pattern: `resolveTicketId()` (comments/index.ts:11-19) supports `--ticket` flag with `HELIX_TICKET_ID` env var fallback, subcommand routing, authenticated API calls via hxFetch, and formatted terminal output. The `inspect` module demonstrates read-only data fetching with JSON output modes. The HTTP client (lib/http.ts) has retry with exponential backoff and basePath support, ready for new API calls. All of these patterns are directly reusable.",
       "evidence": [
-        "Server routes/api.ts lines 189-190: POST /walkthrough and POST /walkthrough/files",
-        "walkthrough-service.ts findRunOrThrow: blocks non-current runs",
-        "SandboxRun.walkthroughData: pre-computed JSONB available for direct serving"
+        "src/comments/index.ts: resolveTicketId with --ticket flag + HELIX_TICKET_ID env var",
+        "src/comments/list.ts: hxFetch with formatted terminal output, --since and --helix-only flags",
+        "src/lib/http.ts: hxFetch with retry (3 attempts, 2s base delay, 30s timeout), basePath '/api'"
+      ]
+    },
+    {
+      "answer": "The CLI depends on the server providing a GET endpoint (or similar read path) for pre-computed walkthrough data. Currently only POST /walkthrough exists, which triggers expensive ~60s regeneration. The CLI also needs 'latest run' resolution — the ability to request walkthrough data for the most recent completed run of a ticket without knowing the exact runId. Both are server-side changes. An alternative MVP path is using the ticket detail API if it already includes walkthroughData in run objects.",
+      "evidence": [
+        "routes/api.ts lines 189-190: Only POST endpoints exist",
+        "walkthrough-service.ts lines 68-76: findRunOrThrow blocks historical run access",
+        "SandboxRun.walkthroughData: JSONB column with complete data ready for direct serving"
       ]
     }
   ],
-  "statement": "helix-cli has no walkthrough capability today but has the right structural patterns (commands, HTTP client, env-based ticket resolution) to support one. The CLI alternative proposed in the ticket is feasible — it would require a new walkthrough subcommand, minor server API additions (GET-based walkthrough retrieval, fix findRunOrThrow), and a decision on terminal rendering format (interactive steps vs JSON output for coding agents).",
+  "statement": "The CLI is a greenfield addition: `hlx walkthrough` command following the `comments` module pattern. It fetches pre-computed walkthrough data from the server and renders it in text (default, terminal-friendly) or JSON format (for coding agents). The primary dependency is a server-side GET endpoint for stored walkthrough data — without this, the CLI has no cheap path to read walkthrough content. The command structure, ticket resolution, HTTP client patterns all already exist in the CLI codebase and are directly reusable.",
   "followups": []
 }
