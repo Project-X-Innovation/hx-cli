@@ -1,0 +1,26 @@
+{
+  "questions": [
+    "Q1: Is the CLI needed for the core side quest mechanism, or is it optional?",
+    "Q2: If CLI changes are needed, what commands should be added?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI is not required for the core side quest mechanism. The recommended architecture has the orchestrator create child tickets server-side based on step output parsing, not via CLI commands from within the sandbox. The CLI could optionally gain a 'hlx tickets create' command for advanced use cases or manual side quest creation from sandbox, but this is not on the critical path.",
+      "evidence": [
+        "The orchestrator (orchestrator.ts) already directly calls ticket-service.ts functions — it doesn't need CLI intermediation",
+        "helix-cli src/index.ts — only 3 commands (login, inspect, comments); no ticket lifecycle commands",
+        "HELIX_INSPECT_TOKEN is scoped for read-only inspection; ticket creation would need elevated auth"
+      ]
+    },
+    {
+      "answer": "If CLI ticket creation is added as an enhancement: (1) 'hlx tickets create' — create a ticket with optional --parent-ticket flag for side quest linking, --mode for RESEARCH/FIX/BUILD, and --after for chaining. (2) 'hlx tickets status <id>' — check if a spawned side quest has completed. These follow the existing subcommand pattern (comments/index.ts) and use the same hxFetch HTTP client.",
+      "evidence": [
+        "src/comments/index.ts — subcommand dispatch pattern with args[0] parsing",
+        "src/comments/post.ts — POST to server API pattern reusable for ticket creation",
+        "src/lib/http.ts — hxFetch with retry and auth already supports API calls"
+      ]
+    }
+  ],
+  "statement": "The CLI is a tertiary target for side quests. The core mechanism works entirely server-side (orchestrator parses step output, creates child tickets). A CLI 'hlx tickets create' command is an optional enhancement that could enable manual side quest creation from sandbox. Changes are minimal and depend on server-side API endpoints being available first.",
+  "followups": []
+}
