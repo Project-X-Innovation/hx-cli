@@ -1,0 +1,64 @@
+{
+  "problem": "helix-cli (hlx) provides production inspection capabilities for databases, logs, and APIs, plus ticket comment management. For the 'Monitoring with Auto Solve' feature, helix-cli is the tool through which the monitoring agent probes Helix Global production environments and posts monitoring status updates as ticket comments.",
+  "files": [
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Database inspection command. Sends POST to /api/inspect/:repoId/database with SQL query. The monitoring agent uses this to run read-only production database checks (e.g., verifying record states, counting error records)."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Log fetching command. Sends POST to /api/inspect/:repoId/logs with query and optional limit. The monitoring agent uses this to search production logs for expected success/error patterns."
+    },
+    {
+      "path": "src/inspect/api.ts",
+      "why": "API inspection command. Sends GET to /api/inspect/:repoId/api. The monitoring agent can check health endpoints or API responses."
+    },
+    {
+      "path": "src/inspect/repos.ts",
+      "why": "Lists available repositories and their inspection capabilities (types: DATABASE, LOGS, API). The monitoring agent needs to discover which repos can be inspected."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Posts agent comments to tickets. The monitoring agent posts status updates (check passed, check failed, waiting for data) as comments. Server determines isAgentAuthored flag."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Lists ticket comments with filtering (--helix-only, --since). Monitoring agent can review prior status updates and human feedback."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client with 3 retries, exponential backoff, 30s timeout, and rate-limit handling. All inspection and comment calls use this resilient client."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Configuration management supporting HELIX_API_KEY, HELIX_INSPECT_TOKEN, HELIX_INSPECT_API_KEY env vars. Config file at ~/.hlx/config.json."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository resolution by ID, name, or partial match. Monitoring agent resolves repo names to IDs for inspection calls."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point defining all commands: login, inspect (db/logs/api/repos), comments (list/post), --version."
+    },
+    {
+      "path": "package.json",
+      "why": "Package: @projectxinnovation/helix-cli v1.2.0. Binary: hlx. Build: tsc. Typecheck: tsc --noEmit. Zero runtime dependencies."
+    }
+  ],
+  "facts": [
+    "CLI binary: hlx. Published as @projectxinnovation/helix-cli v1.2.0. Zero runtime dependencies (pure Node.js built-ins).",
+    "Inspection commands: hlx inspect db --repo <name> '<SQL>', hlx inspect logs --repo <name> '<query>' [--limit N], hlx inspect api --repo <name> <path>.",
+    "Comment commands: hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>], hlx comments post [--ticket <id>] '<message>'.",
+    "Auth: supports HELIX_API_KEY, HELIX_INSPECT_TOKEN, HELIX_INSPECT_API_KEY env vars. Also ~/.hlx/config.json file auth. hxi_ prefixed keys use X-API-Key header.",
+    "Ticket ID resolution: from --ticket flag or HELIX_TICKET_ID environment variable (injected by Helix during sandbox execution).",
+    "HTTP resilience: 3 retries, exponential backoff (2s base), retry on 429/500/502/503/504, 30s timeout, Retry-After header support.",
+    "Build: TypeScript compilation (tsc). Typecheck: tsc --noEmit. No lint or test scripts defined.",
+    "The CLI is already used inside Helix workflow sandboxes. HELIX_TICKET_ID and inspection tokens are injected as environment variables during step execution."
+  ],
+  "unknowns": [
+    "Whether helix-cli needs new monitoring-specific commands (e.g., 'hlx monitor check', 'hlx monitor plan') or if existing inspect and comments commands are sufficient for the monitoring agent.",
+    "Whether the monitoring agent will invoke hlx as a subprocess or use the server's inspection-proxy-service directly. Both paths exist.",
+    "Whether the --limit parameter on log queries is sufficient for monitoring or if additional filtering (e.g., time-window, severity) should be added to the CLI."
+  ]
+}
