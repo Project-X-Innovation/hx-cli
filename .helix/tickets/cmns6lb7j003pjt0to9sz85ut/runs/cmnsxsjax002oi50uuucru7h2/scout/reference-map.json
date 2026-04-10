@@ -1,0 +1,25 @@
+{
+  "problem": "The #ticket feature is primarily a web UI (helix-global-client) and orchestrator (helix-global-server) concern. The helix-cli is a lightweight command-line tool with no interactive prompt/textarea UI where hashtag detection would occur. The CLI may be context-only for this ticket.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point. Simple process.argv command router. No interactive prompt UI exists.",
+      "lines": "8-57"
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comment subcommand router. Uses --ticket flag or HELIX_TICKET_ID env var for ticket context. This is the closest the CLI gets to ticket referencing.",
+      "lines": "11-20"
+    }
+  ],
+  "facts": [
+    "The CLI is a non-interactive command-line tool with simple process.argv parsing. There is no textarea, prompt UI, or interactive input where # detection would occur.",
+    "The CLI has no autocomplete or suggestion mechanism.",
+    "The #ticket feature as described (autocomplete dropdown, filtering, inline references in a textarea) is inherently a web UI feature that belongs in helix-global-client.",
+    "The CLI communicates with the server via REST API (src/lib/http.ts) but only uses /api/inspect/* and /api/tickets/{id}/comments endpoints.",
+    "No changes to helix-cli are expected for this ticket."
+  ],
+  "unknowns": [
+    "Could a future CLI use case benefit from a 'hlx ticket context <ticketId>' command to dump referenced ticket context? (Out of scope for this ticket)"
+  ]
+}

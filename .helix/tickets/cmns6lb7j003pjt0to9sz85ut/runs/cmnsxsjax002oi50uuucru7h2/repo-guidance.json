@@ -1,0 +1,20 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-global-server",
+      "intent": "target",
+      "rationale": "All three gaps are in this repo: (1) pending DB migration for referencedTicketIds, (2) referenced-ticket-resolver.ts needs rewrite from text-based to filesystem materialization approach, (3) orchestrator.ts needs new materialization step using proven parent-artifact blob-download pattern (L879-924), (4) step prompts or common.mjs need update to inform agents about materialized file paths, (5) dead code in common.mjs L375-383 needs cleanup. The resolver, orchestrator, step executor, agent runtime, and blob storage service are all here."
+    },
+    {
+      "repoKey": "helix-global-client",
+      "intent": "context",
+      "rationale": "Client #ticket UX is already fully implemented and functional: use-hashtag-reference.ts hook, hashtag-ticket-picker.tsx, reference-chip.tsx, dashboard.tsx integration with draft persistence and mutation submission. User feedback targets backend context delivery, not UX. No structural changes needed. Minor type safety improvement (CreateTicketRequest) is optional and non-blocking."
+    },
+    {
+      "repoKey": "helix-cli",
+      "intent": "context",
+      "rationale": "CLI is a non-interactive command-line tool with no textarea or autocomplete UI. The #ticket feature is inherently a web UI + orchestrator feature. No changes needed."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
