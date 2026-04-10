@@ -1,0 +1,20 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-global-server",
+      "intent": "target",
+      "rationale": "Server owns the data model (Ticket model needs referencedTicketIds field + migration), ticket creation API (must accept and validate referenced IDs), and the full agent context pipeline (orchestrator scaffold, step input JSON, buildContext, ticket.md). All four layers of the context pipeline need extension to resolve and inject referenced ticket context. Existing report/artifact fetch functions are reusable."
+    },
+    {
+      "repoKey": "helix-global-client",
+      "intent": "target",
+      "rationale": "Client owns the ticket creation UX where #ticket references originate. Needs: new #-trigger detection hook, ticket autocomplete picker with shortId+title search, reference chips, broader ticket query scope (include deployed), CreateTicketRequest/TicketDraft type extensions, and mutation body extension to send referencedTicketIds."
+    },
+    {
+      "repoKey": "helix-cli",
+      "intent": "context",
+      "rationale": "CLI is a non-interactive command-line tool with no textarea or autocomplete UI. The #ticket feature is inherently a web UI + orchestrator feature. No changes needed in helix-cli."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
