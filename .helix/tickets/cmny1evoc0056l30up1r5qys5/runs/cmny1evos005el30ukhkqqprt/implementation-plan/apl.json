@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Q1: What is the optimal structure and assembly sequence for a 9-section modular research report that serves as both pitch-deck prompt material and website content source?",
+    "Q2: What data sources and verification steps are needed to ensure every claim in the report is evidence-backed?",
+    "Q3: How should the report balance honest risk disclosure with compelling investor narrative?"
+  ],
+  "answers": [
+    {
+      "answer": "The report should be assembled in a specific sequence: (1) refresh production metrics first (runtime inspection), (2) capture current website state for contrast, (3) write the Executive Narrative as the narrative anchor that sets the tone, (4) build out evidence-heavy sections (Product Capabilities, Market Sizing, Financial Model, Competitive Landscape, Traction Dashboard) that form the data backbone, (5) write the analytical sections (Risk Register, Strategic Roadmap) that interpret the data, (6) close with Key Quotes for direct slide/site use, (7) assemble into a single file with header, TOC, and appendix. This sequence ensures foundational data is gathered before synthesis sections that depend on it.",
+      "evidence": [
+        "tech-research/tech-research.md — 9-section modular architecture chosen, each section independently extractable",
+        "product/product.md — 7 success criteria defining report quality bar",
+        "ticket.md — founder says 'information that I'm going to feed in as a prompt to a pitch deck'"
+      ]
+    },
+    {
+      "answer": "Five data source categories must be cross-referenced: (1) Codebase evidence — file paths from 6 repos proving each claimed capability; (2) Production runtime data — fresh database queries via runtime-inspection skill for metrics; (3) PDF attachment data — verbatim financial projections, market claims, and Manifesto quotes with page attribution; (4) External market research — citations from diagnosis-stage web searches (Precedence Research, Oracle, Enlyft, TheirStack, TechCrunch); (5) Prior artifact synthesis — scout-summary, diagnosis, product, and tech-research artifacts contain pre-validated analysis. The verification plan includes 8 Required Checks covering file existence, citation density, quote accuracy, metric freshness, financial accuracy, market validation, competitive coverage, and section independence.",
+      "evidence": [
+        "diagnosis/diagnosis-statement.md — 5 evidence categories listed: codebase, runtime, attachments, external research, inspection audit",
+        "scout/scout-summary.md — 34 key files mapped, 30 verified facts, runtime metrics gathered",
+        "tech-research/tech-research.md — evidence standard: 'Every claim cites specific source'"
+      ]
+    },
+    {
+      "answer": "The report follows tech-research Decision 3 (Contextual Honesty, Not Hiding): surface all metrics including weak ones (55% success rate, 31% NS deployment success, zero revenue) with honest context and improvement trajectories. Lead with strength metrics (261 tickets, 123 deployed, 16% MoM growth, 5 active orgs), then contextualize weak metrics as beta-stage product maturity indicators. The Risk Register (Section 7) addresses 8 investor objections proactively with evidence-based mitigations. This approach builds investor trust through transparency rather than undermining it through omission.",
+      "evidence": [
+        "tech-research/tech-research.md — Decision 3: 'Contextual Honesty, Not Hiding' — surface all metrics with honest context",
+        "diagnosis/apl.json A6 — 8 key risks with evidence and mitigation strategies",
+        "product/product.md — Success Criterion: 'Key objections have preemptive framing'"
+      ]
+    }
+  ],
+  "statement": "The implementation plan for RSH-221 directs the creation of a single research report at report/report.md in the helix-cli run root. The report has 9 modular, self-contained sections (Executive Narrative, Product Capabilities, Market Sizing, Financial Model Analysis, Competitive Landscape, Traction Dashboard, Risk Register, Strategic Roadmap, Key Quotes & Positioning) assembled in dependency order. Production metrics are refreshed via runtime inspection before writing data-dependent sections. The Manifesto's accountability thesis anchors the narrative. Financial projections are stress-tested with 3 scenarios (base/conservative/optimistic). Market sizing uses a TAM/SAM/SOM framework with external citations. Competitors are mapped on a 2x2 positioning matrix. Weak metrics are surfaced with honest context. The verification plan has 8 Required Checks covering completeness, evidence density, quote accuracy, metric freshness, financial accuracy, market validation, competitive coverage, and section independence. No code changes are required in any repository.",
+  "followups": []
+}
