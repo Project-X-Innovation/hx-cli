@@ -1,0 +1,67 @@
+{
+  "questions": [
+    "Q1: What report architecture best serves both pitch-deck prompting and website content generation from a single research document?",
+    "Q2: How should the financial projections be stress-tested to present a credible narrative without undermining founder confidence?",
+    "Q3: What market sizing methodology produces a defensible TAM/SAM/SOM that withstands investor scrutiny?",
+    "Q4: How should the two different investment structures (Dovie $50K-$100K vs One Pager $500K/15%) be presented without creating confusion?",
+    "Q5: What competitive positioning framework best communicates Helix's unique 'accountability gap' moat to investors?",
+    "Q6: How should weak metrics (55% run success rate, 31% NS deployment success, zero revenue) be framed constructively?"
+  ],
+  "answers": [
+    {
+      "answer": "A modular, section-based report architecture serves both use cases. Each section should be self-contained with a clear narrative thesis, supporting evidence, and key data points. This allows the pitch-deck prompt to selectively reference sections (e.g., 'Use the Market Sizing section for slides 3-5') and the website to extract positioning language and capability descriptions. The recommended structure: (1) Executive Narrative, (2) Product Capabilities with Evidence, (3) Market Sizing with External Validation, (4) Financial Model Analysis, (5) Competitive Landscape Map, (6) Traction Dashboard, (7) Risk Register with Mitigations, (8) Strategic Roadmap, (9) Key Quotes and Positioning Lines.",
+      "evidence": [
+        "ticket.md — founder says 'information that I'm going to feed in as a prompt to a pitch deck' and also mentions 'updated site'",
+        "product/product.md — Success Criteria lists 8 specific output categories",
+        "Modular structure allows selective extraction for both pitch deck slides and website sections"
+      ]
+    },
+    {
+      "answer": "Present the Dovie model as the 'base case' alongside two adjusted scenarios: a 'conservative case' (with 3% monthly churn, cost scaling at $50K + $30/customer/month for AI inference, and 30% slower customer acquisition) and an 'optimistic case' (acknowledging the $1,500/mo price is conservative vs. $5K-$20K/mo value delivered, suggesting potential for upselling). Surface the flat-cost and zero-churn assumptions explicitly but frame them as 'areas for model refinement' rather than fundamental flaws. The key insight to lead with: even the conservative case reaches profitability within 12 months, which validates the business model even if timeline shifts.",
+      "evidence": [
+        "Dovie Offer PDF — $50K flat costs, 0 churn, 0→999 customers",
+        "diagnosis/apl.json A2 — identifies flat costs and zero churn as key weaknesses",
+        "diagnosis/diagnosis-statement.md — 'Even 2% monthly churn at 500 customers = 10 lost/month'",
+        "One Pager — breakeven month 8 vs Dovie month 6, showing slight variance in cost assumptions already"
+      ]
+    },
+    {
+      "answer": "Use a TAM/SAM/SOM framework with external citations for each layer. TAM: AI-in-ERP market ($5.82B in 2025, $58.7B by 2035 at 26% CAGR — Precedence Research). SAM: NetSuite consulting market specifically (43K-69K+ companies x estimated $3K-$10K/mo average consulting spend = $1.5B-$8.3B). SOM: Companies with active customization needs and budget for AI-assisted solution (~5,000-10,000 companies x $1,500/mo = $90M-$180M near-term serviceable). The $2B+ headline claim should be positioned as SAM, with the more defensible $90M-$180M SOM as the near-term realistic target. This is intellectually honest and gives investors a clear path from 'we can capture this' to 'the ceiling is much higher.'",
+      "evidence": [
+        "Web search (from diagnosis) — AI-in-ERP market $5.82B growing to $58.7B at 26% CAGR",
+        "Web search (from diagnosis) — Oracle 43K+ NS customers, Enlyft 69K+, TheirStack 68K+",
+        "diagnosis/apl.json A3 — '$500M-$1B more defensible for directly addressable segment'",
+        "Dovie Offer — 999 customers at $1,500/mo = $18M ARR as 36-month target"
+      ]
+    },
+    {
+      "answer": "Present them as different instruments serving different investor profiles within the same round strategy. The Dovie structure ($50K-$100K for 2-4% with profit distributions) targets small/angel investors seeking cash-flow returns. The One Pager structure ($500K for 15%) targets larger seed investors seeking equity appreciation. Both share the $2.83M pre-money valuation. The report should present the financial model and market opportunity as the common foundation, and note the two investment tiers as context. The pitch deck should focus on whichever structure matches the specific investor audience.",
+      "evidence": [
+        "Dovie Offer PDF — $50K/2% and $100K/4% with distribution model",
+        "One Pager PDF — $500K/15% equity",
+        "Both share $2.83M pre-money valuation",
+        "ticket.md — 'Ideally I would get all of it from one person but I might have to split it up into small numbers'"
+      ]
+    },
+    {
+      "answer": "Use a 2x2 positioning matrix with axes of 'Scope of Responsibility' (task-level vs. system-level) and 'Domain Specificity' (general-purpose vs. ERP-specialized). This places: (1) AI coding tools (Copilot, Claude Code) at task-level/general — they generate code but don't own outcomes; (2) NetSuite's own AI (NetSuite Next) at task-level/ERP-specialized — automates specific ERP tasks but doesn't own customization lifecycle; (3) AI-native ERP replacements (Rillet, Campfire) at system-level/general — replace ERPs entirely, different buyer; (4) Helix uniquely at system-level/ERP-specialized — autonomous operator for existing ERPs, end-to-end. The Manifesto's language ('Intelligence is not the product. Responsibility is.') provides the narrative anchor. The key defensibility argument: as AI intelligence commoditizes, the moat is operational accountability — which requires the full lifecycle pipeline that Helix has built (9 steps, sandbox testing, deployment, monitoring).",
+      "evidence": [
+        "Manifesto PDF — 'Helix exists only in what neither side can own'",
+        "diagnosis/apl.json A4 — 4 competitor categories with threat levels",
+        "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts — 9-step pipeline is the 'accountability infrastructure'",
+        "diagnosis/diagnosis-statement.md — competitor table with differentiation arguments"
+      ]
+    },
+    {
+      "answer": "Frame weak metrics as 'beta-stage product maturity indicators' with clear improvement trajectories. (1) 55% run success rate: frame as 'the hardest problem in AI — reliable autonomous operation — is being solved iteratively; each failure generates training data for improvement.' Note that the 9-step pipeline itself is the mechanism for improving success rates (each step validates the previous). (2) 31% NS deployment success: frame as 'NetSuite SDF deployment is notoriously complex; general deployment success is 85% (52/61); NS-specific automation is the newest capability.' (3) Zero revenue: frame as '4 enterprise betas validating product-market fit; revenue conversion is a go-to-market milestone, not a product milestone. 7 orgs and 22 users demonstrate adoption.' Lead with the strong metrics (261 tickets, 123 deployed, 16% MoM growth, 5 active orgs) and contextualize the weak ones.",
+      "evidence": [
+        "scout/reference-map.json — 606 runs, 333 succeeded (55%), 61 general deploys (85% success)",
+        "diagnosis/diagnosis-statement.md — 'Product is maturing; general deployment success is higher (85%)'",
+        "One Pager — 4 enterprise beta users",
+        "scout/scout-summary.md — 140 tickets in April vs 121 in March (16% MoM growth)"
+      ]
+    }
+  ],
+  "statement": "The technical direction for RSH-221 is to produce a modular, evidence-backed research report structured in 9 self-contained sections that serve as both pitch-deck prompt material and website content source. The report uses a TAM/SAM/SOM framework for market sizing, presents financial projections with base/conservative/optimistic scenarios, maps competitors on a 2x2 positioning matrix (scope-of-responsibility x domain-specificity), and frames all production metrics with honest context. Two investment structures (Dovie angel tier and One Pager seed tier) are presented as complementary instruments. The narrative is anchored by the Manifesto's accountability thesis and supported by codebase evidence (9-step pipeline, 80+ APIs, production deployment automation) and validated production metrics (7 orgs, 261 tickets, 123 deployed). Key risks (Oracle competition, cost scaling, zero revenue, success rates) are addressed with evidence-based mitigations rather than dismissed.",
+  "followups": []
+}
