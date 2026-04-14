@@ -1,35 +1,44 @@
 {
   "questions": [
-    "Q1: What is the optimal structure and assembly sequence for a 9-section modular research report that serves as both pitch-deck prompt material and website content source?",
-    "Q2: What data sources and verification steps are needed to ensure every claim in the report is evidence-backed?",
-    "Q3: How should the report balance honest risk disclosure with compelling investor narrative?"
+    "Q1: What is the complete report structure and assembly sequence for a 10-section narrative-arc research report?",
+    "Q2: What source documents and evidence categories must be synthesized, and in what priority order?",
+    "Q3: What are the key content decisions that shape how each section is written?",
+    "Q4: How should the verification plan validate report completeness and accuracy without code changes?"
   ],
   "answers": [
     {
-      "answer": "The report should be assembled in a specific sequence: (1) refresh production metrics first (runtime inspection), (2) capture current website state for contrast, (3) write the Executive Narrative as the narrative anchor that sets the tone, (4) build out evidence-heavy sections (Product Capabilities, Market Sizing, Financial Model, Competitive Landscape, Traction Dashboard) that form the data backbone, (5) write the analytical sections (Risk Register, Strategic Roadmap) that interpret the data, (6) close with Key Quotes for direct slide/site use, (7) assemble into a single file with header, TOC, and appendix. This sequence ensures foundational data is gathered before synthesis sections that depend on it.",
+      "answer": "The report follows a 10-section narrative-arc structure optimized for pitch-deck conversion: (1) The Structural Gap (problem via three-way thesis from Positioning Refined), (2) Market Opportunity (TAM with three concentric rings), (3) What Helix Accomplishes (six high-level capability categories), (4) Traction & Momentum (production metrics with honest contextualization), (5) Financial Model (three-layer: base, stress-test, upside), (6) Competitive Landscape (concentric compression model), (7) Risk Register & Mitigations (Reality Check milestones as founder discipline), (8) Team & Investment (dual structure), (9) Branding & Positioning Language (context-organized lines), (10) Future Vision (ERP-as-database thesis). Assembly sequence: read all 7 PDFs first, gather supplementary runtime data if needed, write sections 1-10 in order, assemble into single report/report.md with executive summary and evidence appendix, self-verify.",
       "evidence": [
-        "tech-research/tech-research.md — 9-section modular architecture chosen, each section independently extractable",
-        "product/product.md — 7 success criteria defining report quality bar",
-        "ticket.md — founder says 'information that I'm going to feed in as a prompt to a pitch deck'"
+        "tech-research/tech-research.md — narrative-arc structure chosen as Option B; 10-section content architecture table defined",
+        "product/product.md — success criteria list defining 10 required output categories",
+        "ticket.md — 'information that I'm going to feed in as a prompt to a pitch deck'"
       ]
     },
     {
-      "answer": "Five data source categories must be cross-referenced: (1) Codebase evidence — file paths from 6 repos proving each claimed capability; (2) Production runtime data — fresh database queries via runtime-inspection skill for metrics; (3) PDF attachment data — verbatim financial projections, market claims, and Manifesto quotes with page attribution; (4) External market research — citations from diagnosis-stage web searches (Precedence Research, Oracle, Enlyft, TheirStack, TechCrunch); (5) Prior artifact synthesis — scout-summary, diagnosis, product, and tech-research artifacts contain pre-validated analysis. The verification plan includes 8 Required Checks covering file existence, citation density, quote accuracy, metric freshness, financial accuracy, market validation, competitive coverage, and section independence.",
+      "answer": "Seven PDF source documents organized by reliability tier: Tier 1 Manifesto (philosophical foundation), Tier 2 Dovie Offer (most recent financials), Tier 3 Positioning Refined + Transcript (thesis narrative), Tier 4 Reality Check (threat assessment with milestones), Tier 5 One-Pager (market sizing and team), Tier 6 Tagline (branding). Plus: six codebases for capability evidence at highest category level only, production runtime data (7 orgs, 22 users, 264 tickets, 124 deployed, 81% autonomous, 33 repos), and externally validated market intelligence from diagnosis web searches (NetSuite 43K+ customers, AI-in-ERP $5.82B->$58.7B, ERP consulting $50.1B). All seven PDFs must be re-read directly by the implementation step to avoid telephoning errors through intermediate summaries.",
       "evidence": [
-        "diagnosis/diagnosis-statement.md — 5 evidence categories listed: codebase, runtime, attachments, external research, inspection audit",
-        "scout/scout-summary.md — 34 key files mapped, 30 verified facts, runtime metrics gathered",
-        "tech-research/tech-research.md — evidence standard: 'Every claim cites specific source'"
+        "ticket.md — source priority ranking from founder",
+        "scout/scout-summary.md — six-tier evidence landscape with production metrics",
+        "diagnosis/diagnosis-statement.md — web search validated market data and competitive intelligence"
       ]
     },
     {
-      "answer": "The report follows tech-research Decision 3 (Contextual Honesty, Not Hiding): surface all metrics including weak ones (55% success rate, 31% NS deployment success, zero revenue) with honest context and improvement trajectories. Lead with strength metrics (261 tickets, 123 deployed, 16% MoM growth, 5 active orgs), then contextualize weak metrics as beta-stage product maturity indicators. The Risk Register (Section 7) addresses 8 investor objections proactively with evidence-based mitigations. This approach builds investor trust through transparency rather than undermining it through omission.",
+      "answer": "Eight core content decisions from tech-research shape the report: (1) Six high-level capability categories anchored to Manifesto principles, no software implementations per user guidance; (2) Three-layer financial presentation (base, stress-test, upside) for investor transparency; (3) Three concentric TAM rings leading with conservative $600M floor; (4) Concentric compression competitive model ('governance is scarce') not a feature matrix; (5) Honest traction contextualization with proactive weak-metric framing; (6) Lead with structural gap not ERP-as-database vision (near-term problem grounds the pitch); (7) Reality Check milestones positioned as founder discipline with kill rules; (8) Branding language organized by destination (homepage, pitch, thesis, hook, boundary test) for direct lift.",
       "evidence": [
-        "tech-research/tech-research.md — Decision 3: 'Contextual Honesty, Not Hiding' — surface all metrics with honest context",
-        "diagnosis/apl.json A6 — 8 key risks with evidence and mitigation strategies",
-        "product/product.md — Success Criterion: 'Key objections have preemptive framing'"
+        "tech-research/tech-research.md — Decisions 1-8 with rejected alternatives documented",
+        "User continuation context — 'you don't have to point out specific software implementations'",
+        "Reality_Check___Risks.pdf — milestone gates and kill rules"
+      ]
+    },
+    {
+      "answer": "The verification plan has 8 Required Checks covering: (CHK-01) file existence with all 10 sections present, (CHK-02) narrative arc ordering, (CHK-03) financial figure accuracy against Dovie PDF (5 specific figures), (CHK-04) production metric accuracy against scout/diagnosis values (8 specific metrics), (CHK-05) no software implementation details in capability section, (CHK-06) branding language verbatim match against Tagline and Positioning Refined PDFs, (CHK-07) evidence quality tiering present with minimum 3 tiers, (CHK-08) all four financial stress-test points addressed. All checks use static file reading and cross-referencing since this is a research report with no runtime behavior to test. Pre-conditions: 7 PDFs accessible, prior artifacts available, runtime metrics available, output directory writable.",
+      "evidence": [
+        "tech-research/tech-research.md — evidence quality tier framework (A/B/C/D)",
+        "product/product.md — success criteria for the report deliverable",
+        "diagnosis/diagnosis-statement.md — stress-test points and production metrics to verify against"
       ]
     }
   ],
-  "statement": "The implementation plan for RSH-221 directs the creation of a single research report at report/report.md in the helix-cli run root. The report has 9 modular, self-contained sections (Executive Narrative, Product Capabilities, Market Sizing, Financial Model Analysis, Competitive Landscape, Traction Dashboard, Risk Register, Strategic Roadmap, Key Quotes & Positioning) assembled in dependency order. Production metrics are refreshed via runtime inspection before writing data-dependent sections. The Manifesto's accountability thesis anchors the narrative. Financial projections are stress-tested with 3 scenarios (base/conservative/optimistic). Market sizing uses a TAM/SAM/SOM framework with external citations. Competitors are mapped on a 2x2 positioning matrix. Weak metrics are surfaced with honest context. The verification plan has 8 Required Checks covering completeness, evidence density, quote accuracy, metric freshness, financial accuracy, market validation, competitive coverage, and section independence. No code changes are required in any repository.",
+  "statement": "The implementation plan directs creation of a single research report at report/report.md in the helix-cli run root. The report has 10 modular sections following a narrative-arc structure (Structural Gap -> Market -> Capabilities -> Traction -> Financials -> Competition -> Risks -> Team -> Branding -> Vision) optimized for dual use as pitch-deck prompt material and website content source. Seven PDF source documents (Manifesto, Dovie Offer, Positioning Refined, Positioning Transcript, Reality Check, One-Pager, Tagline) are synthesized alongside production runtime data and externally validated market intelligence. Product capabilities are described at six high-level categories without software implementation details, anchored to Manifesto principles. The financial model uses a three-layer presentation (base case, stress-test, upside framing). The competitive landscape uses a concentric compression model centered on 'governance is scarce.' Evidence quality is tiered (hard facts, sourced, projections, unverifiable). The verification plan has 8 Required Checks covering completeness, accuracy, implementation-detail compliance, and evidence quality. No code changes are needed in any repository.",
   "followups": []
 }

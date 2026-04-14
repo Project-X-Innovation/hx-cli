@@ -2,420 +2,452 @@
 
 ## Overview
 
-This plan assembles a comprehensive, modular investor-pitch research report for Helix for ERPs. The report will be written to `report/report.md` in the helix-cli run root. No code changes are required in any repository. The report synthesizes evidence from 6 codebases, 3 PDF attachments, production runtime data, and externally validated market research — all previously gathered during scout, diagnosis, product, and tech-research steps.
+This is a **research/report mode** ticket. The deliverable is a single polished markdown research report at `report/report.md` in the helix-cli run root. The report serves as the data backbone for an investor pitch deck and updated website for **Helix for ERPs**. There are no code changes, no git commits, no PRs, and no deployments.
 
-The report has 9 self-contained sections designed for dual use: (1) as prompt context for generating pitch deck slides and (2) as source material for updating gethelix.ai.
+The implementation step will synthesize content from seven PDF source documents (organized by reliability tier), six codebases (for capability evidence at the highest category level only), production runtime data (traction metrics), and externally validated market intelligence (gathered during diagnosis). The report follows a narrative-arc structure (Structural Gap -> Evidence -> Opportunity -> Ask) optimized for pitch-deck conversion, with each section self-contained and modular for dual use (investor slides + website content).
+
+**Critical user constraint:** Describe product capabilities at the highest category level only. Do not point out specific software implementations. Focus on Helix for ERPs (not Helix Global as a general dev tool).
+
+**Seven source documents (by reliability tier):**
+- Tier 1: Helix Manifesto (philosophical foundation, 9 principles)
+- Tier 2: Dovie Offer (April 2026 financial projections, most recent numbers)
+- Tier 3: Positioning Refined + Positioning Transcript (three-way structural gap thesis)
+- Tier 4: Reality Check & Risks (honest threat assessment, milestone-based timeline)
+- Tier 5: One-Pager (market sizing, team, broader investment ask)
+- Tier 6: Tagline (branding direction, 5 finalists with context-specific recommendations)
 
 ## Implementation Principles
 
-1. **Evidence-backed claims only** — Every factual assertion cites a specific source (codebase file path, production data query, PDF attachment, or external research citation).
-2. **Modular independence** — Each section is self-contained and extractable without cross-section dependencies.
-3. **Honest framing** — Weak metrics are surfaced with context, not hidden. Assumptions are called out transparently.
-4. **Manifesto-anchored narrative** — The accountability thesis ("Intelligence is not the product. Responsibility is.") is the narrative spine.
-5. **Dual audience** — Content serves both investors (pitch deck) and website visitors (gethelix.ai).
+1. **Narrative coherence over encyclopedic completeness** — Follow the Problem -> Insight -> Evidence -> Opportunity -> Ask arc that maps to standard investor deck flow.
+2. **Evidence-backed claims with quality tiers** — Every quantitative claim traces to a source. Use Tier A (hard facts), B (well-sourced external), C (projections), D (unverifiable) designations.
+3. **Proactive transparency** — Address stress points and weak metrics upfront. Investors doing diligence will find them.
+4. **Modular extraction** — Each section stands alone for slide or website section extraction.
+5. **High-level capability framing** — Per user guidance, describe what the platform accomplishes, not what software was built. Anchor to Manifesto principles. No specific software implementations, file paths, or code references in capability descriptions.
+6. **Founder ownership respected** — The founder explicitly said "I'll take it from there." Provide the information backbone, not a finished deck.
 
 ## Implementation Steps Summary
 
 | Step | Goal | Deliverable |
 |------|------|-------------|
-| 1 | Refresh production metrics via runtime inspection | Fresh production data (org count, ticket count, deployment stats) for Section 6 |
-| 2 | Capture current gethelix.ai website state | Website messaging notes for alignment/contrast in report |
-| 3 | Write Section 1: Executive Narrative | Opening thesis, elevator pitch, and positioning language |
-| 4 | Write Section 2: Product Capabilities | Evidence-backed feature inventory from codebase |
-| 5 | Write Section 3: Market Sizing | TAM/SAM/SOM with external validation citations |
-| 6 | Write Section 4: Financial Model Analysis | Dovie projections with 3-scenario stress test |
-| 7 | Write Section 5: Competitive Landscape | 2x2 positioning matrix with differentiation arguments |
-| 8 | Write Section 6: Traction Dashboard | Production metrics formatted for investor credibility |
-| 9 | Write Section 7: Risk Register | Investor objections with evidence-based mitigations |
-| 10 | Write Section 8: Strategic Roadmap | Near-term and long-term expansion path |
-| 11 | Write Section 9: Key Quotes & Positioning | Manifesto-sourced language for slides and site |
-| 12 | Assemble final report | Combine all sections into `report/report.md` |
-| 13 | Self-verify report completeness | Run verification checks against success criteria |
+| 1 | Read all seven PDF source documents and prior artifacts | Extracted content notes for synthesis |
+| 2 | Gather supplementary production data if needed | Confirmed production metrics (from prior steps or fresh queries) |
+| 3 | Write Section 1: The Structural Gap | Three-way thesis in investor-ready language |
+| 4 | Write Section 2: Market Opportunity | TAM with three concentric rings + external citations |
+| 5 | Write Section 3: What Helix Accomplishes | Six high-level capability categories with Manifesto anchors |
+| 6 | Write Section 4: Traction & Momentum | Production metrics with honest contextualization |
+| 7 | Write Section 5: Financial Model | Three-layer presentation (base, stress-test, upside) |
+| 8 | Write Section 6: Competitive Landscape | Concentric compression model |
+| 9 | Write Section 7: Risk Register & Mitigations | Reality Check milestones reframed as founder discipline |
+| 10 | Write Section 8: Team & Investment | Team composition + dual investment structure |
+| 11 | Write Section 9: Branding & Positioning Language | Context-organized lines ready for direct lift |
+| 12 | Write Section 10: Future Vision | ERP-as-database thesis + multi-ERP expansion |
+| 13 | Assemble and polish the complete report | Single `report/report.md` with all sections + evidence appendix |
+| 14 | Self-verify report completeness and accuracy | Run verification checks against source documents |
 
 ## Detailed Implementation Steps
 
-### Step 1: Refresh Production Metrics via Runtime Inspection
+### Step 1: Read All Seven PDF Source Documents and Prior Artifacts
 
-**Goal:** Obtain the latest production data to ensure report accuracy as of April 2026.
+**Goal:** Extract and internalize all source content directly to ensure accurate synthesis. Prior artifacts contain summaries, but the implementation step must re-read primary sources to avoid errors through intermediate summaries.
 
-**What to Build:**
-- Use the `runtime-inspection` skill to query the helix-global-server production database.
-- Gather: organization count (total, by platform type, active in last 30 days), user count, ticket counts (total, by month, by status), run counts (total, succeeded, failed), deployment counts (general vs NetSuite, success rates), configured repository count.
-- Record results for use in Section 6 (Traction Dashboard) and as evidence citations throughout.
+**What to Build:** Read each attachment PDF in full:
+- `<workspace>/.helix-inputs/attachments/cmny1ewa3005kl30u6tp3o0kq--Helix_Manifesto.pdf` (Tier 1)
+- `<workspace>/.helix-inputs/attachments/cmny1ew0c005gl30unha4u32j--Helix_AI_Dovie_Offer.pdf` (Tier 2)
+- `<workspace>/.helix-inputs/attachments/cmnz14a9j002afy0t18w1aytg--Helix_Positioning_Refined.pdf` (Tier 3)
+- `<workspace>/.helix-inputs/attachments/cmnz14abo002cfy0tp6j50zcu--Helix_Positioning_Transcript.pdf` (Tier 3)
+- `<workspace>/.helix-inputs/attachments/cmnz14a680028fy0tzjjkdr8w--Reality_Check___Risks.pdf` (Tier 4)
+- `<workspace>/.helix-inputs/attachments/cmny1ew5p005il30uh46fw071--Project_X_Innovation_One_Pager.pdf` (Tier 5)
+- `<workspace>/.helix-inputs/attachments/cmnz14afl002efy0txyfaolmd--Helix_Tagline.pdf` (Tier 6)
 
-**Verification (AI Agent Runs):**
-- Confirm runtime inspection queries return data without errors.
-- Compare refreshed metrics against scout-summary values (7 orgs, 261 tickets, 606 runs) — values should be same or higher.
+Where `<workspace>` = `/vercel/sandbox/workspaces/cmnz149qb0026fy0tpmnss2b4`
 
-**Success Criteria:**
-- Fresh metric set documented with query timestamps.
-- Any discrepancies from prior scout data noted and explained.
+Also re-read prior-step artifacts for synthesized analysis:
+- `product/product.md` — product definition with capability categories and success criteria
+- `diagnosis/diagnosis-statement.md` — root cause analysis with competitive intelligence and stress-testing
+- `tech-research/tech-research.md` — content architecture decisions and evidence quality framework
+- `scout/scout-summary.md` — evidence landscape synthesis with production metrics
 
----
+**Verification (AI Agent Runs):** Confirm all seven PDFs are readable. Confirm prior artifacts are accessible.
 
-### Step 2: Capture Current gethelix.ai Website State
+**Success Criteria:** All source documents read. No missing sources.
 
-**Goal:** Record current website messaging for alignment and contrast in the report narrative.
+### Step 2: Gather Supplementary Production Runtime Data (If Needed)
 
-**What to Build:**
-- Use `agent-browser` to navigate to https://gethelix.ai and capture the current homepage messaging, feature descriptions, and positioning language.
-- Take a screenshot for reference.
-- Note any messaging that differs from the Manifesto's positioning (ticket says the website "was not very accurate").
+**Goal:** Confirm production metrics gathered in prior steps are sufficient. The scout and diagnosis steps already gathered: 7 orgs, 22 users, 264 tickets, 611 runs, 124 deployed, 33 repos, 81% autonomous.
 
-**Verification (AI Agent Runs):**
-- Screenshot captured successfully.
-- Key messaging points noted.
+**What to Build:** Check `/tmp/helix-inspect/manifest.json` for runtime inspection availability. If prior metrics are sufficient (they should be based on scout/diagnosis), proceed without additional queries. If a specific data gap is identified (e.g., updated ticket count since prior steps ran), use the runtime-inspection skill for read-only queries against helix-global-server production database.
 
-**Success Criteria:**
-- Current website messaging documented or, if the site is unavailable, that fact is recorded and the report uses the Manifesto as the sole positioning source (per tech-research decision).
+**Verification (AI Agent Runs):** Confirm production metrics are available from prior artifacts or fresh queries.
 
----
+**Success Criteria:** All required traction metrics are available for Section 4.
 
-### Step 3: Write Section 1 — Executive Narrative
+### Step 3: Write Section 1 — The Structural Gap
 
-**Goal:** Open the report with the compelling story of what Helix is, why it exists, and why it matters now.
+**Goal:** Frame the problem nobody else is solving using the three-way thesis from Positioning Refined.
 
-**What to Build:**
-- **Thesis statement** rooted in the Manifesto: "Intelligence is not the product. Responsibility is."
-- **The problem:** 40,000+ NetSuite companies spend $5K-$20K/month on consultants. Slow, expensive, never-ending.
-- **The vision:** ERPs will become data stores (like databases). The AI interface layer that owns customization, deployment, and maintenance is the future. Helix is that layer.
-- **Elevator pitch:** "Autonomous ERP operator. Humans express intent. Helix creates, tests, deploys, monitors, and maintains — end-to-end, with accountability."
-- **Why now:** AI intelligence commoditizing (Claude Code, Copilot, etc.), but operational accountability is not commoditized. ERPs (especially NetSuite) have massive installed base with high customization needs.
-- Draw from: Manifesto (philosophical anchor), ticket description (founder's own framing), and product.md (elevator pitch language).
+**What to Build:** The opening section, establishing the narrative spine. Content includes:
+- The three-way structural gap: (1) ERPs standardize complexity but don't own each customer's custom operational layer over time, (2) consultants implement that layer but don't persist, (3) AI models generate into that layer but don't govern it
+- The macro trend: human operating teams shrinking from 100 to 10 while business complexity stays constant
+- The compressed five-line thesis from Positioning Refined as the centerpiece (verbatim)
+- Manifesto anchor: "Intelligence is not the product. Responsibility is."
+- Concluding statement: "Helix exists to permanently own the operational layer in between."
 
-**Verification (AI Agent Runs):**
-- Section contains a clear thesis, problem, vision, and "why now" with citations to Manifesto pages and ticket description.
+**Primary sources:** Positioning Refined PDF, Positioning Transcript PDF, Manifesto PDF.
 
-**Success Criteria:**
-- Investor-ready opening narrative that could standalone as a 60-second pitch.
-- Manifesto quotations are verbatim with page attribution.
+**Verification (AI Agent Runs):** Confirm the compressed thesis matches the Positioning Refined PDF language exactly.
 
----
+**Success Criteria:** Section clearly articulates the three-way gap in investor-ready language. No software implementation details. Thesis is verbatim from source.
 
-### Step 4: Write Section 2 — Product Capabilities
+### Step 4: Write Section 2 — Market Opportunity
 
-**Goal:** Provide an evidence-backed inventory of what Helix can do today.
+**Goal:** Validate the size and growth of the opportunity with conservative and ambitious framings.
 
-**What to Build:**
-- **Core capability table** with 15+ features, each citing the specific codebase file that proves it (from diagnosis-statement.md capability table).
-- **9-step autonomous pipeline** walkthrough: Scout -> Diagnosis -> Product -> Tech Research -> Implementation Plan -> Implementation -> Code Review -> Verification -> Preview Config. Cite `helix-workflow-step-catalog.ts`.
-- **Ticket modes** explained: AUTO, BUILD, FIX, RESEARCH, EXECUTE.
-- **Key differentiators** framed for investors: per-ticket database branching (Neon), ephemeral preview environments (Northflank), AES-256-GCM credential encryption, production inspection with audit logging.
-- **ns-gm open-source tool** — MIT-licensed, npm-published, created by team member. Shows OSS strategy.
-- **Architecture note:** ERP-specific logic is isolated in `native-phase.ts`; core pipeline is ERP-agnostic, supporting multi-ERP expansion.
+**What to Build:** Three concentric TAM rings (per tech-research Decision 3):
+- **Inner (Conservative):** 10K NetSuite companies with ongoing customization x $5K/mo x 12 = **$600M** — defensible floor
+- **Middle (NetSuite full):** 40K+ companies x $5K-$20K/mo x 12 = **$2.4B-$9.6B** — upper bound overstates continuous spend
+- **Outer (Multi-ERP):** ERP consulting/integration market = **$50.1B** (2024) — long-term vision framing
 
-**Verification (AI Agent Runs):**
-- Every capability in the table has a codebase file citation.
-- Feature count matches or exceeds the 15 features identified in diagnosis.
+Supporting externally validated data (from diagnosis web search):
+- NetSuite: 43,000+ customers across 219 countries (Oracle confirmed)
+- AI-in-ERP market: $5.82B (2025) -> $58.7B by 2035 at 26% CAGR (Precedence Research)
+- ERP consulting market: $50.1B in 2024 (Verified Market Reports)
 
-**Success Criteria:**
-- Complete, investor-readable feature inventory. No unverified claims.
+Recommended pitch framing: lead with $600M conservative floor, acknowledge $2.4B+ upper bound, use $50B+ as "why this becomes very big."
 
----
+**Primary sources:** One-Pager PDF, diagnosis-statement.md (web search validated data).
 
-### Step 5: Write Section 3 — Market Sizing
+**Verification (AI Agent Runs):** Confirm TAM calculations are arithmetically correct. Cross-check external data citations against diagnosis evidence.
 
-**Goal:** Present a layered, externally validated market-sizing framework.
+**Success Criteria:** Three-ring TAM model with external citations. Calculations correct. Lead with conservative number.
 
-**What to Build:**
-- **TAM:** AI-in-ERP market — $5.82B (2025) growing to $58.7B by 2035 at 26% CAGR. Source: Precedence Research.
-- **SAM:** NetSuite consulting spend — 43K-69K+ companies (Oracle, Enlyft, TheirStack confirmations) x $3K-$10K/mo average = $1.5B-$8.3B annually. Position the $2B+ headline claim here as SAM.
-- **SOM:** Realistically serviceable near-term — ~5K-10K companies with active customization needs and budget = $90M-$180M at $1,500/mo. The Dovie model's 999 customers = $18M ARR = ~10-20% SOM penetration.
-- **Multi-ERP ceiling:** Beyond NetSuite, SAP and Odoo represent additional ERP markets. Total ERP market = $70B+ and growing.
-- **External validation table** mapping each claim to its source.
+### Step 5: Write Section 3 — What Helix Accomplishes
 
-**Verification (AI Agent Runs):**
-- TAM/SAM/SOM layers all have at least one external citation.
-- Numbers are internally consistent (SOM < SAM < TAM).
-- The $2B+ claim is positioned as SAM with appropriate qualifiers.
+**Goal:** Describe product capabilities at six high-level categories, anchored to Manifesto principles. Per user guidance: no specific software implementations.
 
-**Success Criteria:**
-- An investor can trace every market-size number to its source.
+**What to Build:** Six capability categories (from tech-research Decision 1):
+1. **Autonomous operational lifecycle** — End-to-end handling from natural language intent through governed production deployment. 81% of tickets executed autonomously. 47% reach production deployment. Anchors to Manifesto principle: Completion.
+2. **Governed execution** — Every action is reversible, observable, and auditable. Trust is engineered through safe testing, approval gates, and deployment controls. Anchors to: Safety.
+3. **Production inspection** — Read-only visibility into the live ERP environment for diagnosis, monitoring, and proactive issue detection without risk to the running system. Anchors to: Calibrated Understanding.
+4. **Account continuity** — Persistent, durable memory of the account over time: what changed, what depends on what, what is fragile, and why decisions were made. 33 configured repositories across 7 organizations. Anchors to: Continuity.
+5. **Bidirectional communication** — Real-time interaction between the platform and human stakeholders for intent clarification, decision discussion, and accountability visibility. Anchors to: Calibrated Understanding.
+6. **Enterprise security** — Encrypted credential management, role-based access, and organizational isolation for production ERP environments that run entire businesses. Anchors to: Trust Through Behavior.
 
----
+Include the boundary test: "If Claude Code can do it, it's not enough. If NetSuite can own it, we don't build it."
 
-### Step 6: Write Section 4 — Financial Model Analysis
+Include the core distinction: "Helix is not a tool. Tools assist. Helix operates. Tools suggest. Helix executes. Tools are used. Helix is relied on."
 
-**Goal:** Present the Dovie projections with transparent stress-testing.
+**Critical constraint:** Describe ONLY what the platform accomplishes, not how it is implemented. No file paths, no technology names, no codebase references, no pipeline step names. Quantitative evidence (production metrics) is acceptable.
 
-**What to Build:**
-- **Base case (Dovie model):** Reproduce key milestones — 0 to 999 customers over 36 months, $1,500/mo average, $50K flat costs, profitable month 6, $18M ARR at month 36, exit scenarios $50M-$150M. Cite Dovie Offer pages.
-- **Conservative case:** 30% slower acquisition (0 to ~500 customers), 3% monthly churn, variable costs ($50K + $30/customer/mo for AI inference), same $1,500/mo ARPU. Breakeven ~month 12-14. 36-month ARR ~$6M-$8M.
-- **Optimistic case:** Same growth as Dovie, 1% churn, variable costs ($50K + $15/customer/mo), value-based pricing upsell to $2,500/mo ARPU for enterprise tier. Breakeven month 5. 36-month ARR ~$25M-$30M.
-- **Assumption callout box:** Explicitly flag the flat-cost assumption, zero-churn assumption, and immediate sales ramp as areas for model refinement.
-- **Investment structure note:** Two complementary tiers — Dovie angel ($50K-$100K for 2-4% with distributions) and seed ($500K for 15% equity appreciation). Both share $2.83M pre-money.
-- **Exit comp:** Oracle/Next Technik acquisition (Oct 2023) — confirmed but $60M price unverifiable. Cite as "reported" not "confirmed."
+**Primary sources:** Manifesto PDF, product/product.md capability categories, scout production metrics.
 
-**Verification (AI Agent Runs):**
-- All three scenarios have consistent math (check: 999 customers x $1,500/mo = $1,498,500 MRR = ~$18M ARR).
-- Conservative scenario still reaches profitability within 14 months.
-- Dovie data points match the PDF exactly.
+**Verification (AI Agent Runs):** Search the section for implementation-specific terms. Confirm each category maps to a Manifesto principle.
 
-**Success Criteria:**
-- Transparent, investor-credible financial analysis with honest assumption surfacing.
+**Success Criteria:** Six categories clearly articulated with Manifesto anchoring. Zero implementation details.
 
----
+### Step 6: Write Section 4 — Traction & Momentum
 
-### Step 7: Write Section 5 — Competitive Landscape
+**Goal:** Present production metrics with honest contextualization (per tech-research Decision 5).
 
-**Goal:** Map the competitive terrain and clearly articulate Helix's unique positioning.
+**What to Build:** Two sub-sections:
 
-**What to Build:**
-- **2x2 positioning matrix** — Axes: "Scope of Responsibility" (task-level vs. system-level) x "Domain Specificity" (general-purpose vs. ERP-specialized).
-  - Task/General: Claude Code, GitHub Copilot, Cursor — Low-Medium threat.
-  - Task/ERP: NetSuite Next (Oracle agentic AI, Autonomous Close) — **High** threat.
-  - System/General: Rillet ($100M), Campfire ($100M), ChatFin — Medium threat (different buyer, different sale — they replace ERPs rather than operate them).
-  - System/ERP: **Helix (alone)** — the defensible position.
-- **Oracle/NetSuite Next deep-dive:** Acknowledge this as the most direct threat. Differentiate on Manifesto thesis: Oracle's business is platform licensing, not accountability for customization outcomes. Oracle makes NetSuite smarter; Helix makes NetSuite accountably operated. These are complementary, like Salesforce getting smarter not eliminating Salesforce consultants.
-- **Moat analysis:** The 9-step pipeline, production deployment, credential management, audit trails, and continuity model constitute operational infrastructure that AI tools alone cannot replicate.
-- **Comp citations:** Rillet/Campfire fundraises (TechCrunch 2025), Oracle/Next Technik acquisition (Oct 2023).
+**Strong metrics (lead with these):**
+| Metric | Value | Why It Matters |
+|--------|-------|----------------|
+| Organizations | 7 (5 NetSuite, 2 General) | Multi-industry early adoption |
+| Users | 22 | Team-level engagement, not single-user trials |
+| Total tickets | 264 (143 in first 14 days of April) | Accelerating: on pace for 2x month-over-month |
+| Production deployments | 124 (47% of total) | Real operational impact, not experimentation |
+| Autonomous execution | 81% in AUTO mode | Platform operates independently |
+| Configured repositories | 33 | Deep integration across customer environments |
 
-**Verification (AI Agent Runs):**
-- All four quadrants populated with named competitors.
-- Oracle/NetSuite Next threat addressed directly with differentiation argument.
-- Citations for all competitor data points.
+**Honest metrics (proactively addressed):**
+| Metric | Value | Recommended Framing |
+|--------|-------|---------------------|
+| Run success rate | 55% overall | Beta maturity with improving trajectory |
+| NS deployment success | 31% (8/26) | Hardest deployment pipeline; general at 84% shows platform maturity |
+| General deployment success | 84% (53/63) | Demonstrates core platform maturity |
+| Revenue | Pre-commercial | Conversion-ready pipeline: 5 NS orgs with active tickets |
 
-**Success Criteria:**
-- Investor can understand competitive positioning in under 2 minutes reading.
+**Primary sources:** scout/scout-summary.md, diagnosis-statement.md production metrics.
 
----
+**Verification (AI Agent Runs):** Confirm all metrics match prior-step verified values exactly.
 
-### Step 8: Write Section 6 — Traction Dashboard
+**Success Criteria:** Metrics accurately reported from verified sources. Weak metrics addressed proactively with framing.
 
-**Goal:** Present production metrics in a format that maximizes investor credibility.
+### Step 7: Write Section 5 — Financial Model
+
+**Goal:** Present Dovie financial projections with three-layer transparency (per tech-research Decision 2).
 
 **What to Build:**
-- **Lead-with-strength metrics table:**
-  - 261 total tickets (140 in April, 121 in March = 16% MoM growth)
-  - 123 tickets deployed to production (47% deployment rate)
-  - 7 organizations (5 NetSuite, 2 General)
-  - 22 users (multiple users per org = team adoption)
-  - 33 configured repositories (deep integration)
-  - 5 active organizations in last 30 days (71% monthly active)
-  - 606 sandbox runs to date
-  - 4 enterprise beta users (from One Pager)
-- **Contextualized weak metrics:**
-  - 55% run success rate — "autonomous ERP operation is genuinely hard; each failure generates training data."
-  - 31% NS deployment success (8/26) — "NetSuite SDF deployment is notoriously complex; general deployments at 85% (52/61)."
-  - Zero revenue — "4 enterprise betas validating product-market fit; conversion to paid is a GTM milestone."
-- Use data from Step 1 (refreshed production metrics) if available; fall back to scout-summary data if inspection is unavailable.
 
-**Verification (AI Agent Runs):**
-- All metrics sourced to either production runtime queries or scout/reference-map data.
-- Weak metrics accompanied by honest context and improvement trajectories.
-- No metrics fabricated or estimated without flagging.
+**Layer 1 — Base Case (Dovie Offer, April 2026):**
+- 0 -> 999 customers over 36 months at ~$1,500/mo average
+- $50K/mo flat operating costs
+- Profitable at month 6 (42 customers)
+- 12-month ARR: ~$1.8M (102 customers)
+- 36-month ARR: ~$18M
+- Exit scenarios: $50M (early, 18mo) / $100M (growth, 36mo) / $150M (strategic, 36mo)
+- Pre-money valuation: $2.83M
 
-**Success Criteria:**
-- Dashboard format is scannable, data-dense, and credibility-building.
+**Layer 2 — Stress-Test Commentary (four vulnerabilities):**
+| Assumption | Vulnerability | Recommended Framing |
+|-----------|---------------|---------------------|
+| $50K/mo flat costs | AI inference and infrastructure scale with usage | "First-tier economics" with scaling model developing |
+| Zero churn modeled | Even 2-3% monthly churn significantly impacts growth at scale | Frame as net-new projection; retention is the key metric to prove |
+| 0 paying customers today | 5 NS orgs in production but pre-commercial | "Conversion-ready pipeline" with beta traction |
+| Next Technik $60M exit comp | Acquisition price not publicly disclosed | Use as directional reference only; lead with market-based math |
 
----
+**Layer 3 — Upside Framing:**
+- $1,500/mo entry price is deliberate land-and-expand against $5K-$20K/mo consultant replacement value
+- 3x-13x pricing headroom above entry point
+- Two investment structures: Dovie ($50K-$100K for 2-4% with distributions) and One-Pager ($500K for 15% equity) — complementary vehicles, same $2.83M pre-money
 
-### Step 9: Write Section 7 — Risk Register
+**Primary sources:** Dovie Offer PDF (Tier 2, most recent), One-Pager PDF (Tier 5), diagnosis stress-test analysis.
 
-**Goal:** Proactively address investor objections with evidence-based mitigations.
+**Verification (AI Agent Runs):** Cross-check every financial figure against Dovie Offer PDF directly. Confirm all four stress points are addressed.
 
-**What to Build:**
-- **Risk table** with columns: Risk | Severity | Evidence | Mitigation
-- Key risks (from diagnosis/apl.json Q6):
-  1. **Oracle builds it themselves** — High severity. NetSuite Next agentic AI. Mitigation: platform vs. accountability distinction, Manifesto thesis.
-  2. **AI tools become good enough** — Medium. Claude Code/Copilot commoditize code gen. Mitigation: Helix differentiates on full lifecycle, not just code generation.
-  3. **Zero revenue today** — High. 0 paying customers April 2026. Mitigation: 4 enterprise betas, distribution partner, 261 tickets prove usage.
-  4. **Cost scaling** — Medium-High. $50K flat costs unrealistic at scale. Mitigation: propose $50K + $15-30/customer/mo variable model; even at $30/customer, 999 customers = $80K/mo total, still profitable.
-  5. **55% success rate** — Medium. May concern reliability-focused investors. Mitigation: beta-stage product maturity; 9-step pipeline is the reliability mechanism; general deploys at 85%.
-  6. **Team of 7 at 999 customers** — Medium. Leverage via automation. Mitigation: autonomous pipeline eliminates manual work; customer support is AI-compressed (Manifesto Principle 9).
-  7. **NetSuite-only initially** — Low-Medium. Limits near-term TAM. Mitigation: architecture ready for multi-ERP (native-phase.ts isolation); NetSuite is beachhead.
-  8. **Two competing investment structures** — Low. Dovie vs One Pager. Mitigation: complementary tiers for different investor profiles.
+**Success Criteria:** Financial model with proactive transparency. All figures traceable to source. All stress points addressed.
 
-**Verification (AI Agent Runs):**
-- All 8 risks from diagnosis/product are covered.
-- Each risk has both evidence (why it's a risk) and mitigation (why it's manageable).
-- No risk dismissed without evidence.
+### Step 8: Write Section 6 — Competitive Landscape
 
-**Success Criteria:**
-- An investor reading this section feels the founder has thought deeply about failure modes.
+**Goal:** Structure competition using the concentric compression model (per tech-research Decision 4).
 
----
+**What to Build:** The "governance is scarce" centerpiece:
 
-### Step 10: Write Section 8 — Strategic Roadmap
+**Force 1 (ERP platforms compressing inward):**
+- Oracle/NetSuite: NetSuite Next (mid-2026), SuiteAgents, AI Connector Service, AI across financial close and developer tooling
+- Key point: Oracle makes the platform smarter; this INCREASES complexity of the custom layer, making governance more valuable
+- Mitigation: Oracle's business model is platform licensing and extensibility. They enable customization; they don't take end-to-end accountability for each customer's custom operational layer
 
-**Goal:** Paint the near-term and long-term expansion path.
+**Force 2 (AI model vendors compressing inward):**
+- Claude Code, OpenAI Codex, GitHub Copilot — increasingly capable at code generation, testing, PR workflows
+- Mitigation: They generate code; they don't govern ERP-specific deployment, monitor impact, maintain over time, or take accountability when it breaks
 
-**What to Build:**
-- **Phase 1 (Now - 12 months): NetSuite Dominance**
-  - Convert 4 enterprise betas to paying customers
-  - Improve NS deployment success rate (31% → target 80%+)
-  - Launch distribution partner channel
-  - Reach 100+ customers, $150K+ MRR
-  - Self-service onboarding
-- **Phase 2 (12-24 months): Multi-ERP Expansion**
-  - Add SAP Business One integration (same native-phase pattern)
-  - Add Odoo integration
-  - 500+ customers across ERP platforms
-  - Value-based pricing tiers
-- **Phase 3 (24-36 months): Platform Play**
-  - "The AI interface for ERPs" — not just NetSuite
-  - 1,000+ customers, ~$18M ARR
-  - Potential strategic exit ($50M-$150M)
-  - Consultant partner ecosystem
-- **Architecture readiness note:** Cite `native-phase.ts` isolation as evidence that multi-ERP expansion follows a proven pattern, not a rewrite.
+**The unclaimed center: governed operational ownership**
+- Neither side claims: safe ERP-specific testing, governed deployment with human approval gates, production monitoring, ongoing maintenance, durable account memory, accountability over time
 
-**Verification (AI Agent Runs):**
-- Each phase has specific, measurable milestones.
-- Phase 1 milestones align with Dovie projections.
-- Multi-ERP expansion framed honestly (architecture supports it, no code yet).
+**Tier 2 (different motion):**
+- AI-native ERP replacements (Rillet $100M, Campfire $100M) — REPLACE ERPs rather than operate on them. Validates market sees ERP as ripe for disruption.
+- Traditional consultants — potential channel partners
 
-**Success Criteria:**
-- Roadmap tells a credible growth story without overpromising.
+Key insight: "Capability is abundant, governance is scarce." (from Reality Check)
 
----
+**Important:** Do NOT use a feature comparison matrix. No direct competitor offers what Helix offers. A feature matrix against Oracle or Claude Code would be misleading — they solve different problems.
 
-### Step 11: Write Section 9 — Key Quotes & Positioning
+**Primary sources:** Reality Check PDF, diagnosis competitive intelligence (web search validated), product/product.md competitive landscape.
 
-**Goal:** Provide ready-to-use language from the Manifesto for pitch deck slides and website.
+**Verification (AI Agent Runs):** Confirm competitive claims match diagnosis web search evidence. Ensure Oracle roadmap items are accurately attributed.
+
+**Success Criteria:** Concentric compression model clearly articulated. Oracle addressed head-on with differentiation argument.
+
+### Step 9: Write Section 7 — Risk Register & Mitigations
+
+**Goal:** Present the Reality Check's honest assessment as founder discipline (per tech-research Decision 7).
 
 **What to Build:**
-- **Headline quotes** (verbatim from Manifesto, with page attribution):
-  - "Intelligence is not the product. Responsibility is."
-  - "Humans express intent. Helix owns outcomes."
-  - "If Claude Code can do it, it's not enough. If NetSuite can own it, we don't build it."
-  - "Software is fast but detached. Consultants are accountable but slow. Helix is accountable at speed."
-  - "Generating code is commoditized. Reliability is not."
-  - "Helix does not complete tasks. Helix maintains systems."
-  - "Tools assist. Helix operates. Tools suggest. Helix executes. Tools are used. Helix is relied on."
-- **Suggested slide headlines** derived from the narrative:
-  - "The $2B Consultant Problem" (market sizing)
-  - "From Intent to Production in Minutes" (product demo)
-  - "The Accountability Gap" (competitive positioning)
-  - "ERPs Are the Next Databases" (vision)
-- **Website messaging suggestions** contrasting current site (if captured in Step 2) with Manifesto-aligned positioning.
 
-**Verification (AI Agent Runs):**
-- All quotes verified verbatim against Manifesto PDF text.
-- Page numbers/sections attributed.
+**Milestone-based timeline with kill rules:**
+| Horizon | Required State | Kill Rule | Investor Framing |
+|---------|---------------|-----------|-----------------|
+| 3 months | Safe, not just clever | Kill generic AI convenience | "We build for trust, not tricks" |
+| 6 months | Trusted in one narrow lane | Kill breadth | "Own NetSuite customization completely before expanding" |
+| 12 months | Stateful and persistent | Kill statelessness | "The account lives inside Helix" |
+| 18 months | Governable by institution | Kill informality | "Enterprise-grade trust that survives compliance" |
+| 36 months | Where the owned operational layer lives | Kill wrapper behavior | "Either we are the ownership layer or we failed" |
 
-**Success Criteria:**
-- A pitch-deck designer could pick up any quote and use it directly.
+**Key risks with mitigations:**
+1. Oracle building it — platform licensing vs. operational ownership
+2. AI tools becoming sufficient — generation vs. governed accountability
+3. Zero revenue — conversion-ready pipeline with beta traction
+4. Cost scaling — first-tier economics with scaling model developing
+5. NS deployment maturity — hardest pipeline, general at 84%
+6. Time window compression — "why we need capital now"
+7. Exit comp unverifiable — use directionally, lead with market math
+8. Competitive pace from both sides — "capability abundant, governance scarce"
 
----
+**Primary sources:** Reality Check PDF (Tier 4), diagnosis risk analysis, product/product.md open questions.
 
-### Step 12: Assemble Final Report
+**Verification (AI Agent Runs):** Confirm milestone gates match Reality Check document. Confirm risk list is comprehensive per diagnosis.
 
-**Goal:** Combine all 9 sections into a single polished `report/report.md` file.
+**Success Criteria:** Honest risk register. Kill rules positioned as founder discipline. "Less time than it feels like" urgency drives capital argument.
 
-**What to Build:**
-- Combine Sections 1-9 with consistent formatting.
-- Add report header: title, date, confidentiality notice, table of contents.
-- Add appendix: data sources catalog, methodology note, artifact inputs table.
-- Write the file to: `<helix-cli run root>/report/report.md`
+### Step 10: Write Section 8 — Team & Investment
 
-**Verification (AI Agent Runs):**
-- File exists at the expected path.
-- All 9 sections present with correct headings.
-- Table of contents links are accurate.
-
-**Success Criteria:**
-- Single, polished markdown document ready for use as pitch-deck prompt and website content source.
-
----
-
-### Step 13: Self-Verify Report Completeness
-
-**Goal:** Run all verification checks from the Verification Plan before completing.
+**Goal:** Present team composition and dual investment structure.
 
 **What to Build:**
-- Execute each Required Check from the Verification Plan below.
-- Record pass/fail for each check.
-- Fix any issues found before declaring completion.
+- 7-person core team with 1-4 years working together
+- Roles: CEO/Founder, Tech Lead (AI Research), AI Agent Architect, Project Manager, Lead Dev (NetSuite/OSS contributor), Full Stack Dev, Special Projects
+- Two investment tiers (per tech-research Decision about complementary structures):
+  - Dovie tier: $50K for 2% or $100K for 4% with net profit distributions (begins month 6)
+  - Seed tier: $500K for 15% equity growth
+- Both share $2.83M pre-money valuation
+- Frame: Dovie targets angels/friends seeking cash-flow returns; One-Pager targets seed investors seeking equity appreciation. Common data foundation; investor-specific structure per audience.
 
-**Verification (AI Agent Runs):**
-- All Required Checks from the Verification Plan pass.
+**Primary sources:** One-Pager PDF (team), Dovie Offer PDF (small raise terms).
 
-**Success Criteria:**
-- Report meets all 7 success criteria from product.md.
+**Verification (AI Agent Runs):** Confirm team size and roles match One-Pager. Confirm investment terms match source documents.
 
----
+**Success Criteria:** Team and investment clearly presented. Dual structure explained as complementary, not contradictory.
+
+### Step 11: Write Section 9 — Branding & Positioning Language
+
+**Goal:** Provide pitch-ready branding language organized by destination (per tech-research Decision 8).
+
+**What to Build:**
+
+| Context | Primary Line | Supporting Line |
+|---------|-------------|-----------------|
+| Homepage / Brand | "Owned operations." | "Helix owns how your NetSuite evolves -- from request to tested, deployed, monitored, and maintained execution." |
+| Pitch / Investor | "The ownership layer for NetSuite." | "NetSuite owns the platform. Helix owns the operational layer inside your account." |
+| One-slide thesis | Compressed five-line thesis | Verbatim from Positioning Refined |
+| Manifesto hook | "Intelligence is not the product. Responsibility is." | Direct from Manifesto |
+| Boundary test | "If Claude Code can do it, it's not enough. If NetSuite can own it, we don't build it." | Direct from Manifesto |
+
+Additional tagline finalists from the Tagline document with context-specific rankings as provided in that source.
+
+**Primary sources:** Tagline PDF (Tier 6), Positioning Refined PDF (Tier 3), Manifesto PDF (Tier 1).
+
+**Verification (AI Agent Runs):** Confirm all quoted language matches source PDFs exactly (verbatim comparison).
+
+**Success Criteria:** All branding lines ready for direct lift into slides and website. All quotes verified against source.
+
+### Step 12: Write Section 10 — Future Vision
+
+**Goal:** Close with the long-term thesis and expansion path.
+
+**What to Build:**
+- The "ERP as database" future: ERPs become infrastructure nobody interacts with directly; the AI operational layer becomes the primary user interface (from Positioning Transcript)
+- Multi-ERP expansion: NetSuite beachhead ($600M conservative) -> SAP, Odoo, others ($50B+ ERP consulting market). The structural gap is not NetSuite-specific.
+- Transition from change engine to operating layer: the shift from handling individual requests to being the persistent system-of-operation
+- Pricing expansion: $1,500/mo entry -> $5K-$20K/mo as ownership deepens (3x-13x headroom)
+- Distribution partner channel as go-to-market motion
+- Reality Check urgency as closing: "The window is shorter than it feels like" — why the capital is needed now
+
+**Critical honesty note:** Multi-ERP expansion is aspirational. No technical readiness for non-NetSuite ERPs exists today. The report should acknowledge this as vision, not current capability.
+
+**Primary sources:** Positioning Transcript PDF (ERP-as-database), Manifesto PDF (principles), Reality Check PDF (urgency).
+
+**Verification (AI Agent Runs):** Confirm expansion path is honest about current NetSuite-only readiness.
+
+**Success Criteria:** Compelling closing vision grounded in present evidence. Aspirational but honest.
+
+### Step 13: Assemble and Polish the Complete Report
+
+**Goal:** Combine all sections into a single, cohesive `report/report.md` file.
+
+**What to Build:**
+- Create directory `report/` in helix-cli run root if needed
+- Write complete report as single markdown file with:
+  - Report header (title, date, purpose statement)
+  - Executive summary (2-3 paragraph synthesis of the entire report)
+  - Table of contents
+  - All 10 sections in narrative-arc order
+  - Evidence Sources & Quality appendix: catalog all seven PDFs, production data, and external research with quality tier assignments
+- Consistent heading levels, formatting, and evidence tier markers throughout
+
+File path: `/vercel/sandbox/workspaces/cmnz149qb0026fy0tpmnss2b4/helix-cli/.helix/tickets/cmny1evoc0056l30up1r5qys5/runs/cmnz149qb0026fy0tpmnss2b4/report/report.md`
+
+**Verification (AI Agent Runs):** Confirm file exists. Confirm all 10 sections present. Confirm evidence appendix exists.
+
+**Success Criteria:** Single cohesive report file with all sections, consistent formatting, evidence appendix.
+
+### Step 14: Self-Verify Report Completeness and Accuracy
+
+**Goal:** Execute verification checks before finishing.
+
+**What to Build:** No new content. Run all Required Checks from the Verification Plan below. Fix any issues found before declaring completion.
+
+**Verification (AI Agent Runs):** All Required Checks pass.
+
+**Success Criteria:** Report passes all verification checks and is ready for the verification step.
 
 ## Verification Plan
 
 ### Pre-conditions
 
 | Dependency | Status | Source/Evidence | Affects Checks |
-|-----------|--------|----------------|----------------|
-| Runtime inspection available for helix-global-server (DATABASE, LOGS) | available | `/tmp/helix-inspect/manifest.json` confirms DATABASE and LOGS types | [CHK-04] |
-| Prior artifacts complete (scout, diagnosis, product, tech-research) | available | All artifacts read and verified in helix-cli run root | [CHK-01], [CHK-02], [CHK-03], [CHK-05], [CHK-06], [CHK-07] |
-| Helix Manifesto PDF attachment | available | `/vercel/sandbox/workspaces/cmny1evos005el30ukhkqqprt/.helix-inputs/attachments/cmny1ewa3005kl30u6tp3o0kq--Helix_Manifesto.pdf` | [CHK-03], [CHK-07] |
-| Helix AI Dovie Offer PDF attachment | available | `/vercel/sandbox/workspaces/cmny1evos005el30ukhkqqprt/.helix-inputs/attachments/cmny1ew0c005gl30unha4u32j--Helix_AI_Dovie_Offer.pdf` | [CHK-05] |
-| Project X One Pager PDF attachment | available | `/vercel/sandbox/workspaces/cmny1evos005el30ukhkqqprt/.helix-inputs/attachments/cmny1ew5p005il30uh46fw071--Project_X_Innovation_One_Pager.pdf` | [CHK-05] |
-| Network access for gethelix.ai | unknown | Website may or may not be reachable from sandbox | [CHK-08] |
+|-----------|--------|-----------------|----------------|
+| Seven PDF attachments accessible at `.helix-inputs/attachments/` paths | available | File paths confirmed in ticket.md; all seven PDFs read successfully in prior steps | CHK-01, CHK-03, CHK-05, CHK-06 |
+| Prior-step artifacts (product.md, diagnosis-statement.md, tech-research.md, scout-summary.md) | available | All artifacts read and confirmed in this planning step | CHK-01, CHK-02, CHK-04 |
+| Production runtime metrics (7 orgs, 22 users, 264 tickets, 124 deployed, 81% autonomous, 33 repos) | available | Gathered by scout and diagnosis steps; available in scout-summary.md and diagnosis-statement.md | CHK-04 |
+| External market data (NetSuite customer counts, AI-in-ERP market size, ERP consulting market size) | available | Gathered during diagnosis step via web search; available in diagnosis-statement.md | CHK-03 |
+| Report output directory writable in helix-cli run root | available | Run root directory confirmed to exist | CHK-01 |
+| Runtime inspection for helix-global-server (DATABASE, LOGS) | available | `/tmp/helix-inspect/manifest.json` confirmed in scout step | CHK-04 |
 
 ### Required Checks
 
-[CHK-01] Verify report file exists with all 9 sections.
-- Action: Read the file at `<helix-cli run root>/report/report.md` and confirm it contains all 9 section headings: (1) Executive Narrative, (2) Product Capabilities, (3) Market Sizing, (4) Financial Model Analysis, (5) Competitive Landscape, (6) Traction Dashboard, (7) Risk Register, (8) Strategic Roadmap, (9) Key Quotes & Positioning.
-- Expected Outcome: The file exists and all 9 section headings are present in the correct order.
-- Required Evidence: File read output showing all 9 section headings present.
+[CHK-01] Verify report file exists and contains all 10 required sections.
+- Action: Read the file at `/vercel/sandbox/workspaces/cmnz149qb0026fy0tpmnss2b4/helix-cli/.helix/tickets/cmny1evoc0056l30up1r5qys5/runs/cmnz149qb0026fy0tpmnss2b4/report/report.md` and confirm the presence of all 10 sections: (1) The Structural Gap, (2) Market Opportunity, (3) What Helix Accomplishes, (4) Traction & Momentum, (5) Financial Model, (6) Competitive Landscape, (7) Risk Register & Mitigations, (8) Team & Investment, (9) Branding & Positioning Language, (10) Future Vision. Also confirm the report has an executive summary and an evidence sources appendix.
+- Expected Outcome: The report file exists, is non-empty, and contains clearly labeled sections for all 10 topic areas plus an executive summary and evidence appendix. Each section has substantive content (not placeholder text).
+- Required Evidence: File read output showing the report structure with all 10 section headings, executive summary, and evidence appendix, each with non-trivial content.
 
-[CHK-02] Verify evidence citations throughout the report.
-- Action: Search the report for evidence citation patterns (e.g., file paths like `helix-global-server/src/`, PDF references like "Manifesto", "Dovie Offer", "One Pager", and external source references like "Precedence Research", "Enlyft", "Oracle").
-- Expected Outcome: At least 30 distinct evidence citations across the report, with every section containing at least one citation.
-- Required Evidence: Count of citations per section from grep/search output.
+[CHK-02] Verify narrative arc follows Problem -> Insight -> Evidence -> Opportunity -> Ask ordering.
+- Action: Read the report from top to bottom and confirm the section ordering follows: structural gap (problem) -> market opportunity (size) -> capabilities (insight) -> traction (evidence) -> financial model (opportunity) -> competitive landscape -> risks -> team/investment (ask) -> branding -> future vision.
+- Expected Outcome: Sections flow in the prescribed narrative arc order. The report opens with the three-way structural gap thesis and builds toward the investment ask and future vision.
+- Required Evidence: Sequential list of section headings extracted from the report showing the narrative arc ordering is correct.
 
-[CHK-03] Verify Manifesto quotes are verbatim.
-- Action: Read the Manifesto PDF and cross-reference at least 5 key quotes used in the report to confirm they are word-for-word accurate.
-- Expected Outcome: All checked quotes match the Manifesto PDF text exactly.
-- Required Evidence: Side-by-side comparison of at least 5 quotes showing report text vs. Manifesto PDF text.
+[CHK-03] Verify financial figures match source documents.
+- Action: Read the Dovie Offer PDF (`<workspace>/.helix-inputs/attachments/cmny1ew0c005gl30unha4u32j--Helix_AI_Dovie_Offer.pdf`) and cross-check at least five specific financial figures from the report: (a) pre-money valuation ($2.83M), (b) 36-month customer target (999), (c) month-6 profitability threshold (42 customers), (d) 36-month ARR (~$18M), (e) conservative TAM ($600M). Read both the report and the source PDF to perform the comparison.
+- Expected Outcome: All five figures in the report match the source document values exactly. No figures are invented or miscalculated.
+- Required Evidence: Side-by-side excerpts from the report and the Dovie Offer PDF showing matching values for each of the five figures.
 
-[CHK-04] Verify production metrics are sourced from runtime data.
-- Action: Use runtime-inspection skill to query helix-global-server production database for organization count, ticket count, and run count. Compare these values against what appears in Section 6 (Traction Dashboard) of the report.
-- Expected Outcome: Metrics in the report match or closely align with fresh runtime query results (within a reasonable range for data that may have grown since scout).
-- Required Evidence: Runtime query output alongside the corresponding report metrics, showing alignment.
+[CHK-04] Verify production traction metrics match prior-step verified values.
+- Action: Cross-check the traction metrics in the report against the values from `scout/scout-summary.md` and `diagnosis/diagnosis-statement.md`: organizations (7), users (22), total tickets (264), deployed tickets (124), autonomous rate (81%), configured repos (33), run success rate (55%), NS deployment success rate (31%).
+- Expected Outcome: All traction metrics in the report match the values verified in prior steps exactly. No metrics are inflated or fabricated.
+- Required Evidence: Excerpts from the report's traction section alongside the corresponding values from scout-summary.md or diagnosis-statement.md showing exact matches for all eight metrics.
 
-[CHK-05] Verify financial data accuracy against source PDFs.
-- Action: Read the Dovie Offer PDF and verify that the report's Section 4 (Financial Model Analysis) correctly reproduces: (a) customer growth trajectory (0 to 999 over 36 months), (b) profitability month (month 6, Sep 2026), (c) pre-money valuation ($2.83M), (d) 36-month ARR (~$18M), (e) exit scenarios ($50M-$150M). Also verify One Pager data: $500K/15%, breakeven month 8, $1.7M 12-month ARR.
-- Expected Outcome: All financial data points in the report match the source PDFs exactly.
-- Required Evidence: Specific data point comparisons showing report values vs. PDF values.
+[CHK-05] Verify no specific software implementation details appear in Helix capability descriptions.
+- Action: Read the "What Helix Accomplishes" section (Section 3) and search for implementation-specific terms: file paths (e.g., "src/", ".ts", ".tsx"), technology names used as Helix implementation details (e.g., "Prisma", "Neon", "Northflank"), pipeline step names (e.g., "scout", "diagnosis", "native-phase"), specific API routes, function names, or code snippets. Note: references to external competitors (Oracle, Claude Code, SuiteAgents) are acceptable in the competitive landscape section but not in the Helix capability descriptions.
+- Expected Outcome: Section 3 describes Helix capabilities using the six high-level categories (autonomous operational lifecycle, governed execution, production inspection, account continuity, bidirectional communication, enterprise security) without any internal implementation details.
+- Required Evidence: Search results across Section 3 confirming no prohibited implementation-specific terms are present. If any borderline terms appear, confirm they are used in a high-level descriptive context, not as implementation references.
 
-[CHK-06] Verify market sizing has external validation.
-- Action: Check that Section 3 (Market Sizing) contains: (a) TAM with Precedence Research citation, (b) SAM with at least two independent NetSuite customer count sources, (c) SOM with a realistic near-term estimate that is smaller than SAM.
-- Expected Outcome: All three market-sizing layers (TAM/SAM/SOM) present with external citations. The $2B+ claim is positioned as SAM, not TAM, with appropriate qualifiers.
-- Required Evidence: Extracted TAM/SAM/SOM figures and their citation sources from the report.
+[CHK-06] Verify branding and positioning language matches source PDFs.
+- Action: Read the Tagline PDF (`<workspace>/.helix-inputs/attachments/cmnz14afl002efy0txyfaolmd--Helix_Tagline.pdf`) and the Positioning Refined PDF (`<workspace>/.helix-inputs/attachments/cmnz14a9j002afy0t18w1aytg--Helix_Positioning_Refined.pdf`), then cross-check at least three quoted branding lines from the report: (a) "Owned operations." tagline, (b) "The ownership layer for NetSuite." pitch line, (c) the compressed five-line thesis from Positioning Refined.
+- Expected Outcome: All three branding lines in the report are accurate verbatim reproductions of the source language.
+- Required Evidence: Side-by-side excerpts from the report and the source PDFs showing matching language for each of the three items.
 
-[CHK-07] Verify competitive landscape covers all four quadrants.
-- Action: Check that Section 5 (Competitive Landscape) includes: (a) the 2x2 positioning matrix with both axes labeled, (b) named competitors in each of the four quadrants, (c) specific treatment of Oracle/NetSuite Next as the primary threat with differentiation argument, (d) Helix positioned uniquely in system-level/ERP-specialized quadrant.
-- Expected Outcome: All four quadrants populated with at least one named player each. Oracle/NetSuite Next is addressed directly. Helix's unique positioning is articulated.
-- Required Evidence: The 2x2 matrix content and Oracle/NetSuite Next differentiation text extracted from the report.
+[CHK-07] Verify evidence quality tiering is present in the report.
+- Action: Read the report's evidence sources appendix and confirm it categorizes claims by reliability tier. Confirm at least three different tiers are represented (e.g., Tier A hard facts, Tier B externally sourced, Tier C projections, Tier D unverifiable).
+- Expected Outcome: The report distinguishes between hard facts (production data, team composition), well-sourced external data (market sizes, Oracle announcements), internal projections (Dovie model), and unverifiable claims (Next Technik acquisition price). At least three tiers are labeled.
+- Required Evidence: Excerpt from the report showing the evidence quality framework or appendix with at least three different tiers represented and example claims assigned to each.
 
-[CHK-08] Verify report is self-contained and section-independent.
-- Action: Read any single section (e.g., Section 3 Market Sizing) in isolation and verify it makes sense without requiring context from other sections — i.e., it contains its own thesis, evidence, and data points.
-- Expected Outcome: The selected section is comprehensible and useful as standalone content, suitable for direct use as pitch-deck prompt context.
-- Required Evidence: The full text of one section extracted from the report, with confirmation it contains a thesis statement, supporting data, and source citations.
+[CHK-08] Verify the financial model section addresses all four stress-test points.
+- Action: Read the financial model section (Section 5) and confirm it proactively addresses all four vulnerabilities: (a) flat costs assumption ($50K/mo through 999 customers), (b) zero churn modeling, (c) zero current revenue (starting at 0 paying customers), (d) unverifiable Next Technik $60M exit comp.
+- Expected Outcome: Each of the four stress-test points is explicitly mentioned and framed with a recommended investor-facing response. No vulnerability is omitted or glossed over.
+- Required Evidence: Excerpts from the report's financial section showing each of the four stress-test points addressed with explicit framing language.
 
 ## Success Metrics
 
-| Metric | Target | Measurement Method |
-|--------|--------|-------------------|
-| Section completeness | 9/9 sections present | [CHK-01] |
-| Evidence citation density | 30+ citations across report | [CHK-02] |
-| Manifesto quote accuracy | 100% verbatim match | [CHK-03] |
-| Production data freshness | Metrics from runtime queries | [CHK-04] |
-| Financial data accuracy | 100% match to source PDFs | [CHK-05] |
-| Market sizing validation | 3 layers with external sources | [CHK-06] |
-| Competitive coverage | 4/4 quadrants populated | [CHK-07] |
-| Section independence | Any section usable standalone | [CHK-08] |
+| Metric | Target |
+|--------|--------|
+| Report completeness | All 10 sections present with substantive content |
+| Financial accuracy | All figures traceable to source documents with zero discrepancies |
+| Traction accuracy | All production metrics match prior-step verified values exactly |
+| Implementation detail compliance | Zero specific software implementation details in Helix capability descriptions |
+| Branding accuracy | All quoted lines match source PDFs verbatim |
+| Evidence quality | Claims tagged or appendixed with quality tiers (minimum 3 tiers) |
+| Narrative coherence | Report flows in Problem -> Evidence -> Opportunity -> Ask arc |
+| Stress-test transparency | All four financial vulnerabilities addressed proactively |
+| Dual-use readiness | Each section self-contained for slide or website extraction |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `helix-cli/.../ticket.md` | Understand deliverable requirements, source hierarchy, and founder's strategic framing | Deliverable is pitch-deck data backbone; Manifesto = most sincere; Dovie = most recent numbers; focus on Helix for ERPs only |
-| `helix-cli/.../scout/scout-summary.md` | Pre-synthesized analysis of all 6 repos, 3 PDFs, and production metrics | Complete evidence inventory: 9-step pipeline, 80+ APIs, 7 orgs, 261 tickets, 606 runs, all financial extractions |
-| `helix-cli/.../diagnosis/diagnosis-statement.md` | Market validation, financial stress-testing, competitive landscape, risk cataloging | $2B+ TAM partially validated; flat costs unrealistic; 4 competitor categories; Oracle threat acknowledged; 8 key risks identified |
-| `helix-cli/.../diagnosis/apl.json` | 7 diagnostic questions with fully evidence-backed answers | Comprehensive answers on capabilities, financials, TAM, competition, traction, risks, and Manifesto positioning |
-| `helix-cli/.../product/product.md` | Product definition with 7 success criteria, 6 use cases, feature inventory | 7 measurable success criteria for the report; scope constraints (Helix for ERPs only); open questions catalogued |
-| `helix-cli/.../tech-research/tech-research.md` | Report architecture decisions and analytical frameworks | 9-section modular structure chosen; TAM/SAM/SOM framework; 3-scenario stress-test model; 2x2 competitive matrix; narrative anchor decision |
-| `helix-cli/.../tech-research/apl.json` | 6 technical questions answered with evidence on report design | Modular architecture rationale; financial framing strategy; market-sizing methodology; investment-tier presentation; competitive positioning framework; weak-metric framing approach |
-| `helix-cli/.../repo-guidance.json` | Confirm repo roles — helix-cli is target; all others are context | No code changes in any repo; helix-cli hosts research output |
-| `Helix_Manifesto.pdf` (attachment) | Narrative anchor and verbatim quotes for Sections 1, 5, 9 | 9 principles; "Intelligence is not the product. Responsibility is."; accountability gap is the moat |
-| `Helix_AI_Dovie_Offer.pdf` (attachment) | Financial model source data for Section 4 | 36-month model, $2.83M pre-money, exit scenarios, distribution model, Oracle/Next Technik comp |
-| `Project_X_Innovation_One_Pager.pdf` (attachment) | Market sizing and investment structure for Sections 3, 4 | $500K/15% ask, $2B+ TAM, 40K+ NS companies, 7-person team, 4 enterprise betas |
-| `/tmp/helix-inspect/manifest.json` | Confirm runtime inspection availability for fresh production data | helix-global-server DATABASE and LOGS types available for metric refresh |
+| ticket.md (helix-cli) | Understand deliverable scope, source priorities, and founder guidance | Report is pitch-deck data backbone; focus on Helix for ERPs; Manifesto drives vision; Dovie = most recent numbers; founder will make deck from this |
+| User continuation context | Updated guidance on scope, tone, and four new documents | No specific software implementations; highest category level only; include positioning/reality check/tagline docs |
+| product/product.md (helix-cli) | Product definition with six capability categories, financial stress points, competitive landscape, success criteria | Six high-level capability categories defined; milestone-based kill gates; dual investment structure; ten open questions |
+| diagnosis/diagnosis-statement.md (helix-cli) | Root cause analysis with competitive intelligence, financial stress-testing, validated market data, production metrics | Three-way gap validated; Oracle faster than assumed; five Dovie stress points; traction formatted for pitch; competitive tiering |
+| diagnosis/apl.json (helix-cli) | Eight investigation questions with evidence-backed answers | Complete evidence landscape: thesis defensibility, financial realism, TAM validation, competitive intel, traction, risks, branding |
+| tech-research/tech-research.md (helix-cli) | Content architecture decisions: narrative-arc structure, six capabilities, three-layer financials, concentric compression model, evidence tiers | Eight core content decisions defining report structure and framing. This is the architectural blueprint for the report. |
+| tech-research/apl.json (helix-cli) | Six investigation questions with answers on report design | Confirmed narrative-arc optimal; three-layer financial presentation; evidence quality tier framework |
+| scout/scout-summary.md (helix-cli) | Pre-synthesized analysis of all 7 PDFs, 6 codebases, production runtime data | Evidence landscape by six tiers; 8 key unknowns; production metrics with NS vs. general breakdown |
+| repo-guidance.json (helix-cli) | Repo intent mapping | helix-cli = target for research output; all other repos = context only; no code changes needed |
+| Helix Manifesto PDF (Tier 1) | Philosophical foundation, 9 principles, boundary test | "Intelligence is not the product. Responsibility is."; "If Claude Code can do it, it's not enough" |
+| Dovie Offer PDF (Tier 2) | Most recent financial projections (April 2026) | 36-month model: 0-999 customers, $50K flat costs, profitable month 6, exit scenarios up to $150M |
+| Positioning Refined PDF (Tier 3) | Core narrative: three-way structural gap thesis | Compressed five-line thesis statement — the single most pitch-ready language in evidence base |
+| Positioning Transcript PDF (Tier 3) | Raw founder articulation of thesis | ERP-as-database future; accountability gap; shrinking human operating layers |
+| Reality Check & Risks PDF (Tier 4) | Honest threat assessment with milestone-based timeline | "Capability abundant, governance scarce"; milestone gates at 3/6/12/18/36mo; "less time than it feels like" |
+| One-Pager PDF (Tier 5) | Market sizing and team composition | $500K/15% ask; $2B+ TAM; 40K+ NS companies; 7-person team |
+| Tagline PDF (Tier 6) | Branding direction with context-specific recommendations | "Owned operations." (homepage) + "The ownership layer for NetSuite." (pitch) |
