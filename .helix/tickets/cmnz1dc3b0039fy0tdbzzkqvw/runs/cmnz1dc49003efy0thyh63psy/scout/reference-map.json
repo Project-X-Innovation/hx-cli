@@ -1,0 +1,50 @@
+{
+  "problem": "Research ticket: How to bring ownership into Helix so that Helix (not humans) owns outcomes, accountability, and operational continuity. The ticket asks for brainstorming about ownership models that avoid putting 'a human's head in the noose' while ensuring accountability. This maps the helix-cli repo's existing ownership-adjacent surface area.",
+  "files": [
+    {
+      "path": "src/comments/list.ts",
+      "why": "Comment attribution model distinguishes human vs agent authors via isAgentAuthored and isHelixTagged flags. This is the current mechanism for tracking who-said-what on a ticket."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Agent comment posting endpoint. Agents respond to @Helix mentions, creating a dialogue trail that could serve as an ownership audit surface."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Two authentication paths: hxi_ inspection tokens (agent identity) and Bearer JWT (human identity). Token type determines attribution, which is foundational for ownership tracking."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client uses token prefix to route agent vs human identity headers. The identity distinction at transport level enables server-side ownership attribution."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Database inspection subcommand. All inspection queries are audited server-side, creating an accountability trail for data access."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Log inspection subcommand. Audited like database queries."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and command router. Defines the full surface area available to agents and humans."
+    },
+    {
+      "path": "package.json",
+      "why": "Build/typecheck scripts. No test or lint commands in CLI repo."
+    }
+  ],
+  "facts": [
+    "helix-cli distinguishes agent identity (hxi_ tokens) from human identity (Bearer JWT) at the HTTP transport level (src/lib/http.ts lines using X-API-Key vs Authorization header)",
+    "Comment model tracks three ownership-relevant fields: author (name/email), isAgentAuthored (boolean), isHelixTagged (boolean) - defined in src/comments/list.ts",
+    "Ticket context is provided to agents via HELIX_TICKET_ID environment variable or --ticket flag, tying all agent actions to a specific ticket (src/comments/index.ts)",
+    "The CLI has no approval, verification, or rollback commands. It is read/write for comments and read-only for inspection. All governance logic lives server-side.",
+    "package.json scripts: build (tsc), typecheck (tsc --noEmit). No test or lint scripts.",
+    "No explicit 'owner' field or ownership concept exists in the CLI codebase itself. Ownership attribution is implicit through token-based identity."
+  ],
+  "unknowns": [
+    "How agent actions beyond comments (e.g., code changes, deployments) are attributed to Helix vs human identity - the CLI only exposes comment and inspection operations",
+    "Whether the ticket workflow orchestrator (which lives in helix-global-server) tracks per-step ownership or just per-ticket reporter/director",
+    "How rollback or revert operations would be attributed in an ownership model - no rollback surface exists in the CLI"
+  ]
+}
