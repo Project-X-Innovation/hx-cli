@@ -1,0 +1,78 @@
+{
+  "title": "Helix Investor Research Report Walkthrough",
+  "description": "Tour of the 10-section investor research report for Helix for ERPs pitch deck and website content",
+  "steps": [
+    {
+      "file": "report/report.md",
+      "line": 9,
+      "title": "Executive Summary",
+      "description": "Two-paragraph synthesis of the entire report: structural gap thesis, production traction metrics, market sizing, financial model highlights, and competitive positioning. Designed for the reader to grasp the full narrative in 60 seconds."
+    },
+    {
+      "file": "report/report.md",
+      "line": 40,
+      "title": "Section 1: The Structural Gap",
+      "description": "The narrative spine of the entire pitch. Establishes the three-way gap (ERPs don't own, consultants don't persist, AI doesn't govern) and the macro trend of shrinking operating teams. Contains the compressed five-line thesis verbatim from Positioning Refined."
+    },
+    {
+      "file": "report/report.md",
+      "line": 78,
+      "title": "Section 2: Market Opportunity",
+      "description": "Three concentric TAM rings ($600M conservative -> $2.4B-$9.6B mid -> $50.1B multi-ERP) with externally validated market data. Leads with the defensible floor per tech-research recommendation."
+    },
+    {
+      "file": "report/report.md",
+      "line": 112,
+      "title": "Section 3: Capabilities at Highest Category Level",
+      "description": "Six capability categories anchored to Manifesto principles. Zero software implementation details per user guidance. Includes the boundary test and 'What Helix Is Not' distinction."
+    },
+    {
+      "file": "report/report.md",
+      "line": 175,
+      "title": "Section 4: Traction with Honest Metrics",
+      "description": "Production metrics table with acceleration narrative, followed by proactive addressing of weak metrics (55% run success, 31% NS deployment). Demonstrates transparency that builds investor trust."
+    },
+    {
+      "file": "report/report.md",
+      "line": 216,
+      "title": "Section 5: Three-Layer Financial Model",
+      "description": "Layer 1 (Dovie base case), Layer 2 (four stress-test vulnerabilities with framings), Layer 3 (pricing headroom and upside). All figures traceable to source PDFs."
+    },
+    {
+      "file": "report/report.md",
+      "line": 285,
+      "title": "Section 6: Concentric Compression Model",
+      "description": "Competitive landscape structured as two forces compressing inward (Oracle from left, AI tools from right) with Helix in the ungoverned center. 'Capability is abundant, governance is scarce.'"
+    },
+    {
+      "file": "report/report.md",
+      "line": 339,
+      "title": "Section 7: Risk Register as Founder Discipline",
+      "description": "Reality Check milestone gates (3/6/12/18/36 months) with kill rules repositioned as execution accountability. Eight key risks with mitigations."
+    },
+    {
+      "file": "report/report.md",
+      "line": 411,
+      "title": "Section 8: Team & Dual Investment Structure",
+      "description": "7-person team table and two complementary investment tiers (Dovie angel + One-Pager seed) at shared $2.83M pre-money valuation."
+    },
+    {
+      "file": "report/report.md",
+      "line": 456,
+      "title": "Section 9: Pitch-Ready Branding Language",
+      "description": "Context-organized lines ready for direct lift: homepage, pitch, one-slide thesis, manifesto hook, boundary test. All five tagline finalists with rankings."
+    },
+    {
+      "file": "report/report.md",
+      "line": 510,
+      "title": "Section 10: Future Vision and Urgency",
+      "description": "ERP-as-database thesis, multi-ERP expansion (with honest acknowledgment of NetSuite-only readiness), pricing expansion headroom, and Reality Check closing urgency."
+    },
+    {
+      "file": "report/report.md",
+      "line": 562,
+      "title": "Evidence Quality Framework",
+      "description": "Four-tier evidence quality system (A: hard facts, B: well-sourced external, C: projections, D: unverifiable) with source document catalog and claims requiring caution."
+    }
+  ]
+}

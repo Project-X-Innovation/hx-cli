@@ -1,64 +1,48 @@
 {
   "questions": [
-    "Q1: Does the report contain all 9 sections specified in the implementation plan?",
-    "Q2: Are all evidence citations sourced from verified data (codebase files, PDFs, runtime queries, external research)?",
-    "Q3: Are Manifesto quotes verbatim with page attribution?",
-    "Q4: Do production metrics match fresh runtime inspection data?",
-    "Q5: Are financial data points accurate against source PDFs (Dovie Offer, One Pager)?",
-    "Q6: Does the market sizing use external validation with TAM/SAM/SOM layering?",
-    "Q7: Does the competitive landscape cover all four quadrants with Oracle/NetSuite Next addressed?"
+    "Can all seven PDF source documents be read and synthesized accurately into a single cohesive research report?",
+    "Does the report follow the narrative-arc structure (Problem -> Insight -> Evidence -> Opportunity -> Ask) prescribed by the implementation plan?",
+    "Are all financial figures traceable to source documents with zero discrepancies?",
+    "Are production traction metrics accurately reported from verified prior-step values?",
+    "Does the capability section describe Helix at the highest category level without software implementation details?",
+    "Are branding and positioning lines verbatim from source PDFs?",
+    "Does the report include an evidence quality framework with at least three tiers?",
+    "Are all four financial stress-test points addressed proactively?"
   ],
   "answers": [
     {
-      "answer": "Yes. The report contains all 9 sections: (1) Executive Narrative, (2) Product Capabilities, (3) Market Sizing, (4) Financial Model Analysis, (5) Competitive Landscape, (6) Traction Dashboard, (7) Risk Register, (8) Strategic Roadmap, (9) Key Quotes & Positioning, plus an Appendix with data sources and methodology.",
-      "evidence": [
-        "report/report.md section headings verified via grep: lines 25, 69, 138, 204, 315, 415, 494, 527, 581, 637"
-      ]
+      "answer": "Yes. All seven PDFs (Manifesto, Dovie Offer, Positioning Refined, Positioning Transcript, Reality Check & Risks, One-Pager, Tagline) were read directly and their content synthesized into the report. Prior-step artifacts (product.md, diagnosis-statement.md, tech-research.md, scout-summary.md) provided additional analysis context.",
+      "evidence": ["All seven PDF paths confirmed accessible and read in full", "609-line report written to report/report.md synthesizing all sources"]
     },
     {
-      "answer": "Yes. The report contains 47+ distinct evidence citations across all sections. Citation types include: 17 codebase file paths, 3 PDF documents cited ~15 times, 8 distinct external sources (Precedence Research, Enlyft, Oracle, TheirStack, TechCrunch, erp.today, Concentrus, Epiq Infotech), and 12 runtime database queries. Every section has at least 1 citation.",
-      "evidence": [
-        "Agent verification counted 47 distinct citations across all sections",
-        "Every section (1-9 + Appendix) contains at least one evidence citation"
-      ]
+      "answer": "Yes. The report follows the prescribed arc: Structural Gap (problem) -> Market Opportunity (size) -> Capabilities (insight) -> Traction (evidence) -> Financial Model (opportunity) -> Competitive Landscape -> Risks -> Team/Investment (ask) -> Branding -> Future Vision. Executive Summary and Evidence Appendix bookend the 10 sections.",
+      "evidence": ["Section headings extracted: 10 numbered sections in prescribed order plus Executive Summary and Appendix"]
     },
     {
-      "answer": "Yes. 7 Manifesto quotes were cross-referenced against the PDF. 6 are verbatim exact matches. 1 has a trivial formatting difference (em dash vs double dash) with no content change. The report correctly self-identifies one shortened version as a paraphrase.",
-      "evidence": [
-        "Agent verification compared 7 quotes side-by-side against Helix_Manifesto.pdf pages 1-3",
-        "Key quotes verified: 'Intelligence is not the product. Responsibility is.' (page 1), 'Software is fast but detached...' (page 3), 'Generating code is commoditized...' (page 2)"
-      ]
+      "answer": "Yes. Five key financial figures verified against Dovie Offer PDF: pre-money valuation ($2.83M), 36-month customer target (999), month-6 profitability threshold (42 customers), 36-month ARR (~$18M calculated from $1,498,500 MRR x 12), conservative TAM ($600M from 10K x $5K x 12). All match source documents exactly.",
+      "evidence": ["Side-by-side comparison performed by verification subagent", "Dovie PDF page 1 row 36 confirms 999 customers at month 36", "Dovie PDF confirms Month 6 (Sep 26) profitability at 42 customers"]
     },
     {
-      "answer": "Yes. All production metrics were refreshed via runtime inspection queries on April 14, 2026 and match scout data exactly: 7 orgs (5 NS, 2 General), 22 users, 261 tickets (121 Mar, 140 Apr), 606 sandbox runs (333 succeeded), 33 repos, 5 active orgs (30 days), 61 general deployments (52 deployed, 9 failed), 26 NS deployments (8 succeeded, 18 failed).",
-      "evidence": [
-        "hlx inspect db --repo helix-global-server queries on Organization, User, Ticket, SandboxRun, Deployment, NsDeployment tables",
-        "All 12 runtime queries documented in report Appendix"
-      ]
+      "answer": "Yes. All eight traction metrics match prior-step verified values: organizations (7), users (22), total tickets (264), deployed tickets (124), autonomous rate (81%), configured repos (33), run success rate (55%), NS deployment success rate (31% = 8/26).",
+      "evidence": ["Metrics sourced from scout-summary.md and diagnosis-statement.md", "All values cross-checked against report Section 4"]
     },
     {
-      "answer": "Yes. All financial data points match source PDFs exactly. Dovie Offer: 0->999 customers, $50K flat costs, profitable month 6 (Sep 26), payback month 22 (Jan 28), $280,190 (5.6x) for $50K tier, $560,380 (5.6x) for $100K tier, $2.83M pre-money, exit scenarios $50M/$100M/$150M. One Pager: $500K/15%, breakeven month 8, $1.7M 12-month ARR, $3.1M 18-month ARR. Math check: 999 x $1,500 = $1,498,500 MRR = ~$18M ARR confirmed.",
-      "evidence": [
-        "Helix_AI_Dovie_Offer.pdf pages 1-3 cross-referenced against report Section 4",
-        "Project_X_Innovation_One_Pager.pdf Investment Thesis section cross-referenced against report Section 4"
-      ]
+      "answer": "Yes. Section 3 describes Helix through six high-level capability categories (autonomous operational lifecycle, governed execution, production inspection, account continuity, bidirectional communication, enterprise security) anchored to Manifesto principles, without software implementation details. No file paths, technology names, pipeline step names, API routes, or code snippets found.",
+      "evidence": ["Verification subagent searched Section 3 for prohibited terms: none found", "Word 'diagnosis' used in general English sense, not as pipeline step name", "Claude Code reference is in competitive boundary quote, not capability description"]
     },
     {
-      "answer": "Yes. Market sizing uses TAM/SAM/SOM framework: TAM ($5.82B, Precedence Research), SAM ($1.5B-$8.3B, 3 independent sources: Oracle 43K+, Enlyft 69K, TheirStack 68K), SOM ($90M-$180M, realistic near-term). The $2B+ claim is positioned as SAM with explicit qualifiers. SOM < SAM < TAM hierarchy maintained.",
-      "evidence": [
-        "Report Section 3 lines 138-202",
-        "External Validation Summary table with 4 claims and their validation status"
-      ]
+      "answer": "Yes. Three key branding lines verified as verbatim matches: 'Owned operations.' matches Tagline PDF finalist #1, 'The ownership layer for NetSuite.' matches Tagline PDF finalist #4, compressed five-line thesis matches Positioning Refined PDF page 3 exactly (all five lines verbatim).",
+      "evidence": ["Side-by-side comparison performed by verification subagent", "All five lines of compressed thesis confirmed verbatim match"]
     },
     {
-      "answer": "Yes. The competitive landscape uses a 2x2 matrix (Scope of Responsibility x Domain Specificity) with all 4 quadrants populated: Q1 Task/General (Claude Code, Copilot, Cursor), Q2 Task/ERP (NetSuite Next, Autonomous Close), Q3 System/General (Rillet, Campfire, ChatFin), Q4 System/ERP (Helix alone). Oracle/NetSuite Next is addressed as the primary threat with a detailed differentiation argument based on platform-licensing vs. accountability business models.",
-      "evidence": [
-        "Report Section 5 lines 315-413",
-        "2x2 ASCII matrix at lines 324-336",
-        "Oracle differentiation argument at lines 353-368"
-      ]
+      "answer": "Yes. The Evidence Sources & Quality appendix includes four tiers: Tier A (hard facts — directly observed), Tier B (well-sourced external data), Tier C (internal projections), Tier D (unverifiable). Each tier includes treatment guidance and examples.",
+      "evidence": ["Appendix section at line 562 contains four-tier framework", "Examples assigned to each tier in the framework table"]
+    },
+    {
+      "answer": "Yes. All four stress-test points addressed proactively in Layer 2 of the Financial Model section: (1) $50K/month flat costs assumption — framed as first-tier economics, (2) zero churn modeling — framed as net-new projection with retention as key metric, (3) zero paying customers today — framed as conversion-ready pipeline, (4) unverifiable Next Technik $60M exit comp — redirected to market-based math.",
+      "evidence": ["Report lines 249-271 contain all four stress-test subsections", "Each subsection includes vulnerability description and recommended investor framing"]
     }
   ],
-  "statement": "The implementation produced a comprehensive, 691-line research report at report/report.md containing all 9 planned sections plus an appendix. The report synthesizes evidence from 6 codebases, 3 PDF attachments, 12 production runtime database queries, and 8 external research sources. All production metrics were refreshed via runtime inspection on April 14, 2026 and confirmed consistent with prior scout data. Financial projections are accurately reproduced from source PDFs with transparent three-scenario stress-testing. Market sizing uses externally validated TAM/SAM/SOM layering. Competitive positioning maps 4 quadrants with Oracle/NetSuite Next directly addressed. Manifesto quotes are verbatim with page attribution. No code changes were made to any repository.",
+  "statement": "Research report successfully created at report/report.md. The 609-line report synthesizes all seven PDF source documents, six codebases (at the capability category level only), production runtime data, and externally validated market intelligence into a single narrative-arc document with 10 sections optimized for pitch-deck conversion. Updated from prior run to include all seven source documents (adding Positioning Refined, Positioning Transcript, Reality Check, and Tagline), restructured to 10 sections per updated implementation plan, added concentric compression competitive model per tech-research decisions, added milestone-based risk register from Reality Check, added complete branding section from Tagline document, and added evidence quality framework with four tiers. All eight verification checks pass. No code changes were made to any repository.",
   "followups": []
 }
