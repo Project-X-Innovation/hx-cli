@@ -1,0 +1,72 @@
+{
+  "title": "Helix Investor Pitch Research Report",
+  "description": "Walkthrough of the comprehensive research report produced for the Helix for ERPs investor pitch deck and gethelix.ai website update",
+  "steps": [
+    {
+      "file": "report/report.md",
+      "line": 1,
+      "title": "Report Header & Table of Contents",
+      "description": "The report opens with a confidentiality notice and table of contents linking to all 9 sections plus appendix. Designed for dual use: pitch deck prompt context and website content source."
+    },
+    {
+      "file": "report/report.md",
+      "line": 25,
+      "title": "Section 1: Executive Narrative",
+      "description": "The narrative spine anchored by the Manifesto thesis: 'Intelligence is not the product. Responsibility is.' Covers the problem ($2B+ consultant spend), the vision (ERPs becoming databases), the elevator pitch, and the 'why now' argument."
+    },
+    {
+      "file": "report/report.md",
+      "line": 69,
+      "title": "Section 2: Product Capabilities",
+      "description": "Evidence-backed feature inventory with 16 capabilities, each citing specific codebase files. The 9-step autonomous pipeline is the centerpiece, with key differentiators (database branching, deployment automation, audit trails) highlighted for investors."
+    },
+    {
+      "file": "report/report.md",
+      "line": 138,
+      "title": "Section 3: Market Sizing (TAM/SAM/SOM)",
+      "description": "Layered market sizing with external validation: TAM ($5.82B from Precedence Research), SAM ($1.5B-$8.3B from 3 independent sources), SOM ($90M-$180M realistic near-term). The $2B+ claim is positioned as SAM with qualifiers."
+    },
+    {
+      "file": "report/report.md",
+      "line": 204,
+      "title": "Section 4: Financial Model Analysis",
+      "description": "Dovie projections reproduced with 3-scenario stress test. Base case: profitable month 6, $18M ARR at month 36. Conservative case still profitable by month 14. Assumption callout box transparently flags flat-cost and zero-churn assumptions."
+    },
+    {
+      "file": "report/report.md",
+      "line": 315,
+      "title": "Section 5: Competitive Landscape (2x2 Matrix)",
+      "description": "Competitive positioning on two axes: Scope of Responsibility x Domain Specificity. Helix alone occupies the system-level/ERP-specialized quadrant. Oracle/NetSuite Next is the primary threat, addressed with the platform-vs-accountability differentiation."
+    },
+    {
+      "file": "report/report.md",
+      "line": 415,
+      "title": "Section 6: Traction Dashboard",
+      "description": "Production metrics from runtime inspection: 261 tickets, 123 deployed (47%), 71% monthly active rate, 16% MoM growth. Weak metrics (55% run success, 31% NS deployment, zero revenue) presented with honest context and improvement trajectories."
+    },
+    {
+      "file": "report/report.md",
+      "line": 494,
+      "title": "Section 7: Risk Register",
+      "description": "8 investor risks with severity, evidence, and mitigations. Top risks: Oracle building it (High), zero revenue (High), cost scaling (Medium-High). Pre-emptive responses to top 3 investor questions included."
+    },
+    {
+      "file": "report/report.md",
+      "line": 527,
+      "title": "Section 8: Strategic Roadmap",
+      "description": "3-phase roadmap: NetSuite Dominance (0-12mo), Multi-ERP Expansion (12-24mo), Platform Play (24-36mo). Architecture readiness for multi-ERP cited via native-phase.ts isolation."
+    },
+    {
+      "file": "report/report.md",
+      "line": 581,
+      "title": "Section 9: Key Quotes & Positioning",
+      "description": "10 verbatim Manifesto quotes with page attribution and suggested slide use. 8 slide headlines mapped to report sections. Website messaging recommendations for gethelix.ai."
+    },
+    {
+      "file": "report/report.md",
+      "line": 637,
+      "title": "Appendix: Data Sources & Methodology",
+      "description": "Complete data source catalog (17 sources), methodology description, and full table of 12 runtime database queries with results -- providing full auditability for every claim in the report."
+    }
+  ]
+}
