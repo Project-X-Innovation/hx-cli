@@ -1,0 +1,35 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Primary repo for this run. Research ticket — output artifacts (pitch deck information package) are written here. No code changes needed; this repo hosts the research deliverable."
+    },
+    {
+      "repoKey": "helix-global-server",
+      "intent": "context",
+      "rationale": "Core product backend — primary evidence source for product capabilities (9-step pipeline, 80+ APIs, deployment automation, inspection API, NS integration). No code changes needed."
+    },
+    {
+      "repoKey": "helix-global-client",
+      "intent": "context",
+      "rationale": "Web application frontend — evidence source for user-facing features (dashboard, kanban, deployment center, staging queue, analytics). No code changes needed."
+    },
+    {
+      "repoKey": "helix-ns-client",
+      "intent": "context",
+      "rationale": "Legacy/deprecated NS frontend — historical context only, showing NetSuite-first product evolution. No code changes needed."
+    },
+    {
+      "repoKey": "helix-ns-server",
+      "intent": "context",
+      "rationale": "Legacy/deprecated NS backend — historical context only, showing original 6-step workflow before Helix Global integration. No code changes needed."
+    },
+    {
+      "repoKey": "ns-gm",
+      "intent": "context",
+      "rationale": "Open-source NetSuite CLI tool (MIT) — evidence of OSS strategy and NS integration foundation. Created by team member Luis Simosa. No code changes needed."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

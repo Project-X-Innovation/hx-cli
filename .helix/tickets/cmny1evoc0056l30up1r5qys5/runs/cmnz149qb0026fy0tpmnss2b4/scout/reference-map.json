@@ -1,0 +1,196 @@
+{
+  "problem": "Compile research-backed information for an investor pitch deck and updated website for Helix AI, focused on Helix for ERPs (starting with NetSuite). The deliverable is a comprehensive report covering target market, TAM, financials, positioning thesis, competitive landscape, threats, branding direction, and future trajectory that will serve as the data backbone for a pitch deck. User guidance: discuss capabilities at the highest category level only; do not call out specific software implementations.",
+  "files": [
+    {
+      "path": ".helix-inputs/attachments/cmny1ewa3005kl30u6tp3o0kq--Helix_Manifesto.pdf",
+      "why": "Internal product bible defining Helix vision and 9 principles. Highest-sincerity source per ticket owner. Drives the 'responsibility over intelligence' thesis."
+    },
+    {
+      "path": ".helix-inputs/attachments/cmny1ew0c005gl30unha4u32j--Helix_AI_Dovie_Offer.pdf",
+      "why": "Most recent financial projections (April 2026) with 36-month revenue model, customer growth, investor equity terms, and exit scenarios. Created with distribution partner; owner considers most current and reliable."
+    },
+    {
+      "path": ".helix-inputs/attachments/cmny1ew5p005il30uh46fw071--Project_X_Innovation_One_Pager.pdf",
+      "why": "Investor one-pager (March 2026) with team, TAM, and investment thesis. Focus on Helix section; ignore Finesse/Haven per owner instructions."
+    },
+    {
+      "path": ".helix-inputs/attachments/cmnz14a9j002afy0t18w1aytg--Helix_Positioning_Refined.pdf",
+      "why": "Refined positioning document articulating the structural gap thesis and compressed thesis statement. Core narrative for pitch."
+    },
+    {
+      "path": ".helix-inputs/attachments/cmnz14abo002cfy0tp6j50zcu--Helix_Positioning_Transcript.pdf",
+      "why": "Raw founder transcript (Apr 14, 2026) plus refined version. Contains original thinking, nuance, and the 'three-way gap' argument."
+    },
+    {
+      "path": ".helix-inputs/attachments/cmnz14a680028fy0tzjjkdr8w--Reality_Check___Risks.pdf",
+      "why": "Honest timeline-based reality check assessing threats from Oracle/NetSuite and AI model vendors at 3, 6, 12, 18, and 36 month horizons with milestone requirements."
+    },
+    {
+      "path": ".helix-inputs/attachments/cmnz14afl002efy0txyfaolmd--Helix_Tagline.pdf",
+      "why": "Five finalist taglines with context-specific recommendations. Establishes branding direction around 'Owned operations' and 'The ownership layer for NetSuite'."
+    },
+    {
+      "path": "helix-global-server/prisma/schema.prisma",
+      "why": "Database schema showing full data model scope: Organizations (GENERAL/NETSUITE platforms), Tickets, SandboxRuns, Deployments, NsDeployments, InspectionCredentials, etc."
+    },
+    {
+      "path": "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts",
+      "why": "Defines the 9-step autonomous workflow pipeline. Core product feature evidence."
+    },
+    {
+      "path": "helix-global-server/package.json",
+      "why": "Server dependencies revealing tech stack and integration breadth."
+    },
+    {
+      "path": "helix-global-client/src/App.tsx",
+      "why": "Route definitions showing 24 UI routes: ticket management, kanban board, staging queue, deployment center, transcript-to-ticket, settings, admin, usage analytics, docs."
+    },
+    {
+      "path": "helix-cli/src/index.ts",
+      "why": "CLI entry point showing production inspection and agent-human communication capabilities."
+    },
+    {
+      "path": "ns-gm/ns_gm_restlet.js",
+      "why": "Open-source NetSuite RESTlet enabling remote SuiteScript execution. Foundational technology for NetSuite integration."
+    },
+    {
+      "path": "helix-ns-server/src/helix-workflow/orchestrator.ts",
+      "why": "Legacy NS orchestrator showing evolutionary origin. NetSuite functionality now embedded in Helix Global."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Helix is live in production with 7 organizations, 22 users, and 264 total tickets as of April 14, 2026",
+      "source": "Runtime inspection: production database queries"
+    },
+    {
+      "claim": "5 of 7 organizations are NETSUITE platform (EKB: 25 tickets, Dealmed: 8 tickets/7 users, Outdoor Living Supply: 5 tickets, Broudy Precision: 2 tickets, DMW: 1 ticket); 2 are GENERAL (Project X Innovation: 223 tickets/8 users, PX Cracked: 0 tickets)",
+      "source": "Runtime inspection: Organization join query"
+    },
+    {
+      "claim": "Ticket volume is accelerating: 121 tickets in March 2026, 143 tickets in first 14 days of April 2026",
+      "source": "Runtime inspection: Ticket creation date aggregation"
+    },
+    {
+      "claim": "611 total sandbox runs: 338 SUCCEEDED (55%), 164 FAILED (27%), 88 UNVERIFIED (14%), 16 MERGED, 3 INTERRUPTED, 2 RUNNING",
+      "source": "Runtime inspection: SandboxRun status aggregation"
+    },
+    {
+      "claim": "124 tickets have reached DEPLOYED status (47% of total); 34 PREVIEW_READY; 24 REPORT_READY; 16 SANDBOX_READY",
+      "source": "Runtime inspection: Ticket status aggregation"
+    },
+    {
+      "claim": "63 general deployments (53 DEPLOYED, 9 FAILED); 26 NetSuite deployments (8 SUCCEEDED, 18 FAILED)",
+      "source": "Runtime inspection: Deployment and NsDeployment tables"
+    },
+    {
+      "claim": "Ticket modes: 214 AUTO, 26 RESEARCH, 14 BUILD, 10 FIX - platform primarily used for autonomous end-to-end execution",
+      "source": "Runtime inspection: Ticket mode aggregation"
+    },
+    {
+      "claim": "33 repositories configured across all organizations",
+      "source": "Runtime inspection: OrganizationRepository count"
+    },
+    {
+      "claim": "The autonomous pipeline has 9 steps: scout, diagnosis, product, tech-research, implementation-plan, implementation, code-review, verification, preview-config",
+      "source": "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts"
+    },
+    {
+      "claim": "Dovie financial model projects 0 to 999 customers over 36 months; ~$1.5M MRR (~$18M ARR) at month 36; $50K/month fixed costs; profitable at month 6 (42 customers); payback at month 22",
+      "source": "Helix_AI_Dovie_Offer.pdf, Chart 1"
+    },
+    {
+      "claim": "Dovie offer investment terms: 2% equity ($50K) or 4% equity ($100K) at $2.83M pre-money valuation with distributions from net profit",
+      "source": "Helix_AI_Dovie_Offer.pdf, page 1"
+    },
+    {
+      "claim": "One-Pager investment terms: $500K for 15% equity at $2.83M pre-money; 12-mo ARR $1.7M; 18-mo $3.1M; breakeven month 8",
+      "source": "Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Exit scenarios: Early ($50M at 18mo, 20x), Growth ($100M at 36mo, 40x), Strategic ($150M at 36mo, 60x). Comp: Oracle acquired Next Technik (NetSuite FSM) for $60M",
+      "source": "Helix_AI_Dovie_Offer.pdf, page 3"
+    },
+    {
+      "claim": "Market opportunity: 40,000+ NetSuite companies globally; $5K-$20K/mo per company on consultants; $2B+ annual consultant spend addressable; expandable to SAP, Odoo, other ERPs",
+      "source": "Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Value props: 60-80% reduction in consultant costs; dictate customization in minutes; department reports in minutes vs hours/days; sandbox-safe with human approval for deploy",
+      "source": "Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Team: 7 core members with 1-4 years at PX each. Includes CEO, Tech Lead (AI Research background), AI Agent Architect, PM, Lead NetSuite Dev (creator of open-source ns-gm), Full Stack Dev, Special Projects",
+      "source": "Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Manifesto core thesis: 'Intelligence is not the product. Responsibility is.' and 'Humans express intent. Helix owns outcomes.' Nine principles: Responsibility, Completion, Safety, Decision Ownership, Opinionated by Design, Continuity, Calibrated Understanding, Trust Through Behavior, Extreme Customer Support",
+      "source": "Helix_Manifesto.pdf"
+    },
+    {
+      "claim": "Manifesto boundary test: 'If Claude Code can do it, it's not enough. If NetSuite can own it, we don't build it.'",
+      "source": "Helix_Manifesto.pdf, page 1"
+    },
+    {
+      "claim": "Positioning thesis compressed: NetSuite standardizes complexity but doesn't own each customer's custom operational layer. Consultants implement but don't stay. AI models generate but don't govern. Human teams are shrinking while business complexity stays the same. Helix exists to permanently own the operational layer in between.",
+      "source": "Helix_Positioning_Refined.pdf, page 3"
+    },
+    {
+      "claim": "Positioning identifies three-way structural gap: (1) ERPs don't own custom layers over time, (2) consultants don't persist, (3) AI models generate but don't take accountability. The 'ownership' layer is unclaimed.",
+      "source": "Helix_Positioning_Refined.pdf, pages 1-3"
+    },
+    {
+      "claim": "Reality check validates structural thesis as 'mostly right' but warns pace is faster on both sides. Oracle/NetSuite pushing agentic workflows, AI-native extensibility, and NetSuite Next. Model vendors pushing coding agents, enterprise deployment, safer autonomy.",
+      "source": "Reality_Check___Risks.pdf, page 1"
+    },
+    {
+      "claim": "Reality check timeline milestones: 3mo=Helix must be safe (not just clever); 6mo=trusted in one narrow lane; 12mo=stateful and persistent; 18mo=governable by an institution; 36mo=where the owned operational layer lives. 'Kill' rules at each checkpoint.",
+      "source": "Reality_Check___Risks.pdf, page 6"
+    },
+    {
+      "claim": "Reality check key insight: 'Capability is abundant, governance is scarce.' The defensible zone is governed execution + durable account-specific memory, not generation or convenience.",
+      "source": "Reality_Check___Risks.pdf, page 2"
+    },
+    {
+      "claim": "Reality check warns: 'If Helix is still mostly generating scripts, packaging model outputs, or standing in front of NetSuite UI, then Oracle plus model ecosystems will eat most of it.'",
+      "source": "Reality_Check___Risks.pdf, page 4"
+    },
+    {
+      "claim": "Tagline finalists: (1) 'Owned operations.' (best for brand/homepage), (2) 'Operations, owned.' (elegant/premium), (3) 'Own your NetSuite operations.' (max clarity), (4) 'The ownership layer for NetSuite.' (best for pitch/investor), (5) 'Intelligence for owned operations.' (subtitle/explanatory)",
+      "source": "Helix_Tagline.pdf, pages 1-3"
+    },
+    {
+      "claim": "Recommended branding: Homepage='Owned operations. Helix owns how your NetSuite evolves - from request to tested, deployed, monitored, and maintained execution.' Pitch='The ownership layer for NetSuite. NetSuite owns the platform. Helix owns the operational layer inside your account.'",
+      "source": "Helix_Tagline.pdf, page 4"
+    },
+    {
+      "claim": "User continuation context specifies: focus pitch on Helix for ERPs (not Helix Global as dev tool); do not call out specific software implementations; discuss capabilities at highest category level only",
+      "source": "User continuation context in prompt"
+    },
+    {
+      "claim": "Platform supports end-to-end autonomous workflow from intent to deployed, monitored production code across multiple repositories, with sandbox isolation, human approval gates, and production inspection capabilities",
+      "source": "Codebase exploration: helix-global-server, helix-global-client, helix-cli"
+    },
+    {
+      "claim": "NetSuite-specific capabilities include: credential management for SDF and remote execution, sandbox-to-production deployment pipelines, SuiteScript testing and execution, and file cabinet deployment with manifest tracking",
+      "source": "Codebase exploration: helix-global-server (native-phase, sdf-credentials, ns-gm-credentials)"
+    },
+    {
+      "claim": "Average implied pricing ~$1,500/mo per customer (Dovie model: $1.5M MRR / 999 customers at month 36)",
+      "source": "Calculated from Helix_AI_Dovie_Offer.pdf Chart 1"
+    }
+  ],
+  "unknowns": [
+    "Current actual MRR and revenue from existing customers - no billing/subscription tables observed in production database schema. Dovie model shows 0 customers in April 2026 (month 1), but production has 5 NS orgs with tickets.",
+    "Whether the 4 enterprise beta users from the One-Pager (March 2026) have converted to paying customers by April 2026, or what the conversion pipeline looks like.",
+    "Churn rate assumptions - Dovie projections show linear-then-accelerating growth (0 to 999) with no churn modeled. Actual retention unknown.",
+    "Cost scalability beyond $50K/month flat - whether AI inference costs, infrastructure, and support headcount scale meaningfully with customer count.",
+    "Competitive landscape specifics - no formal competitive analysis document provided. Manifesto and positioning docs frame against generic AI tools and ERP vendors but no named competitors in the 'AI for ERP' space.",
+    "Distribution partner identity and terms - referenced as collaborator on Dovie numbers but not named or documented in any attachment.",
+    "Website (gethelix.ai) current state and content - not available for inspection; ticket owner describes it as 'not very accurate' and 'slapped together'.",
+    "SAP/Odoo/other ERP expansion technical feasibility - codebase is NetSuite-specific for ERP features; no connectors for other ERPs exist yet.",
+    "Actual consultant cost benchmarks per NetSuite company to validate the '$5K-$20K/mo' and '$2B+ addressable' market claims with third-party data.",
+    "The two investment structures (Dovie: $50K-$100K for 2-4% equity; One-Pager: $500K for 15%) appear to be different instruments for different investor tiers - relationship not clarified.",
+    "NetSuite deployment success rate is low (8/26 = 31% succeeded) vs general deployments (53/63 = 84%) - reason for discrepancy not investigated."
+  ]
+}

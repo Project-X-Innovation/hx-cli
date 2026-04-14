@@ -1,0 +1,82 @@
+{
+  "questions": [
+    "Q1: What concrete product capabilities and features exist in the Helix codebase today that can be cited in a pitch deck?",
+    "Q2: Are the financial projections in the Dovie Offer internally consistent and grounded in realistic assumptions?",
+    "Q3: Is the $2B+ TAM claim for NetSuite consulting spend defensible with external market data?",
+    "Q4: What is the competitive landscape — who else is building AI-for-ERP and how does Helix differentiate?",
+    "Q5: What production traction metrics exist to demonstrate product-market fit or momentum?",
+    "Q6: What are the key risks and threats that an investor would probe, and what mitigations exist?",
+    "Q7: How does the Helix Manifesto's philosophical positioning translate into concrete defensibility for investors?"
+  ],
+  "answers": [
+    {
+      "answer": "The Helix codebase demonstrates a mature, production-grade platform with: (1) a 9-step autonomous AI workflow pipeline (scout → diagnosis → product → tech-research → implementation-plan → implementation → code-review → verification → preview-config), (2) 80+ API endpoints, (3) multi-repository orchestration with GitHub integration, (4) NetSuite SDF/SuiteCloud CLI integration for headless deployment, (5) production inspection API with read-only safety guards and audit logging, (6) per-ticket database branching via Neon, (7) ephemeral preview environments via Northflank, (8) staging merge queue, (9) AES-256-GCM credential encryption, (10) usage analytics, (11) bidirectional agent-user comments during runs, (12) CLI for production inspection (hlx inspect), (13) deployment center supporting DigitalOcean and Vercel, (14) custom LLM inference endpoint configuration, and (15) the open-source ns-gm tool (MIT) for NetSuite SuiteScript execution. Ticket modes include AUTO, BUILD, FIX, RESEARCH, and EXECUTE (NetSuite-only).",
+      "evidence": [
+        "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts — 9 workflow steps",
+        "helix-global-server/src/routes/api.ts — 80+ API endpoints",
+        "helix-global-server/prisma/schema.prisma — full data model with TicketMode enum (AUTO, BUILD, FIX, RESEARCH, EXECUTE)",
+        "helix-global-server/src/services/inspection-proxy-service.ts — read-only production inspection",
+        "helix-global-server/src/services/neon/provisioning.ts — per-ticket DB branching",
+        "helix-global-server/src/security/crypto.ts — AES-256-GCM encryption",
+        "ns-gm/src/cli.js — open-source NetSuite CLI tool"
+      ]
+    },
+    {
+      "answer": "The Dovie projections have several strengths and weaknesses. Strengths: (1) conservative early growth (0→42 customers in 6 months = ~$1,500/customer/month), (2) profitability at month 6 with only 42 customers against $50K/month costs, (3) growth acceleration from linear (10/mo) to ~10% monthly compounding is standard SaaS modeling. Weaknesses: (1) $50K/month flat cost assumption is unrealistic through 999 customers — AI inference, infrastructure, and support costs will scale; (2) no churn modeled — even 2-3% monthly churn at scale significantly impacts net customer count; (3) $1,500/mo average revenue per customer is reasonable for SMB SaaS but below the $5K-$20K/mo consultant replacement value proposition; (4) the implicit assumption of going from 0 paying customers (April 2026, which is now) to 6 by May 2026 requires immediate sales execution. The One Pager's $500K/15% structure implies different investor tiers than Dovie's $50K-$100K offering.",
+      "evidence": [
+        "Helix_AI_Dovie_Offer.pdf — Chart 1 shows 0→999 customers, $50K flat costs, profitable month 6",
+        "Project_X_Innovation_One_Pager.pdf — $500K/15% at $2.83M pre-money, breakeven month 8",
+        "Production runtime: 7 organizations exist but 0 confirmed paying customers in Dovie timeline"
+      ]
+    },
+    {
+      "answer": "The TAM claim is partially defensible. External data confirms: (1) NetSuite has 43,000-69,000+ customers globally (multiple sources including Oracle, Enlyft, TheirStack), validating the 40K+ claim; (2) NetSuite implementation costs range $25K-$200K+ per company, with ongoing consulting typically 1.5x-3x annual license cost; (3) the broader AI-in-ERP market was $5.82B in 2025, projected to reach $58.7B by 2035 at 26% CAGR. However, the $2B+ 'annual consultant spend addressable' figure ($5K-$20K/mo x 40K+ companies) likely overstates the addressable market because: (a) not all 40K+ companies spend $5K-$20K/mo on consultants continuously, (b) many companies have internal teams, (c) Helix addresses customization/development consulting, not implementation consulting. A more conservative estimate of the directly addressable market would be $500M-$1B annually (subset of companies with ongoing customization needs at meaningful spend levels).",
+      "evidence": [
+        "Web search: NetSuite has 43,000+ customers (Oracle), 69,373 tracked (Enlyft), 68,032 tracked (TheirStack)",
+        "Web search: NetSuite implementation costs $25K-$200K+ per company (Concentrus, Epiq Infotech)",
+        "Web search: AI in ERP market $5.82B in 2025, projected $58.7B by 2035 at 26% CAGR (Precedence Research)",
+        "Project_X_Innovation_One_Pager.pdf — claims 40K+ companies, $5K-$20K/mo, $2B+ addressable"
+      ]
+    },
+    {
+      "answer": "The competitive landscape has three tiers: (1) ERP-replacement AI-native startups (Rillet, Campfire, ChatFin) — these build entirely new ERPs with AI embedded, not ERP operators; Rillet and Campfire each raised $100M in 2025, showing major investor interest in AI+ERP; (2) NetSuite's own AI roadmap ('NetSuite Next') — Oracle is embedding conversational and agentic AI directly into NetSuite, including Autonomous Close, natural-language interaction, and multi-step process orchestration; this is the most direct competitive threat; (3) AI coding tools (Claude Code, GitHub Copilot, Cursor) — general-purpose AI dev tools that help with code but don't own the ERP customization lifecycle end-to-end. Helix differentiates by being an ERP *operator* rather than an ERP *replacement* or a general *tool* — it takes end-to-end responsibility for customization, deployment, and monitoring on top of existing ERP infrastructure. No direct competitor currently offers autonomous, accountable NetSuite customization-as-a-service.",
+      "evidence": [
+        "Web search: Rillet and Campfire each raised $100M (2025) — AI-native ERP replacements",
+        "Web search: ChatFin — AI Super Agent for autonomous finance work",
+        "Web search: NetSuite Next — Oracle's agentic AI roadmap for 2026 (erp.today)",
+        "Helix_Manifesto.pdf — 'If Claude Code can do it, it's not enough. If NetSuite can own it, we don't build it.'",
+        "helix-global-server codebase — 9-step autonomous pipeline with deployment, not just code generation"
+      ]
+    },
+    {
+      "answer": "Production traction as of April 2026: 7 organizations (5 NetSuite, 2 General), 22 users, 261 total tickets (140 in April alone, 121 in March — strong month-over-month growth), 606 sandbox runs, 123 tickets deployed to production (47% deployment rate), 33 configured repositories, 5 active organizations in last 30 days. The One Pager mentions 4 enterprise beta users. Key concern: 55% run success rate (333/606) and 69% NetSuite deployment failure rate (18/26 failed) suggest the product is still maturing. For a pitch, the growth trajectory (261 tickets in ~2 months, 5 active orgs) demonstrates real usage, but converting beta users to paying customers is the immediate challenge.",
+      "evidence": [
+        "Runtime DB queries — 7 orgs, 22 users, 261 tickets, 606 runs, 123 deployed",
+        "Runtime DB queries — ticket status distribution, run success rates",
+        "Runtime DB queries — 5 orgs active in last 30 days",
+        "Project_X_Innovation_One_Pager.pdf — 4 enterprise beta users"
+      ]
+    },
+    {
+      "answer": "Key investor risks: (1) Oracle/NetSuite building it themselves — NetSuite Next is actively embedding agentic AI; mitigation: Oracle's business model is platform licensing, not end-to-end customization accountability; they enable customization, Helix owns it; (2) AI coding tools becoming good enough — Claude Code, Copilot, etc. commoditize code generation; mitigation: Helix differentiates on the full lifecycle (test, deploy, monitor, maintain), not just code generation; (3) Zero revenue today — Dovie shows 0 customers in month 1 (April 2026); mitigation: 4 enterprise betas and distribution partner collaboration; (4) Cost scaling — $50K flat costs won't hold at 999 customers (AI inference, infra, support); mitigation: needs transparent cost-scaling model; (5) 55% success rate — may concern investors about reliability; mitigation: still in beta, success rate improvement is a product maturity metric; (6) Team of 7 supporting 999 customers in 36 months — needs explanation of how autonomous operations enable this leverage; (7) NetSuite-only initially — limits total addressable market until SAP/Odoo expansion; (8) No confirmed revenue or contracts.",
+      "evidence": [
+        "Web search: NetSuite Next agentic AI roadmap (erp.today 2026)",
+        "Helix_AI_Dovie_Offer.pdf — $50K flat costs through month 36",
+        "Runtime DB — 55% run success rate, 69% NS deployment failure rate",
+        "Project_X_Innovation_One_Pager.pdf — 7-person team, 4 enterprise betas",
+        "Helix_Manifesto.pdf — positioning against AI tools and ERPs"
+      ]
+    },
+    {
+      "answer": "The Manifesto's 9 principles (Responsibility, Completion, Safety, Decision Ownership, Opinionated by Design, Continuity, Calibrated Understanding, Trust Through Behavior, Extreme Customer Support) map directly to investor-relevant defensibility: (1) 'Responsibility' = accountability moat — neither AI tools nor ERPs own outcomes end-to-end; Helix occupies this gap; (2) 'Completion' = full-lifecycle value — the 9-step pipeline from scout to deploy proves this isn't just code generation; (3) 'Safety' (reversible, observable, auditable) = enterprise trust requirements for production deployment; (4) 'Continuity' (maintains systems, not just tasks) = recurring revenue justification — customers need ongoing maintenance, not one-shot tasks; (5) 'Trust Through Behavior' = reliability as competitive moat in a world of commoditized intelligence. The Manifesto essentially argues that as AI intelligence commoditizes, the value shifts to reliable, accountable *operation* — which is harder to replicate than raw capability.",
+      "evidence": [
+        "Helix_Manifesto.pdf — all 9 principles, core thesis: 'Intelligence is not the product. Responsibility is.'",
+        "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts — 9-step pipeline proves completion principle",
+        "helix-global-server/src/services/inspection-proxy-service.ts — safety principle (read-only, audit logging)",
+        "helix-global-server/src/services/inspection-audit-service.ts — auditable principle"
+      ]
+    }
+  ],
+  "statement": "This is a RESEARCH ticket requesting comprehensive information gathering and synthesis for an investor pitch deck and updated website for Helix for ERPs. The deliverable is a structured information package — not code changes — covering: product capabilities (verified from 6 codebases and production data), market sizing (validated against external data), financial projections (from Dovie Offer and One Pager), competitive landscape (researched from web sources), risk analysis, and narrative positioning (from the Helix Manifesto). Key findings: (1) The product is technically mature with a 9-step autonomous pipeline, 80+ API endpoints, and real production usage (261 tickets, 7 orgs, 22 users); (2) The $2B+ TAM is partially defensible — 40K+ NetSuite companies confirmed but ongoing consultant spend assumptions need tempering; a $500M-$1B directly addressable estimate is more conservative; (3) Financial projections are optimistic but internally consistent, with key gaps around cost scaling and churn; (4) The competitive position is genuinely unique — no direct competitor offers autonomous, accountable ERP customization-as-a-service, though Oracle's NetSuite Next agentic AI roadmap is the primary strategic threat; (5) The Manifesto provides a compelling philosophical framework that translates into concrete defensibility arguments. All six repositories serve as context sources; no code changes are needed. The helix-global-server and helix-global-client codebases are the primary evidence for current product capabilities, while helix-ns-server and helix-ns-client provide historical context for the NetSuite-first evolution.",
+  "followups": []
+}
