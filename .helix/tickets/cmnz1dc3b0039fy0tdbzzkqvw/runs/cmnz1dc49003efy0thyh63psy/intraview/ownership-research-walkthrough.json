@@ -1,0 +1,78 @@
+{
+  "title": "Ownership Framework Research Report Tour",
+  "description": "A guided walkthrough of the ownership framework research report for Helix (RSH-226), covering the six design dimensions and roadmap mapping.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 7,
+      "title": "Executive Summary",
+      "description": "The report opens with the core finding: Helix already owns outcomes in practice (97.6% autonomous deployments) but this ownership is implicit, unrecorded, and unaccountable. The five gaps are stated concisely."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 40,
+      "title": "Production Reality Data",
+      "description": "All quantitative claims are grounded in live production database queries. Key numbers: 265 tickets, 6.8% director adoption, 84.1% deployment success rate, 2,073 audit entries (all inspection-only)."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 91,
+      "title": "The Structural Gap",
+      "description": "Synthesizes the Positioning document: NetSuite owns the platform, consultants touch temporarily, AI generates but doesn't govern. Helix fills the structural gap in the middle."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 123,
+      "title": "Six Design Principles",
+      "description": "Each principle is derived directly from the Helix Manifesto and mapped to concrete product implications. The core principle: 'Helix owns by default. Humans intervene by exception.'"
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 155,
+      "title": "Dimension 1: Ownership Assertion Model",
+      "description": "The most important architectural insight: ownership is not a field on a ticket — it is a trail of events. Each assertion records what, when, at what stage, and with what evidence."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 208,
+      "title": "Dimension 2: Decision Log Design",
+      "description": "Six decision types derived from the current workflow. Currently none are recorded with reasoning — workflow logs go to stdout only. The decision log makes them queryable and immutable."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 258,
+      "title": "Dimension 3: Human Verification by Exception",
+      "description": "The inverted approval model: instead of 'approve before deploy,' it is 'review after deploy, intervene if wrong.' Includes escalation triggers and the cold-start trust problem."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 320,
+      "title": "Dimension 4: Accountability Visibility",
+      "description": "The accountability dashboard concept, grounded in current production metrics. Key design principle: transparency over promotion — show failures alongside successes."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 374,
+      "title": "Dimension 5: Reversibility Model",
+      "description": "Platform-specific feasibility assessment. Standard platforms are feasible; NetSuite SDF is constrained. Phased approach from recording intent (3mo) to full orchestration (18mo+)."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 422,
+      "title": "Dimension 6: Continuity Model",
+      "description": "Post-deployment ownership via a continuity contract: monitoring frequency, health check scope, anomaly thresholds, escalation targets. Addresses the Manifesto's most distinctive principle."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 472,
+      "title": "Roadmap Mapping",
+      "description": "Concrete capabilities mapped to Reality Check milestones. 3mo: safe. 6mo: trusted in one lane. 12mo: stateful. 18mo: institutionally trusted. 36mo: ownership layer or dead."
+    },
+    {
+      "file": ".helix/tickets/cmnz1dc3b0039fy0tdbzzkqvw/runs/cmnz1dc49003efy0thyh63psy/report/report.md",
+      "line": 558,
+      "title": "Recommendations for Next Steps",
+      "description": "Prioritized immediate actions: define the ownership event schema, instrument the workflow orchestrator, build the decision trail view, add ownership indicators to the board view."
+    }
+  ]
+}

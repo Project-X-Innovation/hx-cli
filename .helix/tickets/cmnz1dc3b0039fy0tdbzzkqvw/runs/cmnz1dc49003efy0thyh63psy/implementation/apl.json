@@ -1,0 +1,43 @@
+{
+  "questions": [
+    "What does 'Helix owns outcomes' mean in concrete, testable product terms?",
+    "How does Helix record every automated decision with reasoning?",
+    "How do humans review and intervene without gating the process?",
+    "What does Helix's accountability track record look like to customers?",
+    "What does rollback mean for Helix and how does it remediate its own mistakes?",
+    "What does post-deployment ownership look like?",
+    "How do the six ownership dimensions map to the Reality Check milestones?"
+  ],
+  "answers": [
+    {
+      "answer": "Ownership is an append-only event trail, not a field on a ticket. Helix records an immutable ownership assertion at each lifecycle stage: what is owned, since when, at what stage, with what evidence. Helix is always the default owner (validated by 97.6% autonomous deployment rate). Human interventions are exceptions, not transfers.",
+      "evidence": ["Production DB: 124 deployed tickets, 3 with director (2.4%)", "Manifesto Principle 1: 'Fully. And forever.'", "Tech research: Option B (separate append-only event log) chosen over field-based or external event store"]
+    },
+    {
+      "answer": "A structured decision log captures every automated decision (proceed, verify, deploy, retry, escalate, remediate) with: decision type, reasoning, evidence references, risk assessment, outcome, timestamp, and actor. Currently workflow logs go to stdout only (logRun/logRunWorkflowStep in orchestrator/logging.ts). The decision log makes these queryable and immutable.",
+      "evidence": ["Production DB: 0 verification retries recorded (verificationAttemptCount unused)", "53 deployments with no authorization record", "Current audit: 2,073 entries all data inspection, zero lifecycle events"]
+    },
+    {
+      "answer": "The verification-by-exception model: Helix proceeds by default, customers review after deployment. No approval gates. Interventions (flag issue, request review, request rollback) are recorded in the decision trail. Escalation triggers are defined for failures and anomalies. Director role evolves from 'overseer' to 'exception intervener.'",
+      "evidence": ["Ticket creator explicitly rejects approval gates", "Director adoption 6.8% proves optional human ownership goes unused", "Board view has no 'Awaiting Approval' column, deployment center has no 'Approve' button"]
+    },
+    {
+      "answer": "An accountability dashboard shows: deployment success rate (84.1%), verification coverage (62.1%), tickets by outcome, failure handling, resolution speed. Must be transparent about failures (9 failed deployments visible, not hidden). Follows existing usage page pattern. Per-ticket views show ownership trail, decision trail, evidence trail.",
+      "evidence": ["Production DB: 53 deployed, 9 failed, 380/612 verification reports", "Existing usage.tsx provides period filtering, sortable tables, summary cards pattern", "Manifesto Principle 8: Trust Through Behavior"]
+    },
+    {
+      "answer": "Rollback is a first-class concept even when technical execution is constrained. Standard platforms (Vercel, DigitalOcean) support automated rollback. NetSuite SDF does not support atomic rollback; partial reversal by redeploying previous state is possible. Phased approach: record intent (3mo), standard rollback (6mo), NetSuite partial (12mo), full orchestrated (18mo+).",
+      "evidence": ["Current state: 9 failed deployments with zero remediation", "SDF deploy is not natively reversible", "Vercel and DigitalOcean APIs support rollback"]
+    },
+    {
+      "answer": "Ownership continues beyond DEPLOYED via a continuity contract: monitoring frequency, health check scope, anomaly thresholds, escalation targets. Platform-specific: polling-based for NetSuite (execution logs via SuiteTalk), API-based for standard platforms. 6-month milestone defines the contract; 12-month milestone implements active monitoring.",
+      "evidence": ["Current state: no status beyond DEPLOYED, no health checks", "Manifesto Principle 6: 'Helix maintains systems'", "NetSuite does not expose real-time execution logs"]
+    },
+    {
+      "answer": "3 months: safe (decision log + audit trail + basic assertions). 6 months: trusted in one lane (deployment accountability + accountability dashboard + verification-by-exception). 12 months: stateful (account memory + monitoring + breakage detection + rollback). 18 months: institutionally trusted (governance thresholds + formal audit + stronger write guarantees). 36 months: ownership layer or dead.",
+      "evidence": ["Reality Check milestones", "Tech research roadmap mapping", "Competitive assessment: capability is commoditizing, governance is scarce"]
+    }
+  ],
+  "statement": "The ownership framework defines six concrete design dimensions (Assertion, Decisions, Verification, Accountability, Reversibility, Continuity) grounded in Helix's production reality (265 tickets, 97.6% autonomous deployments, 84.1% deployment success rate). The core principle 'own by default, intervene by exception' is validated by current behavior and maps to Reality Check milestones. The technical architecture uses an append-only ownership event log extending the existing InspectionAuditLog pattern. No code changes were made — this is a research deliverable as specified by the ticket.",
+  "followups": []
+}
