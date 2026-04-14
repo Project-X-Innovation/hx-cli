@@ -1,0 +1,283 @@
+{
+  "problem": "Gather comprehensive product, market, financial, and technical evidence from the Helix codebase, attachments (Manifesto, Dovie Offer, One Pager), and production environment to serve as the information backbone for an investor pitch deck and updated website for Helix for ERPs.",
+  "files": [
+    {
+      "path": "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts",
+      "why": "Defines the complete 9-step AI workflow pipeline (scout → diagnosis → product → tech-research → implementation-plan → implementation → code-review → verification → preview-config) - core product differentiator."
+    },
+    {
+      "path": "helix-global-server/src/helix-workflow/orchestrator.ts",
+      "why": "Main sandbox run executor - orchestrates the end-to-end autonomous workflow that is the product's core value proposition."
+    },
+    {
+      "path": "helix-global-server/src/helix-workflow/orchestrator/native-phase.ts",
+      "why": "NetSuite SuiteCloud CLI integration - handles SDF project setup and CI-mode execution for headless NetSuite automation."
+    },
+    {
+      "path": "helix-global-server/src/helix-workflow/sdf-credentials.ts",
+      "why": "SDF credential management with AES-256-GCM encryption - shows enterprise-grade security for NetSuite integration."
+    },
+    {
+      "path": "helix-global-server/src/helix-workflow/ns-gm-credentials.ts",
+      "why": "NS-GM credential management - enables programmatic NetSuite record access for inspection and operations."
+    },
+    {
+      "path": "helix-global-server/src/controllers/ticket-controller.ts",
+      "why": "Ticket API - entry point for all workflow requests; shows ticket modes (AUTO, BUILD, FIX, RESEARCH, EXECUTE)."
+    },
+    {
+      "path": "helix-global-server/src/controllers/deployment-controller.ts",
+      "why": "Deployment center API - manages general deployments with preparation, execution, and status tracking."
+    },
+    {
+      "path": "helix-global-server/src/controllers/ns-deployment-controller.ts",
+      "why": "NetSuite-specific deployment API - staging summary, production deploy, deployment history."
+    },
+    {
+      "path": "helix-global-server/src/services/inspection-proxy-service.ts",
+      "why": "Production inspection service - read-only SQL/logs/API querying with write-keyword blocking and credential decryption."
+    },
+    {
+      "path": "helix-global-server/src/services/github-merge-service.ts",
+      "why": "GitHub integration - PR creation, branch management, merge operations across multiple repositories."
+    },
+    {
+      "path": "helix-global-server/src/services/staging-queue-service.ts",
+      "why": "Staging merge queue - manages ordered merging of completed tickets to staging branch."
+    },
+    {
+      "path": "helix-global-server/src/services/deployment-prep-service.ts",
+      "why": "AI-powered deployment preparation using Claude Agent SDK - generates deployment commands and plans."
+    },
+    {
+      "path": "helix-global-server/src/services/preview-deployment.ts",
+      "why": "Northflank preview deployment integration - ephemeral preview environments per branch."
+    },
+    {
+      "path": "helix-global-server/src/services/neon/provisioning.ts",
+      "why": "Neon database branching - per-ticket isolated database branches for safe testing."
+    },
+    {
+      "path": "helix-global-server/prisma/schema.prisma",
+      "why": "Complete data model - shows full scope of entities: orgs, tickets, runs, deployments, credentials, comments, analytics."
+    },
+    {
+      "path": "helix-global-server/src/routes/api.ts",
+      "why": "API router with 80+ endpoints - shows the full breadth of platform capabilities."
+    },
+    {
+      "path": "helix-global-server/src/services/analytics-service.ts",
+      "why": "Usage analytics - per-user and org-wide metrics on tickets, runs, deployments, success rates."
+    },
+    {
+      "path": "helix-global-server/src/services/comment-service.ts",
+      "why": "Collaboration features - threaded comments, reactions, mentions, agent-authored comments."
+    },
+    {
+      "path": "helix-global-client/src/App.tsx",
+      "why": "Client router - shows all user-facing pages and features available in the web UI."
+    },
+    {
+      "path": "helix-global-client/src/routes/dashboard.tsx",
+      "why": "Main dashboard - ticket management, creation, filtering; primary user entry point."
+    },
+    {
+      "path": "helix-global-client/src/routes/deployment-center.tsx",
+      "why": "Deployment center UI - shows deployment preparation and execution workflow."
+    },
+    {
+      "path": "helix-global-client/src/routes/staging-queue.tsx",
+      "why": "Staging queue UI - merge queue management with conflict resolution."
+    },
+    {
+      "path": "helix-global-client/src/routes/board.tsx",
+      "why": "Kanban board - visual workflow with Backlog → Not Attended → In Progress → Done columns."
+    },
+    {
+      "path": "helix-global-client/src/routes/usage.tsx",
+      "why": "Usage analytics UI - organization metrics dashboard."
+    },
+    {
+      "path": "helix-global-client/src/components/ns-readiness-banner.tsx",
+      "why": "NetSuite credential readiness - shows NS-specific onboarding and setup status."
+    },
+    {
+      "path": "helix-global-client/src/routes/settings/netsuite-tab.tsx",
+      "why": "NetSuite settings UI - SDF and NS-GM credential management interface."
+    },
+    {
+      "path": "helix-cli/src/index.ts",
+      "why": "CLI entry point - commands: login, inspect, comments; enables agent-to-production inspection."
+    },
+    {
+      "path": "helix-cli/src/inspect/db.ts",
+      "why": "Database inspection command - read-only production database queries from sandbox agents."
+    },
+    {
+      "path": "helix-cli/src/comments/post.ts",
+      "why": "Comments post command - enables bidirectional agent-user communication during runs."
+    },
+    {
+      "path": "ns-gm/src/cli.js",
+      "why": "ns-gm CLI entry - open-source NetSuite SuiteScript execution tool, foundational for NS integration."
+    },
+    {
+      "path": "ns-gm/ns_gm_restlet.js",
+      "why": "NetSuite RESTlet script - SuiteScript 2.1 RESTlet that executes arbitrary code and retrieves logs."
+    },
+    {
+      "path": "ns-gm/server/auth.js",
+      "why": "OAuth 2.0 client credentials flow for NetSuite - standards-based M2M authentication."
+    },
+    {
+      "path": "helix-ns-server/src/helix-workflow/orchestrator.ts",
+      "why": "Legacy NS server orchestrator - historical reference showing original NS-focused workflow design."
+    },
+    {
+      "path": "helix-ns-client/src/routes/dashboard.tsx",
+      "why": "Legacy NS client dashboard - historical reference showing original NS-focused UI with production deploy staging."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Helix has 7 organizations in production, 5 NetSuite and 2 General platform types.",
+      "source": "Runtime: SELECT platform, COUNT(*) FROM Organization GROUP BY platform"
+    },
+    {
+      "claim": "Helix has 22 registered users across all organizations.",
+      "source": "Runtime: SELECT COUNT(*) FROM User"
+    },
+    {
+      "claim": "5 organizations were active (created tickets) in the last 30 days.",
+      "source": "Runtime: SELECT COUNT(DISTINCT organizationId) FROM Ticket WHERE createdAt > NOW() - INTERVAL '30 days'"
+    },
+    {
+      "claim": "261 total tickets have been created in production, with 140 in April 2026 and 121 in March 2026.",
+      "source": "Runtime: SELECT COUNT(*) FROM Ticket; SELECT DATE_TRUNC('month', createdAt) as month, COUNT(*) FROM Ticket GROUP BY month"
+    },
+    {
+      "claim": "Ticket status distribution: 123 DEPLOYED, 38 FAILED, 34 PREVIEW_READY, 22 REPORT_READY, 16 SANDBOX_READY, 12 UNVERIFIED, 7 BACKLOG, 6 IN_PROGRESS, 3 RUNNING.",
+      "source": "Runtime: SELECT status, COUNT(*) FROM Ticket GROUP BY status"
+    },
+    {
+      "claim": "606 total sandbox runs executed, with 333 SUCCEEDED (55%), 164 FAILED (27%), 87 UNVERIFIED (14%), 16 MERGED.",
+      "source": "Runtime: SELECT status, COUNT(*) FROM SandboxRun GROUP BY status"
+    },
+    {
+      "claim": "Ticket modes: 212 AUTO, 25 RESEARCH, 14 BUILD, 10 FIX.",
+      "source": "Runtime: SELECT mode, COUNT(*) FROM Ticket GROUP BY mode"
+    },
+    {
+      "claim": "33 repositories configured across all organizations.",
+      "source": "Runtime: SELECT COUNT(*) FROM OrganizationRepository"
+    },
+    {
+      "claim": "61 general deployments (52 DEPLOYED, 9 FAILED) and 26 NetSuite deployments (8 SUCCEEDED, 18 FAILED) in production.",
+      "source": "Runtime: SELECT status, COUNT(*) FROM Deployment/NsDeployment GROUP BY status"
+    },
+    {
+      "claim": "The workflow pipeline has 9 steps: scout, diagnosis, product, tech-research, implementation-plan, implementation, code-review, verification, preview-config.",
+      "source": "helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts"
+    },
+    {
+      "claim": "Ticket modes are AUTO, BUILD, FIX, RESEARCH, and EXECUTE (EXECUTE is NetSuite-only).",
+      "source": "helix-global-server/prisma/schema.prisma (TicketMode enum)"
+    },
+    {
+      "claim": "The server exposes 80+ API endpoints across tickets, deployments, settings, inspection, comments, analytics, staging queue, and admin.",
+      "source": "helix-global-server/src/routes/api.ts"
+    },
+    {
+      "claim": "Helix uses Anthropic Claude Agent SDK for AI workflow execution in Vercel Sandbox environments.",
+      "source": "helix-global-server/package.json (@anthropic-ai/claude-agent-sdk 0.2.70, @vercel/sandbox 1.9.0)"
+    },
+    {
+      "claim": "All credentials (SDF, NS-GM, GitHub PAT, deploy keys, inference keys, DB URIs) are encrypted at rest using AES-256-GCM.",
+      "source": "helix-global-server/src/security/crypto.ts"
+    },
+    {
+      "claim": "Platform supports both GENERAL and NETSUITE organization types with platform-specific features isolated behind platform checks.",
+      "source": "helix-global-server/prisma/schema.prisma (OrganizationPlatform enum)"
+    },
+    {
+      "claim": "The Manifesto defines 9 principles: Responsibility, Completion, Safety, Decision Ownership, Opinionated by Design, Continuity, Calibrated Understanding, Trust Through Behavior, Extreme Customer Support.",
+      "source": "Attachment: Helix_Manifesto.pdf"
+    },
+    {
+      "claim": "Manifesto core thesis: 'Intelligence is not the product. Responsibility is.' and 'Humans express intent. Helix owns outcomes.'",
+      "source": "Attachment: Helix_Manifesto.pdf, page 1"
+    },
+    {
+      "claim": "Dovie Offer: Pre-money valuation $2.83M; equity 2% ($50K) / 4% ($100K); costs $50K/month; profitable at month 6 (Sep 2026); payback at month 22 (Jan 2028).",
+      "source": "Attachment: Helix_AI_Dovie_Offer.pdf"
+    },
+    {
+      "claim": "Dovie projections: 0→999 customers over 36 months; MRR $0→$1.5M; ~$18M ARR at month 36 with ~1,000 customers.",
+      "source": "Attachment: Helix_AI_Dovie_Offer.pdf, Chart 1"
+    },
+    {
+      "claim": "Dovie exit scenarios: Early ($50M/18mo), Growth ($100M/36mo), Strategic ($150M/36mo). Comp: Oracle acquired Next Technik (NetSuite FSM) for $60M.",
+      "source": "Attachment: Helix_AI_Dovie_Offer.pdf, page 3"
+    },
+    {
+      "claim": "One Pager: $500K ask for 15% equity at $2.83M pre-money; 12-mo ARR $1.7M projected; breakeven month 8.",
+      "source": "Attachment: Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Helix market opportunity: 40,000+ NetSuite companies globally; $5K-$20K/mo per company on consultants; $2B+ annual consultant spend addressable; expandable to SAP, Odoo, and other ERPs.",
+      "source": "Attachment: Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Key value propositions: 60-80% reduction in consultant costs; dictate customization in minutes; reports in minutes vs hours; sandbox-safe with human approval for deploy.",
+      "source": "Attachment: Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "Team: 7 core members - Usher Klein (CEO), Jesse Racicot (Tech Lead), Darshan Sandhu (AI Agent Architect), Fabiola Vivas (PM), Luis Simosa (Lead Dev NetSuite, creator ns-gm OSS), Fernando Batres (Full Stack Dev), Andrea Ribon (Special Projects).",
+      "source": "Attachment: Project_X_Innovation_One_Pager.pdf"
+    },
+    {
+      "claim": "ns-gm is open-source (MIT license), published on npm, created by Luis Simosa - enables SuiteScript execution via CLI with OAuth 2.0 M2M authentication.",
+      "source": "ns-gm/package.json, ns-gm/LICENSE, ns-gm/README.md"
+    },
+    {
+      "claim": "helix-ns-client and helix-ns-server are deprecated legacy repos; NetSuite functionality is now embedded in Helix Global (helix-global-server/client).",
+      "source": "ticket.md description: 'The Helix NetSuite, the Helix ERP project, is embedded now in Helix Global.'"
+    },
+    {
+      "claim": "The platform supports multi-repository orchestration - tickets can span 1-N Git repositories with intelligent staging/main merge management.",
+      "source": "helix-global-server/prisma/schema.prisma (TicketRepository model with position ordering)"
+    },
+    {
+      "claim": "Helix supports ephemeral preview environments via Northflank integration and per-ticket database branching via Neon.",
+      "source": "helix-global-server/src/services/preview-deployment.ts, helix-global-server/src/services/neon/"
+    },
+    {
+      "claim": "Production platform supports both DigitalOcean and Vercel deployment targets.",
+      "source": "helix-global-server/prisma/schema.prisma (ProductionPlatformType enum: NONE, DIGITALOCEAN, VERCEL)"
+    },
+    {
+      "claim": "Custom LLM inference endpoints configurable per organization and per ticket, supporting external model providers.",
+      "source": "helix-global-server/src/controllers/inference-endpoint-controller.ts, helix-global-server/src/services/inference-endpoint-service.ts"
+    },
+    {
+      "claim": "Inspection API provides read-only production database and log querying with rate limiting, audit logging, and write-keyword blocking for safety.",
+      "source": "helix-global-server/src/services/inspection-proxy-service.ts, inspection-rate-limiter.ts, inspection-audit-service.ts"
+    },
+    {
+      "claim": "Pricing model implied: ~$1,500/mo per customer average (based on Dovie projections: $1.5M MRR / 999 customers at month 36).",
+      "source": "Calculated from Helix_AI_Dovie_Offer.pdf Chart 1"
+    }
+  ],
+  "unknowns": [
+    "Exact current MRR and paying customer count - Dovie Offer shows 0 customers in April 2026 (month 1) while One Pager shows 4 enterprise beta users. Production has 7 orgs and 22 users but unclear which are paying vs beta.",
+    "Website content at gethelix.ai - could not be inspected at runtime; ticket describes it as 'not very accurate' and 'slapped together'.",
+    "Churn rate assumptions - the Dovie projections show only growth (0→999 customers) with no churn modeled; actual retention is unknown.",
+    "Cost structure beyond the flat $50K/month - whether this scales with customer count (AI inference costs, infrastructure, support headcount).",
+    "Competitive landscape details - no competitive analysis document was provided; the Manifesto positions against Claude Code and NetSuite but no formal competitive matrix exists.",
+    "Distribution partner identity and terms - mentioned in ticket description as collaborator on Dovie numbers, but not named or formalized in any document.",
+    "Actual consultant cost benchmarks per NetSuite company to validate the '$5K-$20K/mo' and '$2B+ addressable' market claims.",
+    "SAP/Odoo expansion technical feasibility - the codebase is currently NetSuite-only for ERP features; no SAP or Odoo connectors exist.",
+    "Revenue per customer pricing tiers - the One Pager and Dovie Offer don't specify pricing tiers or contract structures.",
+    "The Dovie Offer equity structure ($50K/2% or $100K/4%) differs from the One Pager ($500K/15%) - these appear to be different investment vehicles for different investor tiers."
+  ]
+}
