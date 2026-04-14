@@ -8,27 +8,27 @@
     {
       "repoKey": "helix-global-server",
       "intent": "context",
-      "rationale": "Core product backend — primary evidence source for product capabilities (9-step pipeline, 80+ APIs, deployment automation, inspection API, NS integration). No code changes needed."
+      "rationale": "Core product backend — primary evidence source for product capabilities described at category level (autonomous AI workflow pipeline, deployment automation, production inspection, enterprise security, analytics). No code changes needed."
     },
     {
       "repoKey": "helix-global-client",
       "intent": "context",
-      "rationale": "Web application frontend — evidence source for user-facing features (dashboard, kanban, deployment center, staging queue, analytics). No code changes needed."
+      "rationale": "Web application frontend — evidence source for user-facing feature categories (workflow management, deployment center, staging, analytics, administration). No code changes needed."
     },
     {
       "repoKey": "helix-ns-client",
       "intent": "context",
-      "rationale": "Legacy/deprecated NS frontend — historical context only, showing NetSuite-first product evolution. No code changes needed."
+      "rationale": "Legacy/deprecated NS frontend — historical context showing NetSuite-first product evolution. ERP functionality now embedded in Helix Global. No code changes needed."
     },
     {
       "repoKey": "helix-ns-server",
       "intent": "context",
-      "rationale": "Legacy/deprecated NS backend — historical context only, showing original 6-step workflow before Helix Global integration. No code changes needed."
+      "rationale": "Legacy/deprecated NS backend — historical context showing original workflow pipeline before Helix Global integration. No code changes needed."
     },
     {
       "repoKey": "ns-gm",
       "intent": "context",
-      "rationale": "Open-source NetSuite CLI tool (MIT) — evidence of OSS strategy and NS integration foundation. Created by team member Luis Simosa. No code changes needed."
+      "rationale": "Open-source NetSuite CLI tool (MIT) — evidence of OSS strategy and ERP integration foundation. Created by team member Luis Simosa. No code changes needed."
     }
   ],
   "updatedBy": "diagnosis"
