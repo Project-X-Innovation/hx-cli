@@ -2,152 +2,271 @@
 
 ## Problem Statement
 
-The founder needs to pitch Helix for ERPs to investors. The necessary information — product capabilities, market sizing, financial projections, competitive positioning, risk analysis, and strategic narrative — is scattered across six codebases, three PDF attachments, and a live production environment. No single document synthesizes this into a coherent, evidence-backed pitch-deck backbone. Without this synthesis, the pitch lacks the structured data and validated claims investors require.
+There is a structural ownership gap in the ERP ecosystem. Three parties touch the custom operational layer around ERPs like NetSuite, but none of them own it durably:
+
+1. **ERPs** standardize business complexity with baked-in financial and accounting rules, but they do not own each customer's custom operational layer over time. They provide infinite customizability but take no end-to-end accountability for how individual business flows evolve.
+2. **Consultants** implement the custom layer, but do not persist. They cycle in and out, leaving fragmented logic, inconsistent documentation, and scripts nobody fully understands.
+3. **AI models** can generate into the custom layer, but do not govern it. They do not remember the account over time, do not test in sandbox, do not deploy safely to production, do not monitor outcomes, and do not carry accountability when something breaks.
+
+Meanwhile, a macro trend is accelerating the problem: businesses are downsizing their internal operating teams. The same business complexity that required 100 people around the ERP may soon require 10. The ERP still matters. The business is just as complex. But the human operating layer is shrinking dramatically.
+
+**Nobody owns the most important business-specific layer. That is the opportunity.**
 
 ## Product Vision
 
-Helix is the AI interface layer between users and ERPs. The thesis: ERPs will become data stores with embedded financial and legal rules (like databases today), and the user-facing interface will be an AI platform that owns customization, deployment, and ongoing maintenance end-to-end. Helix occupies the gap where neither AI coding tools (which suggest but don't own outcomes) nor ERP vendors (which enable customization but don't take responsibility for it) can compete.
+Helix exists to permanently own the operational layer in between.
 
-**Core positioning line (from Manifesto):** *"Intelligence is not the product. Responsibility is."*
+Not the ERP itself. Not general-purpose AI generation. Not temporary consulting. Helix takes durable ownership of the custom operational layer around ERPs: the customizations, the flows, the logic, the changes, the maintenance, the monitoring, and the continuity over time.
 
-**Elevator pitch:** Helix is an autonomous ERP operator. Humans express intent; Helix creates, tests, deploys, monitors, and maintains the customization — end-to-end, with accountability. Software is fast but detached. Consultants are accountable but slow. Helix is accountable at speed.
+The core thesis: ERPs will go the way of databases. Databases are used everywhere, but nobody interacts with them directly anymore. ERPs will become the same — infrastructure with baked-in financial and legal rules. The interface layer between users and ERPs will be an AI-powered operational platform like Helix.
+
+**Compressed thesis for pitch:**
+> NetSuite standardizes complexity, but does not own each customer's custom operational layer.
+> Consultants implement that layer, but do not stay.
+> AI models generate into that layer, but do not govern it.
+> Meanwhile, the human teams around ERP are shrinking while the business complexity stays the same.
+> **Helix exists to permanently own the operational layer in between.**
+
+**Brand line:** "Owned operations."
+**Investor line:** "The ownership layer for NetSuite."
+**Supporting line:** "NetSuite owns the platform. Helix owns the operational layer inside your account."
 
 ## Users
 
-| User Segment | Description | Pain |
+| User Segment | Description | Pain Point |
 |---|---|---|
-| **NetSuite customers (primary)** | 40,000+ companies globally spending $5K-$20K/mo on consultants for customizations, reporting, debugging, deployments | Slow, expensive, never-ending consultant dependency; weeks for simple changes |
-| **Internal NetSuite admins** | Business analysts and admins within NS companies who need customizations but lack technical skill | Bottlenecked by IT or external consultants for every workflow change |
-| **NetSuite consulting firms (channel)** | Existing NS consultants who could use Helix to scale their delivery | Constrained by headcount; can't serve more clients without more people |
-| **ERP companies on SAP/Odoo (future)** | Similar pain to NetSuite segment but on different ERP platforms | Same consultant dependency; even larger market |
+| **NetSuite customers (primary)** | 40,000+ companies globally spending $5K-$20K/mo on consultants for customizations, reporting, debugging, deployments | Slow, expensive, never-ending consultant dependency; weeks for simple changes; fragmented knowledge across consultant rotations |
+| **Internal NetSuite admins** | Operations staff managing ERP customizations, often on shrinking teams | Drowning in customization requests; bottlenecked by IT or external consultants for every workflow change |
+| **Finance/accounting teams** | Departments dependent on accurate ERP-driven processes | Reports take days; custom logic is fragile; no persistent accountability for the operational layer |
+| **IT leadership** | Decision-makers evaluating ERP operational costs amid headcount reductions | $5K-$20K/month on consultants with no persistent ownership; internal teams shrinking while complexity stays constant |
+
+**Initial beachhead:** Mid-market NetSuite companies with active customization needs and ongoing consultant spend.
+
+**Expansion path:** SAP, Odoo, and other ERPs — the structural gap is not NetSuite-specific.
 
 ## Use Cases
 
-1. **Build customization from intent** — User describes a business need in natural language; Helix autonomously scouts the codebase, diagnoses the problem, plans the implementation, writes the code, tests it, deploys it to staging, and prepares it for production deployment.
-2. **Fix production bugs** — User reports an issue; Helix inspects production state (database, logs, APIs), diagnoses root cause, implements the fix, and deploys it — all within minutes instead of consultant weeks.
-3. **Generate department reports** — User requests a report; Helix builds a custom SuiteScript report that would take consultants hours or days, ready in minutes.
-4. **Research and investigate** — User asks a question about their ERP configuration; Helix investigates the codebase and production environment and delivers a structured answer.
-5. **Execute NetSuite operations** — User requests a direct operation against their NetSuite instance (record operations, searches); Helix executes safely with audit trails.
-6. **Ongoing system maintenance** — Helix monitors deployed customizations over time, maintaining systems rather than just completing tasks (Manifesto Principle 6: Continuity).
+1. **Customization lifecycle ownership** — A business needs a new operational flow. Instead of engaging a consultant for weeks, they describe what they need. Helix takes it from request through safe testing, governed deployment, and ongoing maintenance — and remains accountable for it over time.
+
+2. **Operational continuity across consultant turnover** — A company's third consultant in two years has just left. Existing customizations are undocumented and fragile. Helix takes persistent ownership of the custom operational layer, understands what exists, monitors it, and maintains it going forward.
+
+3. **Team augmentation under downsizing** — An operations team of 50 is being cut to 15. The ERP complexity hasn't changed. Helix replaces the missing operational capacity by autonomously handling the customization, maintenance, and monitoring workload that the departed team members used to carry.
+
+4. **Production issue resolution** — Something breaks in the live ERP environment. Instead of opening a support ticket and waiting days, Helix inspects the production state, diagnoses the root cause, and resolves it — with full auditability and rollback capability.
+
+5. **Department-ready reporting** — A finance or ops team needs a custom report. Hours of consultant work becomes minutes of platform work — without pushing responsibility back to the requester.
 
 ## Core Workflow
 
-The 9-step autonomous pipeline (verified in codebase at `helix-global-server/src/helix-workflow/helix-workflow-step-catalog.ts`):
+At the highest level, Helix accomplishes the following:
 
-1. **Scout** — Codebase reconnaissance and mapping
-2. **Diagnosis** — Root cause analysis
-3. **Product** — Product definition and planning
-4. **Tech Research** — Technology investigation
-5. **Implementation Plan** — Detailed strategy
-6. **Implementation** — Code generation
-7. **Code Review** — Automated quality review
-8. **Verification** — Testing and validation
-9. **Preview Config** — Preview deployment setup
+**Intent in, owned outcomes out.**
 
-Ticket modes: AUTO (intelligent selection), BUILD (new features), FIX (bug fixes), RESEARCH (investigation), EXECUTE (NetSuite direct operations).
+1. **Receive intent** — The user describes what they need in natural language.
+2. **Investigate** — Helix understands the current state of the account and the implications of the request.
+3. **Plan and build** — Helix creates the solution, applying opinionated judgment rather than just generating options.
+4. **Test safely** — Every change is validated in a safe environment before touching production.
+5. **Deploy with governance** — Production deployment happens with human approval gates, audit trails, and rollback capability.
+6. **Monitor and maintain** — Helix watches the deployed change, detects breakage, and takes corrective action. The work is not "done" — it is continuously owned.
 
-Human approval gate before production deployment. Everything before that is autonomous.
+This is fundamentally different from what AI tools or consultants offer. AI tools stop after generation. Consultants stop after implementation. Helix persists.
 
-## Essential Features (MVP — Current State)
+## Essential Features (MVP)
 
-All features below are **verified in production** from codebase and runtime data:
+Described at the highest capability level, reflecting what the platform accomplishes:
 
-- **Autonomous 9-step AI workflow pipeline** — End-to-end from intent to deployable code
-- **Multi-repo orchestration** — Works across multiple customer repositories simultaneously
-- **NetSuite SDF headless deployment** — SuiteCloud CLI integration for automated NS deployments
-- **Production inspection** — Read-only database, logs, and API queries against live production with write-blocking safety guards
-- **Per-ticket database branching** — Neon-powered isolated DB branches for safe testing
-- **Ephemeral preview environments** — Northflank-based preview deployments per branch
-- **Staging merge queue** — Ordered merging with conflict detection
-- **Deployment center** — Supports DigitalOcean, Vercel, and NetSuite SDF targets
-- **AES-256-GCM credential encryption** — Enterprise-grade security for stored credentials
-- **Bidirectional agent-user communication** — Threaded comments during autonomous runs
-- **Usage analytics** — Per-user and org-wide metrics
-- **CLI tooling** — `hlx` CLI for production inspection and agent communication
-- **ns-gm open-source NetSuite CLI** — MIT-licensed, npm-published SuiteScript execution tool
+1. **Autonomous operational lifecycle** — End-to-end handling of customization requests from natural language intent through governed production deployment, without requiring the user to manage intermediate steps. 81% of all tickets run autonomously.
+
+2. **Governed execution** — Every action is reversible, observable, and auditable. Trust is not assumed; it is engineered through safe testing, approval gates, and deployment controls.
+
+3. **Production inspection** — Read-only visibility into the live ERP environment to support diagnosis, monitoring, and proactive issue detection without risk to the running system.
+
+4. **Account continuity** — Persistent, durable memory of the account over time: what changed, what depends on what, what is fragile, and why decisions were made. 33 configured repositories across 7 organizations demonstrate multi-environment depth.
+
+5. **Bidirectional communication** — Real-time interaction between the platform and human stakeholders, so intent can be clarified, decisions can be discussed, and accountability is visible at every step.
+
+6. **Enterprise security** — Encrypted credential management, role-based access, and organizational isolation appropriate for handling production ERP environments that run entire businesses.
+
+7. **Extreme customer support at speed** — The platform combines the ownership posture of a consultant with the speed of software. Tickets that used to take weeks can be resolved in minutes.
 
 ## Features Explicitly Out of Scope (MVP)
 
-- **SAP / Odoo / other ERP integrations** — Future expansion; no technical implementation yet
-- **Self-service customer onboarding** — Currently manual/beta onboarding
-- **Churn prevention / automated retention features** — Not yet built
-- **Cost-scaling infrastructure** — Flat $50K/mo cost model; no dynamic scaling for high customer counts
-- **White-label / partner portal** — No channel-partner facing UI
-- **Finesse Contracts and Haven AI** — Separate products under Project X Innovation; excluded from this pitch per founder direction
+| Feature | Rationale |
+|---|---|
+| **Replacing the ERP itself** | Helix owns the operational layer around the ERP, not the ERP. "If NetSuite can own it, we don't build it." |
+| **Generic AI coding tool** | "If Claude Code can do it, it's not enough." Helix competes on governed ownership, not generation. |
+| **Multi-ERP support (SAP, Odoo)** | Vision includes expansion, but MVP focuses exclusively on NetSuite to own one lane completely before broadening. |
+| **In-product AI features that overlap with native ERP AI** | NetSuite will add natural language search, AI helpers, and in-product intelligence. Helix does not compete there. |
+| **Finesse Contracts or Haven AI** | Separate products in the Project X Innovation portfolio. This pitch focuses exclusively on Helix. |
 
 ## Success Criteria
 
-For this research deliverable (not for the product itself):
+### For the Pitch Deck (Immediate Deliverable)
 
 | Criterion | Measure |
 |---|---|
-| Market sizing is externally validated | TAM claim includes at least two independent data sources |
-| Financial projections are stress-tested | Dovie model assumptions are surfaced with risk commentary |
-| Competitive landscape is mapped | At least 4 competitor categories with differentiation arguments |
-| Product capabilities are evidence-backed | Every claimed feature links to codebase or production data |
-| Traction metrics are real | All usage numbers come from production database queries |
-| Risk register is investor-ready | Key objections (zero revenue, success rates, cost scaling) have preemptive framing |
-| Narrative is coherent | Single story from problem → product → market → financials → exit |
+| Positioning clarity | The three-way structural gap thesis is articulated in investor-ready language that any investor can grasp in 60 seconds |
+| Market validation | TAM is framed with both conservative and ambitious numbers, supported by external data |
+| Financial credibility | Dovie projections are presented with honest stress-testing and recommended investor framings |
+| Competitive differentiation | Clear argument for why Oracle/NetSuite won't own this layer and why AI models won't either |
+| Traction evidence | Production metrics demonstrate real usage — not just a prototype |
+| Branding readiness | Taglines and positioning language are pitch-ready |
+
+### For the Business (Milestone-Based Kill-or-Continue Gates)
+
+From the Reality Check document:
+
+| Horizon | Helix Must Be | Kill Rule |
+|---|---|---|
+| 3 months | **Safe** — controlled system, not clever tool | Kill anything that looks like generic AI convenience |
+| 6 months | **Trusted in one narrow lane** — customers rely on it for one workflow class | Kill breadth. Own one thing completely |
+| 12 months | **Stateful and persistent** — account memory, dependency awareness, breakage detection | Kill statelessness. The account must live inside Helix |
+| 18 months | **Governable by an institution** — formal approval flows, compliance-ready | Kill informality. Trust must survive compliance and production reality |
+| 36 months | **Where the owned operational layer lives** — the durable system-of-operation | Kill wrapper behavior. Either Helix is the ownership layer or it is dead |
 
 ## Key Design Principles
 
-Drawn directly from the Helix Manifesto (3 pages, 9 principles):
+From the Helix Manifesto (the internal product bible):
 
 1. **Responsibility** — "If Helix touches it, Helix is responsible for it. Not partially. Not temporarily. Fully. And forever."
-2. **Completion** — Created → tested → deployed → verified. What Helix does is done.
+2. **Completion** — Created, tested, deployed, verified. What Helix does is done.
 3. **Safety** — Every action is reversible, observable, auditable. Trust is engineered, not assumed.
 4. **Decision Ownership** — All decisions flow through Helix; once executed, Helix owns them.
-5. **Opinionated by Design** — "People do not pay Helix for flexibility. They pay Helix for the right defaults, the right actions, and the right decisions."
+5. **Opinionated by Design** — "People do not pay Helix for flexibility. They pay for the right defaults, the right actions, and the right decisions."
 6. **Continuity** — Helix maintains systems, not just tasks.
-7. **Calibrated Understanding** — Demonstrate understanding through correct action, not by asking for confirmation.
-8. **Trust Through Behavior** — "Generating code is commoditized. Reliability is not."
-9. **Extreme Customer Support** — "Software is fast but detached. Consultants are accountable but slow. Helix is accountable at speed."
+7. **Trust Through Behavior** — "Generating code is commoditized. Reliability is not."
+
+**The boundary test:** "If Claude Code can do it, it's not enough. If NetSuite can own it, we don't build it."
+
+**The core distinction:** "Intelligence is not the product. Responsibility is."
+
+**What Helix is not:** "Helix is not a tool. Tools assist. Helix operates. Tools suggest. Helix executes. Tools are used. Helix is relied on."
 
 ## Scope & Constraints
 
-**This ticket's scope:** Produce a structured research report that serves as the data backbone for an investor pitch deck and updated website for Helix for ERPs.
+### Market Sizing
 
-**Constraints:**
-- Focus on **Helix for ERPs only** — not Helix Global for general development, not Finesse, not Haven.
-- The Manifesto drives the narrative vision; the Dovie numbers are the most recent/relevant financials.
-- The codebase describes current product but the report must reasonably extrapolate the future (multi-ERP, deeper automation).
-- No code changes are needed — this is purely a research deliverable.
-- Two different investment structures exist (Dovie: $50K-$100K small investor; One Pager: $500K/15% equity raise) and should not be conflated.
+| TAM Frame | Calculation | Assessment |
+|---|---|---|
+| Conservative near-term (NetSuite only) | 10K companies with ongoing customization x $5K/mo x 12 | **$600M** — defensible floor |
+| Mid-range (NetSuite) | 40K+ companies x $5K-$20K/mo x 12 | **$2.4B-$9.6B** — upper bound overstates continuous spend |
+| AI-in-ERP market (macro) | $5.82B (2025) growing to $58.7B (2035) at 26% CAGR | Macro tailwinds validated |
+| Multi-ERP expansion (long-term) | ERP consulting/integration market | **$50.1B** (2024) — long-term vision framing |
+
+### Financial Model (Dovie Offer, April 2026 — Most Recent)
+
+| Metric | Value |
+|---|---|
+| Pre-money valuation | $2.83M |
+| Current investment ask | $50K for 2% or $100K for 4% (with net profit distributions) |
+| Customer trajectory | 0 to 999 over 36 months at ~$1,500/mo average |
+| Profitability | Month 6 (42 customers) |
+| Payback | Month 22 |
+| 12-month ARR | ~$1.8M (102 customers) |
+| 36-month ARR | ~$18M |
+| Monthly operating costs | $50K (flat) |
+| Exit scenarios | $50M (early, 18mo) / $100M (growth, 36mo) / $150M (strategic, 36mo) |
+
+### Financial Model Stress Points (Proactive Investor Framing)
+
+| Assumption | Concern | Recommended Framing |
+|---|---|---|
+| $50K/mo flat costs through 999 customers | AI inference, infrastructure, and support scale with usage | Show cost-scaling tiers or explain efficiency leverage |
+| Zero churn modeled | Even 2-3% monthly churn significantly impacts net growth at scale | Frame as conservative net-new projection; add churn sensitivity |
+| Starting at 0 paying customers now | 5 NS orgs active in production but none confirmed paying | Frame as "conversion-ready pipeline" with beta traction |
+| $1,500/mo average price | Below the $5K-$20K/mo consultant replacement value | Frame as pricing upside: land at $1.5K, expand to $5K+ as ownership deepens |
+| Oracle/Next Technik $60M exit comp | Acquisition price not publicly disclosed | Use as directional reference, not confirmed valuation |
+
+### Production Traction (April 2026)
+
+| Metric | Value | Investor Narrative |
+|---|---|---|
+| Organizations | 7 (5 NetSuite, 2 General) | Multi-industry early adoption |
+| Users | 22 | Team-level engagement, not single-user trials |
+| Total tickets | 264 (143 in first 14 days of April) | Accelerating: on pace for 2x month-over-month growth |
+| Tickets deployed to production | 124 (47% of total) | Real production impact, not experimentation |
+| Configured repositories | 33 | Deep integration across customer environments |
+| Autonomous execution rate | 81% of tickets in AUTO mode | Platform operates independently |
+
+**Concerns to address proactively:**
+- 55% overall run success rate — frame as "beta maturity with improving trajectory"
+- 31% NetSuite deployment success vs 84% general — frame as "the hardest pipeline" with a clear improvement path; this is where the product is newest
+- No billing/subscription data in production — revenue is pre-commercialization
+
+### Competitive Landscape
+
+**Tier 1: Oracle/NetSuite (ERP Platform)**
+
+Oracle is moving faster than "cute features." NetSuite Next (rolling out mid-2026) includes agentic workflows, conversational intelligence, AI-native extensibility, and connectors to external AI assistants. SuiteAgents let developers build autonomous agents on the platform. NetSuite 2026.1 includes AI across financial close, reconciliation, forecasting, and developer tooling.
+
+*Why Helix is still differentiated:* Oracle's AI is about in-platform intelligence and developer enablement. It does not mean Oracle is stepping in to permanently own, govern, deploy, monitor, and maintain each customer's custom operational layer over time. That layer remains structurally unclaimed.
+
+**Tier 2: AI-Native ERP Replacements**
+
+Rillet ($100M raised, 2025), Campfire ($100M raised) — these aim to *replace* ERPs with AI-native alternatives. Different buyer, different motion. They validate that the market sees ERP as ripe for disruption, but they attack the platform itself rather than the operational layer around it.
+
+**Tier 3: AI Coding Tools**
+
+General-purpose coding agents are increasingly capable at code generation, test running, and PR creation. But they do not handle ERP-specific lifecycle governance: safe deployment to production environments that run entire businesses, monitoring, rollback, ongoing maintenance, or durable account memory. They help the user act. They do not own the action.
+
+**Key competitive insight (from the Reality Check):** "Capability is abundant, governance is scarce." The real threat model is not "NetSuite on the left, AI tools on the right." It is Oracle compressing the obvious product layer, AI models compressing the obvious capability layer, and Helix owning the governed execution layer that neither side wants to fully own.
+
+### Team
+
+7-person core team with 1-4 years working together: CEO/Founder, Tech Lead (AI Research), AI Agent Architect, Project Manager, Lead Dev (NetSuite/OSS contributor), Full Stack Dev, Special Projects. Tight-knit, role-specialized, battle-tested.
+
+### Investment Structure
+
+Two tiers observed in evidence:
+- **Small raise (Dovie, April 2026):** $50K for 2% or $100K for 4%, with net profit distributions
+- **Larger raise (One-Pager, March 2026):** $500K for 15% at same $2.83M pre-money
+
+Both share the same pre-money valuation. Relationship between these two vehicles is unclear from current evidence.
 
 ## Future Considerations
 
-- **Multi-ERP expansion** — SAP, Odoo, and other ERPs represent the long-term vision of being "the AI interface for all ERPs." No technical implementation exists yet but the architecture (separate ERP integration layer in `native-phase.ts`) supports the pattern.
-- **Distribution partner channel** — Dovie numbers were built with a distribution partner. This channel model (consultants reselling Helix) could be the primary go-to-market.
-- **AI inference cost scaling** — As customer count grows, AI compute costs will grow proportionally. The flat $50K/mo cost assumption doesn't hold beyond ~100 customers.
-- **Success rate improvement** — Current 55% run success rate and 31% NetSuite deployment success rate need improvement before scaling. These are product maturity metrics, not fundamental blockers.
-- **Self-service onboarding** — Currently beta with manual onboarding (7 orgs, 22 users). Scaling to 100+ customers requires self-service.
-- **Pricing model validation** — $1,500/mo average is conservative relative to consultant spend ($5K-$20K/mo). Potential for value-based pricing tiers.
+1. **Multi-ERP expansion** — The structural gap (ERP doesn't own custom layer, consultants don't persist, AI doesn't govern) is not NetSuite-specific. SAP, Odoo, and other ERPs represent a path from a $600M near-term floor to the $50B+ ERP consulting market.
+
+2. **The "ERP as database" future** — As ERPs become infrastructure nobody directly interacts with, the AI operational layer becomes the primary user interface. This positions Helix as the future of how businesses interact with their financial and operational systems.
+
+3. **From change engine to operating layer** — The product must evolve from handling individual requests to being the persistent system-of-operation where account-specific logic, approvals, monitoring, and ongoing accountability live. This is the transition that separates a real company from a commodity wrapper.
+
+4. **Pricing expansion** — Landing at $1,500/mo with expansion to $5K-$20K/mo as the platform proves deeper ownership. The consultant replacement value represents significant pricing headroom above the current entry point.
+
+5. **Distribution partner channel** — Referenced in the Dovie projections as a growth lever. Consultants reselling Helix could become the primary go-to-market motion.
+
+6. **Urgency from the Reality Check** — The window is shorter than it feels. "Your structural thesis is accurate. Your timing assumptions should be more aggressive." Oracle is erasing superficial whitespace, and AI model vendors are erasing superficial capability. The only thing left is owned, governed, account-specific continuity.
 
 ## Open Questions / Risks
 
-| Category | Question / Risk | Current Evidence |
+| Category | Question / Risk | Source |
 |---|---|---|
-| **Revenue** | Zero paying customers as of April 2026. When does revenue start? | 7 orgs exist but all appear to be beta; 4 enterprise betas cited in One Pager |
-| **Cost scaling** | Flat $50K/mo costs through 999 customers is unrealistic. What is the real cost curve? | AI inference, compute, and support costs scale with customers. No variable cost model exists. |
-| **Churn** | Dovie model assumes zero churn over 36 months. What is realistic churn? | Even 2% monthly churn at 500 customers = 10 lost/month, requiring 10+ new/month to stay flat |
-| **Competition — Oracle** | NetSuite Next includes agentic AI and Autonomous Close. Can Oracle build this internally? | Per Manifesto thesis: Oracle's business is the platform, not end-to-end accountability for customization workflows. Plausible but unverified. |
-| **Competition — AI-native ERPs** | Rillet ($100M raised) and Campfire ($100M raised) aim to replace ERPs entirely. | Different buyer (new vs. existing ERP customers). Helix works on top of existing ERPs — different value proposition. |
-| **TAM validation** | $2B+ claim assumes all 40K+ NS companies spend continuously on consultants. | More defensible: $500M-$1B directly addressable segment (companies with active customization needs). Oracle cites 43K+ NS customers; third parties cite 68K+. |
-| **Exit comp** | Oracle/Next Technik $60M acquisition cited as comp. Price not publicly confirmed. | Acquisition in Oct 2023 confirmed; $60M figure is not in public sources. |
-| **NS deployment success** | 31% success rate on NetSuite deployments (8/26). Investors will probe this. | Product is maturing; general deployment success is higher (85% = 52/61). NS path is newer. |
-| **Investment structure** | Two different asks exist: Dovie ($50K-$100K small) vs. One Pager ($500K/15%). Which is current? | Dovie is most recent (April 2026); One Pager is March 2026. May represent different investor tiers. |
-| **Distribution partner** | Referenced in ticket as co-creator of Dovie numbers but not identified in any document. | Unknown — need to clarify for pitch credibility. |
+| **Timing** | "Your structural thesis is accurate. Your timing assumptions should be more aggressive." The competitive window is shorter than it feels. Oracle is erasing superficial whitespace faster than expected. | Reality Check |
+| **Revenue** | No paying customers confirmed as of April 2026. 5 NS orgs in production are beta/pre-commercial. When does first revenue materialize? | Production data, Dovie Offer |
+| **Churn** | Zero churn modeled in 36-month projections. What are actual retention patterns once customers start paying? | Dovie Offer |
+| **Cost scaling** | $50K/month flat cost assumed through 999 customers. AI inference and infrastructure costs likely scale with usage. At what customer count does the model break? | Dovie Offer |
+| **NS deployment maturity** | 31% NetSuite deployment success rate vs 84% for general deployments. Can this reach production-grade reliability before the competitive window narrows? | Production data |
+| **Exit comp validity** | Oracle/Next Technik acquisition price ($60M) is not publicly disclosed. Should be used directionally, not as confirmed valuation. | Web search (diagnosis) |
+| **Distribution partner** | Referenced as collaborator on Dovie numbers but identity and terms are not specified. | Dovie Offer |
+| **Two investment vehicles** | Dovie ($50K-$100K small) and One-Pager ($500K large) appear to be different instruments at the same pre-money. Relationship unclear. | Dovie Offer, One-Pager |
+| **ERP expansion path** | SAP/Odoo mentioned as targets but no technical foundation for those integrations exists today. | Ticket description |
+| **Competitive pace from both sides** | Both Oracle and AI model vendors are moving faster than initially assumed. By 6 months, shallow "AI for ERP" positioning becomes crowded and weak. | Reality Check |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |---|---|---|
-| `helix-cli/.../ticket.md` | Understand deliverable requirements, source reliability ranking, and founder's strategic framing | Deliverable is pitch-deck data backbone; Manifesto = most sincere; Dovie = most recent numbers; focus on Helix for ERPs only |
-| `helix-cli/.../scout/scout-summary.md` | Pre-synthesized analysis of all 6 repos, 3 PDFs, and production metrics | 9-step pipeline, 80+ APIs, 7 orgs, 261 tickets, 606 runs; financial extractions from both investment docs |
-| `helix-cli/.../scout/reference-map.json` | Key file inventory across repos and verified production facts | 34 key files mapped; production data model and runtime metrics |
-| `helix-cli/.../diagnosis/diagnosis-statement.md` | Root cause analysis, market validation, financial stress-testing, competitive landscape | $2B+ TAM partially validated; flat costs unrealistic; zero churn unrealistic; 4 competitor categories mapped; Oracle/Next Technik comp unverifiable |
-| `Helix_Manifesto.pdf` (attachment) | Extract philosophical foundation and positioning principles | 9 principles; core thesis: "Intelligence is not the product. Responsibility is." Defines competitive moat as the accountability gap |
-| `Helix_AI_Dovie_Offer.pdf` (attachment) | Extract 36-month financial projections and investor terms | 0 → 999 customers, $1,500/mo avg, $50K flat costs, profitable month 6, $2.83M pre-money, exit scenarios $50M-$150M |
-| `Project_X_Innovation_One_Pager.pdf` (attachment) | Extract market sizing, team, and investment thesis | $500K/15% ask, $2B+ TAM, 40K+ NS companies, 7-person team, 4 enterprise betas, expandable to SAP/Odoo |
-| `helix-cli/.../repo-guidance.json` | Confirm repo roles for this run | helix-cli = target (research output); all others = context (evidence sources) |
-| `/tmp/helix-inspect/manifest.json` | Check runtime inspection availability | helix-global-server has DATABASE and LOGS inspection types available |
+| ticket.md (helix-cli) | Understand deliverable requirements, source priority, and founder vision | Deliverable is pitch deck data backbone; focus on Helix for ERPs; Manifesto = most sincere; Dovie = most recent numbers |
+| User continuation context | Updated guidance on scope, tone, and new documents | Describe capabilities at highest category level only; don't point out specific software implementations; include positioning/reality check/tagline docs |
+| scout/scout-summary.md (helix-cli) | Pre-synthesized evidence landscape across all 7 attachments and 6 repos | Complete financial extractions, production metrics (7 orgs, 22 users, 264 tickets), competitive analysis, and 8 key unknowns |
+| diagnosis/diagnosis-statement.md (helix-cli) | Root cause analysis, stress-tested financials, competitive intelligence with web search validation | Three-way gap thesis validated; Oracle moving faster than expected; TAM framed conservatively and ambitiously; production metrics formatted for pitch credibility |
+| Helix_Manifesto.pdf (attachment) | Philosophical foundation — Tier 1 source per ticket owner | 9 principles; "Intelligence is not the product. Responsibility is."; boundary test defines competitive moat |
+| Helix_AI_Dovie_Offer.pdf (attachment) | Financial projections — most recent (April 2026, created with distribution partner) | 36-month model: 0-999 customers, $50K flat costs, profitable month 6, 5.6x return, exit scenarios up to $150M |
+| Helix_Positioning_Refined.pdf (attachment) | Core positioning thesis — refined three-way structural gap narrative | Compressed thesis statement investor-ready; "Helix exists to permanently own the operational layer in between" |
+| Helix_Positioning_Transcript.pdf (attachment) | Raw founder articulation of thesis | Original spoken thesis with nuances about ERP-as-database future and the accountability gap nobody else wants to fill |
+| Reality_Check___Risks.pdf (attachment) | Honest threat assessment with timeline milestones | Thesis "mostly right" but pace faster on both sides; milestone gates at 3/6/12/18/36 months; "capability abundant, governance scarce" |
+| Project_X_Innovation_One_Pager.pdf (attachment) | Market sizing and team | $500K/15% ask, $2B+ TAM, 40K+ NS companies, 7-person team, 4 enterprise betas |
+| Helix_Tagline.pdf (attachment) | Branding direction for website and pitch | 5 finalists; recommended: "Owned operations." (homepage) + "The ownership layer for NetSuite." (pitch) |
+| repo-guidance.json (helix-cli) | Repo intent mapping | helix-cli = target (research output); all other repos = context only; no code changes needed |
+| Production runtime data (via diagnosis) | Real usage metrics for traction evidence | 7 orgs, 22 users, 264 tickets, 124 deployed, 81% autonomous; accelerating month-over-month |
+| /tmp/helix-inspect/manifest.json | Confirm runtime inspection availability | DATABASE and LOGS inspection available for helix-global-server; production metrics already gathered by prior steps |
