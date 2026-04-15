@@ -1,0 +1,32 @@
+{
+  "problem": "The CLI provides ticket-centric collaboration (inspect, comments) but has no commands related to product ownership, director assignment, approval workflows, or team alignment visibility.",
+  "files": [
+    {
+      "path": "src/comments/list.ts",
+      "why": "Lists ticket comments with filtering (--helix-only, --since). The only CLI surface for collaborative discussion."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Posts comments to tickets. Used by workflow agents for @Helix responses. No director-awareness in the command."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Read-only database query execution. Could be used to query ownership data but not purpose-built for it."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and command routing. Three command families: login, inspect, comments."
+    }
+  ],
+  "facts": [
+    "CLI has no director/ownership-related commands.",
+    "Comments system supports HELIX_TICKET_ID env var for agent integration.",
+    "No test or lint scripts defined in package.json.",
+    "Build command: `npm run build` (tsc), `npm run typecheck` (tsc --noEmit).",
+    "CLI binary installed as 'hlx'. Version 1.2.0."
+  ],
+  "unknowns": [
+    "Should the CLI surface director/ownership information (e.g., 'hlx tickets --directed-by-me' or 'hlx ticket status' showing director)?",
+    "Is the CLI relevant to this research ticket or is it context-only?"
+  ]
+}
