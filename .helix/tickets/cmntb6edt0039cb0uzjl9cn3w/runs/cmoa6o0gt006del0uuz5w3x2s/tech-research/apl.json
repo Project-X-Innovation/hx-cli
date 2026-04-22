@@ -1,0 +1,58 @@
+{
+  "questions": [
+    "Q1: How should the version drift (hardcoded '0.1.0' vs package.json '1.2.0') be fixed — runtime read from package.json or build-time injection?",
+    "Q2: What API contract should the new artifact commands use with the Helix backend, and what basePath is appropriate?",
+    "Q3: How should the GitHub Actions publish workflow detect version changes to avoid publishing on every push to main?",
+    "Q4: Should any new runtime dependencies be introduced for the artifact commands or the publish workflow?",
+    "Q5: Should the duplicated getFlag/getPositionalArgs arg-parsing helpers be consolidated into a shared module?"
+  ],
+  "answers": [
+    {
+      "answer": "Use createRequire(import.meta.url) to read the version from package.json at runtime. This is the simplest approach: it requires no build pipeline changes, no tsconfig modifications, and no code generation step. It works reliably in ESM modules on Node 18+ because createRequire is a stable Node API. npm always includes package.json in published packages regardless of the files field, so the relative path '../package.json' from dist/index.js will resolve correctly in both local dev (after build) and npm-installed scenarios.",
+      "evidence": [
+        "package.json type is 'module' (ESM) — standard import of JSON requires either import assertions, resolveJsonModule tsconfig, or createRequire",
+        "tsconfig.json does not have resolveJsonModule: true, and adding it would be an unnecessary config change",
+        "Node createRequire is stable since Node 12, fully supported in Node 18+",
+        "package.json is always included in npm packages per npm documentation, even when files array is restricted",
+        "bin entry maps 'hlx' to 'dist/index.js', so '../package.json' resolves to the package root"
+      ]
+    },
+    {
+      "answer": "Artifact commands should use basePath '/api' (consistent with comments) and the following contract: GET /api/artifacts/tickets/{ticketId} and GET /api/artifacts/runs/{runId}, with an optional 'source' query parameter for filtering by 'github' or 'vercel'. Response shape: { artifacts: ArtifactInfo[] } where ArtifactInfo includes id, name, source, createdAt, and optional sizeBytes/url/metadata fields. This follows the existing thin-client pattern exactly and avoids direct GitHub/Vercel API calls from the CLI.",
+      "evidence": [
+        "src/comments/list.ts uses basePath: '/api' and calls /tickets/{ticketId}/comments — artifact endpoints logically belong under the same /api namespace",
+        "src/lib/http.ts hxFetch supports basePath override and queryParams — both needed for artifact commands",
+        "All existing commands use requireConfig() -> hxFetch() -> display pattern; no command calls external APIs directly",
+        "Zero runtime dependencies is a preserved invariant — calling GitHub/Vercel APIs directly would require no new deps (native fetch) but would require users to configure separate tokens"
+      ]
+    },
+    {
+      "answer": "Compare the package.json version against the currently published npm registry version using 'npm view @projectxinnovation/helix-cli version'. If they differ (or if the package was never published), proceed with publish. This is more reliable than comparing against the previous git commit because it handles edge cases like force-pushes, cherry-picks, or manual npm publishes. The comparison is a simple shell script step, avoiding third-party action dependencies.",
+      "evidence": [
+        "npm view exits with non-zero if the package is not published — this can be handled to trigger first-ever publish",
+        "js-DevTools/npm-publish is a popular third-party alternative but introduces an external dependency on a marketplace action",
+        "The manual approach (4-5 lines of shell) is more transparent and maintainable for a small project",
+        "Diagnosis recommended version-gated publishing, product spec confirms 'publishes only when package.json version changes'"
+      ]
+    },
+    {
+      "answer": "No new runtime dependencies should be introduced. The CLI must maintain its zero-runtime-dependency property. All artifact commands use hxFetch (which uses native fetch), the version fix uses createRequire (Node builtin), and the publish workflow uses only GitHub Actions built-in tools and npm CLI. No commander/yargs — continue with hand-rolled arg parsing.",
+      "evidence": [
+        "package.json devDependencies are only @types/node and typescript — zero runtime deps",
+        "Product spec explicitly states: 'Zero new runtime dependencies'",
+        "hxFetch + native fetch covers all HTTP needs",
+        "createRequire is from node:module (builtin)"
+      ]
+    },
+    {
+      "answer": "Yes, extract getFlag and getPositionalArgs into a shared src/lib/args.ts module. These helpers are currently duplicated in src/inspect/index.ts, src/comments/index.ts, and src/comments/list.ts. Consolidating reduces duplication and provides a consistent arg-parsing surface for the new artifacts module. This is a minimal refactor that improves maintainability without introducing new abstractions.",
+      "evidence": [
+        "getFlag is defined identically in src/inspect/index.ts (line 5), src/comments/index.ts (line 5), src/comments/list.ts (line 13)",
+        "getPositionalArgs is defined in src/inspect/index.ts (line 11) and will be needed by artifacts module",
+        "New artifacts/index.ts will need both helpers — extracting avoids a fourth copy"
+      ]
+    }
+  ],
+  "statement": "The technical direction for HLX-207 is to make three additions (README, GitHub Actions publish workflow, artifact retrieval commands) plus one defect fix (version drift), all within the helix-cli repo with zero new runtime dependencies. The version drift is fixed by reading package.json at runtime via createRequire. Artifact commands follow the existing thin-client hxFetch pattern with a defined backend API contract. The publish workflow uses a version comparison against the npm registry to publish only on version changes. Shared arg-parsing helpers are consolidated into src/lib/args.ts.",
+  "followups": []
+}
