@@ -1,0 +1,15 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Primary target for all three deliverables: README.md, GitHub Actions publish workflow, and artifact retrieval commands. Also needs version string fix (src/index.ts line 47 hardcodes 0.1.0 vs package.json 1.2.0) and prepublishOnly script addition. New src/artifacts/ command module follows established patterns from src/comments/ and src/inspect/."
+    },
+    {
+      "repoKey": "helix-global-server",
+      "intent": "target",
+      "rationale": "Requires a small but critical change: move two artifact route registrations in src/routes/api.ts (lines 261, 274) before the requireAuth gate (line 236) and add attachInspectionAuth + requireCommentAuth middleware. This follows the established comment-endpoint pattern and enables CLI access with hxi_ API keys. No handler, service, or schema changes needed."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
