@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single repository in scope. All three workstreams (README, CI publish workflow, artifact retrieval commands) and the version drift fix are implemented entirely within this repo. No cross-repo dependencies identified — artifact commands will call the Helix backend via the existing hxFetch HTTP client, keeping the CLI as a thin client."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

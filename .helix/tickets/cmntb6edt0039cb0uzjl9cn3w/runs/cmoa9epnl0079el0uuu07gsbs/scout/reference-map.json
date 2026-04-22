@@ -1,0 +1,101 @@
+{
+  "problem": "helix-cli lacks a README, automated npm publish CI, and artifact retrieval commands. Version drift exists between package.json (1.2.0) and the hardcoded --version output (0.1.0). No .github/workflows directory exists. No test files exist.",
+  "files": [
+    {
+      "path": "package.json",
+      "why": "Package metadata, npm publish config (name: @projectxinnovation/helix-cli, version: 1.2.0, bin: dist/index.js, files: [dist], scripts: build/typecheck, engines: node>=18). Defines the publishable surface."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript build config. Compiles src/ to dist/ with ES2022 target, Node16 module resolution, strict mode, declarations enabled."
+    },
+    {
+      "path": ".gitignore",
+      "why": "Ignores node_modules/ and dist/. dist is not committed but is the npm publish target (files: [dist])."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entrypoint (shebang #!/usr/bin/env node). Defines top-level command router: login, inspect, comments, --version. Hardcodes version string '0.1.0' which drifts from package.json 1.2.0. This is where new 'artifacts' command would be registered."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Auth/config layer. Reads from env vars (HELIX_API_KEY, HELIX_URL, etc.) or ~/.hlx/config.json. Defines HxConfig type (apiKey, url). Used by all authenticated commands."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client with retry/backoff. hxFetch() sends requests to Helix backend with bearer or X-API-Key auth. Base path defaults to /api/inspect. Supports configurable basePath. This is the HTTP layer new artifact commands would use."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository resolution helper. Fetches repo list from backend and resolves by ID, name, or partial match. Used by inspect subcommands."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "Login flow: browser-based OAuth callback on localhost or --manual API key entry. Saves config to ~/.hlx/config.json."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Inspect command router: repos, db, logs, api subcommands. Each requires --repo flag. Hand-rolled arg parsing (getFlag, getPositionalArgs)."
+    },
+    {
+      "path": "src/inspect/repos.ts",
+      "why": "Lists available repos with inspection types."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Runs SQL query via POST /{repoId}/database."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Queries logs via POST /{repoId}/logs with optional limit."
+    },
+    {
+      "path": "src/inspect/api.ts",
+      "why": "Fetches API data via GET /{repoId}/api?path=..."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comments command router: list, post subcommands. Resolves ticket ID from --ticket flag or HELIX_TICKET_ID env var."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Lists ticket comments via GET /api/tickets/{ticketId}/comments. Supports --helix-only and --since filters."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Posts comment to ticket via POST /api/tickets/{ticketId}/comments."
+    }
+  ],
+  "facts": [
+    "Package name is @projectxinnovation/helix-cli, scoped npm package.",
+    "package.json version is 1.2.0 but src/index.ts --version outputs hardcoded '0.1.0' — confirmed version drift.",
+    "npm bin entry is 'hlx' pointing to 'dist/index.js'.",
+    "package.json files array is ['dist'] — only dist/ is included in published package.",
+    "dist/ is gitignored; must be built before publish (npm run build → tsc).",
+    "Typecheck passes cleanly (npm run typecheck exits 0).",
+    "No test files exist anywhere in the repo (no *.test.*, no *.spec.*).",
+    "No .github/ directory exists — no CI workflows at all.",
+    "No README.md exists at repo root.",
+    "Only devDependencies: @types/node ^25.5.0 and typescript ^6.0.2. No runtime dependencies — CLI uses only Node builtins and native fetch.",
+    "No ORM, no database schema, no migrations — not applicable to this repo.",
+    "Auth config reads env vars: HELIX_API_KEY/HELIX_INSPECT_TOKEN/HELIX_INSPECT_API_KEY and HELIX_URL/HELIX_INSPECT_BASE_URL/HELIX_INSPECT_URL.",
+    "Config file stored at ~/.hlx/config.json with shape {apiKey, url}.",
+    "HTTP client supports two auth modes: hxi_* prefix → X-API-Key header; otherwise → Bearer token.",
+    "hxFetch default basePath is /api/inspect; comments use basePath /api. New artifact commands will need to determine appropriate basePath.",
+    "CLI uses hand-rolled arg parsing (no commander/yargs dependency). Command routing is a switch statement in src/index.ts.",
+    "Existing command structure: login, inspect (repos/db/logs/api), comments (list/post), --version.",
+    "No existing 'artifacts' command or any artifact-retrieval logic.",
+    "No package-lock.json lockfileVersion checked — file exists at repo root.",
+    "Node engine requirement is >=18 (needed for native fetch)."
+  ],
+  "unknowns": [
+    "Whether the @projectxinnovation/helix-cli npm package is currently published and what version is live on npm.",
+    "Whether artifact retrieval should go through the Helix backend API (like inspect/comments do) or directly to GitHub/Vercel APIs. The existing pattern is: CLI → Helix backend → external service.",
+    "What Helix backend endpoints exist (or need to exist) for artifact retrieval by ticket ID or run ID.",
+    "What GitHub repo(s) and Vercel project(s) artifact retrieval should target, and what credentials/tokens are needed.",
+    "Whether the Helix backend already has any artifact-related API routes.",
+    "What npm publish access model is used (public vs restricted) and what npm token/secret name is expected in GitHub Actions.",
+    "Whether publish should trigger on every push to main or only on version bumps — ticket leaves this as an open decision.",
+    "No runtime inspection manifest available — cannot verify production API behavior or existing artifact endpoints."
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "questions": [
+    "Q1: What is the current state of the helix-cli repo relative to the three requested improvements (README, CI publish, artifact retrieval)?",
+    "Q2: Is the reported version drift between package.json and --version output real, and what is its scope?",
+    "Q3: What architectural pattern do existing commands follow, and should artifact commands follow the same pattern (Helix backend proxy) or call GitHub/Vercel APIs directly?",
+    "Q4: What build/packaging configuration exists and what does a publish workflow need to do?",
+    "Q5: Are there any existing tests, CI workflows, or related infrastructure that the new work should integrate with?"
+  ],
+  "answers": [
+    {
+      "answer": "All three gaps are confirmed. No README.md exists at the repo root. No .github/ directory exists, meaning zero CI/CD workflows. No 'artifacts' command, module, or artifact-retrieval logic exists anywhere in src/. The CLI has 3 command groups (login, inspect, comments) plus --version.",
+      "evidence": [
+        "ls of repo root shows no README.md",
+        "ls of .github/ returns 'No .github directory'",
+        "src/index.ts switch statement (lines 28-53) routes only: login, inspect, comments, --version/-v",
+        "Glob of src/ shows 13 source files in inspect/, comments/, lib/, plus index.ts and login.ts — no artifacts module"
+      ]
+    },
+    {
+      "answer": "Version drift is confirmed. package.json declares version 1.2.0, but src/index.ts line 47 hardcodes console.log('0.1.0') for the --version flag. This is a code defect — the version string should be derived from package.json or injected at build time, not hardcoded.",
+      "evidence": [
+        "package.json line 3: \"version\": \"1.2.0\"",
+        "src/index.ts line 47: console.log(\"0.1.0\")"
+      ]
+    },
+    {
+      "answer": "All existing authenticated commands follow a consistent pattern: requireConfig() → hxFetch(config, path, options) → console.log result. The HTTP client (src/lib/http.ts) sends all requests to the Helix backend server with retry/backoff. It does NOT call GitHub or Vercel APIs directly. The CLI acts as a thin client to the Helix backend. Artifact commands should follow this same pattern for consistency, using hxFetch with an appropriate basePath. The Helix backend would proxy to GitHub/Vercel APIs, handling credentials server-side. This is the architecturally consistent approach and avoids requiring users to configure separate GitHub/Vercel tokens.",
+      "evidence": [
+        "src/lib/http.ts: hxFetch() constructs URLs as config.url + basePath + path, sends auth via X-API-Key or Bearer",
+        "src/inspect/db.ts: cmdDb calls hxFetch(config, '/{repoId}/database', {method: 'POST', body: {query}})",
+        "src/comments/list.ts: cmdList calls hxFetch(config, '/tickets/{ticketId}/comments', {basePath: '/api'})",
+        "No imports of octokit, @vercel/client, or any external API SDK exist anywhere in the codebase",
+        "devDependencies are limited to @types/node and typescript only"
+      ]
+    },
+    {
+      "answer": "The package builds via 'tsc' (src/ → dist/). The published npm package is configured to include only dist/ (files: ['dist']). dist/ is gitignored and must be built before publish. The bin entry maps 'hlx' to 'dist/index.js'. A publish workflow needs to: (1) install deps, (2) run build (tsc), (3) optionally typecheck, (4) npm publish. There is no prepublishOnly script, so the workflow must explicitly build. The package is ESM (type: module) with Node ≥18 engine requirement.",
+      "evidence": [
+        "package.json: \"files\": [\"dist\"], \"bin\": {\"hlx\": \"dist/index.js\"}, \"type\": \"module\", \"engines\": {\"node\": \">=18\"}",
+        "package.json scripts: \"build\": \"tsc\", \"typecheck\": \"tsc --noEmit\"",
+        ".gitignore: dist/",
+        "tsconfig.json: outDir: \"dist\", rootDir: \"src\""
+      ]
+    },
+    {
+      "answer": "No tests exist anywhere in the repo (no *.test.*, no *.spec.*, no test framework in dependencies). No .github/ directory exists — no CI, no workflows, no issue templates, nothing. The publish workflow will be created from scratch. The typecheck script (tsc --noEmit) is the only validation gate available.",
+      "evidence": [
+        "No test files found via scout scan",
+        "No .github/ directory",
+        "package.json devDependencies: only @types/node and typescript",
+        "package.json scripts: only build and typecheck"
+      ]
+    }
+  ],
+  "statement": "This is a feature-addition ticket with one code defect (version drift). The helix-cli repo is a functional but minimally packaged CLI with zero CI, zero tests, no README, and no artifact retrieval capability. The version string is hardcoded and out of sync with package.json. All three requested improvements (README, CI publish workflow, artifact commands) require net-new additions. The artifact commands should follow the existing Helix-backend-proxy pattern, routing through hxFetch to backend API endpoints that handle GitHub/Vercel credential management server-side. The scope is confined entirely to the helix-cli repository.",
+  "followups": []
+}

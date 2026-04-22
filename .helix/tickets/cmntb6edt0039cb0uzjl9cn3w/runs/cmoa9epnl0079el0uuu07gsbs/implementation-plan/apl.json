@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Q1: What is the correct implementation sequence to avoid breaking existing commands while adding new capabilities?",
+    "Q2: What files need to be created and what files need to be modified?",
+    "Q3: What verification checks can be performed by an automated agent without access to the Helix backend?"
+  ],
+  "answers": [
+    {
+      "answer": "The sequence is: (1) extract shared args helpers, (2) update existing modules to use shared args, (3) create artifact subcommand modules, (4) create artifacts command router, (5) update src/index.ts for version fix + artifacts registration, (6) create publish workflow, (7) create README. Steps 1-2 are prerequisite refactoring. Steps 3-5 are the artifact feature. Steps 6-7 are independent additions. The shared args extraction must come before artifact modules (which need the helpers) and before modifying existing files (to avoid merge conflicts).",
+      "evidence": [
+        "src/inspect/index.ts, src/comments/index.ts, src/comments/list.ts all define local getFlag — must be consolidated before adding a fourth copy in artifacts",
+        "src/index.ts contains both the version drift (line 47) and the command router switch — both modifications go in step 5",
+        "Tech research recommends extracting args.ts before building artifact modules"
+      ]
+    },
+    {
+      "answer": "Files to create (6): src/lib/args.ts, src/artifacts/index.ts, src/artifacts/ticket.ts, src/artifacts/run.ts, .github/workflows/publish.yml, README.md. Files to modify (4): src/index.ts (version fix + artifacts routing + usage text), src/inspect/index.ts (import shared args), src/comments/index.ts (import shared args), src/comments/list.ts (import shared args). No other files are changed.",
+      "evidence": [
+        "Tech research summary table lists exactly these files",
+        "Diagnosis scope section confirms the same file list",
+        "All existing lib files (http.ts, config.ts, resolve-repo.ts) remain unchanged"
+      ]
+    },
+    {
+      "answer": "Automated checks include: typecheck (tsc --noEmit), build (tsc), version output verification (node dist/index.js --version should output 1.2.0), usage text verification (node dist/index.js should show artifacts commands), auth error handling (run artifacts command without credentials), backend error handling (run artifacts command with fake backend URL), YAML validity of workflow file, README content verification, and dependency check (no runtime deps added). End-to-end artifact retrieval cannot be verified because the Helix backend artifact endpoints may not exist yet — this is an acknowledged risk from all prior artifacts.",
+      "evidence": [
+        "Pre-condition 3 in the verification plan: Helix backend /api/artifacts/* endpoints have unknown status",
+        "Product/product.md explicitly states backend endpoint creation is out of scope",
+        "All prior artifacts (diagnosis, product, tech-research) document this as the primary risk"
+      ]
+    }
+  ],
+  "statement": "The implementation plan for HLX-207 defines 7 sequential steps to add documentation, a CI publish workflow, artifact retrieval commands, and fix version drift in the helix-cli repo. The plan creates 6 new files and modifies 4 existing files with zero new runtime dependencies. Verification is achievable through typecheck, build, CLI output inspection, error handling verification, and static content checks. End-to-end artifact retrieval testing is blocked by unknown backend endpoint availability, which is an acknowledged and documented risk.",
+  "followups": []
+}
