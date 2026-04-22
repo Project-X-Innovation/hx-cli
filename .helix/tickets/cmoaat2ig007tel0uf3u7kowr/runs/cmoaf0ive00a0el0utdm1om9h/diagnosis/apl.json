@@ -1,56 +1,56 @@
 {
   "questions": [
-    "Why can't the CLI currently access artifact endpoints on the server?",
-    "What is the version drift between package.json and the CLI's --version output?",
-    "What blocking gaps exist for automated npm publishing?",
-    "What existing patterns can artifact commands follow?",
-    "Does the ticket's 'GitHub Actions artifacts' and 'Vercel storage' match actual server implementation?"
+    "What infrastructure is missing from helix-cli to support automated npm publishing on push to main?",
+    "Are the helix-global-server artifact endpoints already accessible with hxi_ inspection tokens, or do server-side auth changes need to happen?",
+    "What is the version drift situation between package.json and the CLI's --version output?",
+    "What GitHub/npm secrets and configuration steps are required for the publish workflow?",
+    "What module pattern should new artifact commands follow in helix-cli?"
   ],
   "answers": [
     {
-      "answer": "The server's artifact endpoints (GET /api/tickets/:ticketId/artifacts at line 261, GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId at line 274 of api.ts) are registered AFTER apiRouter.use(requireAuth) at line 236. The requireAuth gate depends on attachAuthContext (line 161), which only recognizes session JWTs via loadAuthContextFromRequest. The CLI sends hxi_ API keys via X-API-Key header (src/lib/http.ts lines 53-54), which attachAuthContext does not process. Therefore, CLI users authenticated with hxi_ keys get 401 Unauthorized on artifact endpoints. The server already has a proven pattern for inspection-token-compatible routes: comment endpoints (lines 192-196) and inspection endpoints (lines 186-189) are registered BEFORE requireAuth with attachInspectionAuth + requireCommentAuth middleware.",
+      "answer": "helix-cli has no .github/ directory at all — zero CI/CD workflows. The publish workflow must be created from scratch. Additionally, dist/ is gitignored so the workflow must run npm ci + npm run build before publishing. No prepublishOnly script exists to guard against broken manual publishes either.",
       "evidence": [
-        "helix-global-server/src/routes/api.ts line 236: apiRouter.use(requireAuth)",
-        "helix-global-server/src/routes/api.ts lines 261, 274: artifact endpoints after requireAuth",
-        "helix-global-server/src/auth/middleware.ts lines 15-27: attachAuthContext only calls loadAuthContextFromRequest (session JWTs)",
-        "helix-global-server/src/auth/middleware.ts lines 126-189: attachInspectionAuth handles hxi_ keys, inspection tokens, and session JWTs",
-        "helix-cli/src/lib/http.ts lines 53-54: hxi_ keys sent as X-API-Key header"
+        "ls .github/ returns NO_GITHUB_DIR",
+        ".gitignore contains 'dist/' (line 2)",
+        "package.json scripts has only 'build' and 'typecheck', no prepublishOnly or test",
+        "package.json files field restricts published content to ['dist'] only"
       ]
     },
     {
-      "answer": "package.json declares version 1.2.0, but src/index.ts line 47 hardcodes the string '0.1.0' for the --version flag. The version was never updated in source when package.json was bumped. The fix is to either read version from package.json at build time or import it dynamically.",
+      "answer": "YES — artifact endpoints are already accessible with hxi_ inspection tokens. Direct reading of helix-global-server/src/routes/api.ts lines 236-240 confirms: artifact routes (lines 237-238) are registered BEFORE apiRouter.use(requireAuth) (line 240) with attachInspectionAuth + requireCommentAuth middleware. This is the same auth pattern used by comment endpoints. No server-side changes needed. The prior diagnosis incorrectly claimed these routes were after requireAuth based on outdated line numbers.",
       "evidence": [
-        "helix-cli/package.json line 3: \"version\": \"1.2.0\"",
-        "helix-cli/src/index.ts line 47: console.log(\"0.1.0\")"
+        "src/routes/api.ts line 236: '// Artifact routes registered before requireAuth so inspection tokens / API keys can reach them.'",
+        "src/routes/api.ts line 237: apiRouter.get('/tickets/:ticketId/artifacts', attachInspectionAuth, requireCommentAuth, getTicketArtifacts)",
+        "src/routes/api.ts line 238: apiRouter.get('/tickets/:ticketId/runs/:runId/step-artifacts/:stepId', attachInspectionAuth, requireCommentAuth, getStepArtifacts)",
+        "src/routes/api.ts line 240: apiRouter.use(requireAuth) — the general auth gate is AFTER artifact routes"
       ]
     },
     {
-      "answer": "Three gaps block automated publishing: (1) No .github/ directory exists at all - no workflows. (2) No prepublishOnly or prepack script in package.json to ensure tsc runs before publish, meaning a manual npm publish without building first would ship an empty or stale dist/. (3) The dist/ directory is gitignored and not present in the repo, so CI must build before publishing. The files array correctly restricts the npm package to 'dist' only.",
+      "answer": "package.json declares version '1.2.0' but src/index.ts line 47 hardcodes '0.1.0' for the --version output. This must be fixed — either by reading version from package.json at runtime (via createRequire or fs.readFileSync) or by using a build-time replacement strategy.",
       "evidence": [
-        "Glob for .github/**/* in helix-cli returned no files",
-        "helix-cli/package.json scripts: only 'build' (tsc) and 'typecheck' (tsc --noEmit), no prepublishOnly",
-        "helix-cli/.gitignore includes dist/, confirmed by ls showing no dist/ directory",
-        "helix-cli/package.json files: [\"dist\"]"
+        "package.json line 3: '\"version\": \"1.2.0\"'",
+        "src/index.ts line 47: 'console.log(\"0.1.0\");'"
       ]
     },
     {
-      "answer": "The CLI has a well-established command pattern. Commands are routed via switch/case in src/index.ts to module routers (e.g., src/comments/index.ts, src/inspect/index.ts). Each module router parses subcommands and flags, resolves context (e.g., ticket ID from --ticket flag or HELIX_TICKET_ID env var), and delegates to subcommand implementations that call hxFetch(). Comments commands use basePath '/api' instead of the default '/api/inspect'. Artifact commands should follow this same pattern with a new src/artifacts/ module, using basePath '/api' to reach the server's ticket artifact endpoints.",
+      "answer": "One GitHub repository secret is required: NPM_TOKEN. On the npm side, generate an Automation-type access token (bypasses org-level 2FA) with publish permissions for @projectxinnovation scope. On the GitHub side, add it as a repository secret in helix-cli repo Settings > Secrets and variables > Actions. The workflow uses actions/setup-node@v4 with registry-url: 'https://registry.npmjs.org' and passes the token via NODE_AUTH_TOKEN env var. GITHUB_TOKEN is automatically available.",
       "evidence": [
-        "helix-cli/src/index.ts: switch/case routing to runInspect, runComments, runLogin",
-        "helix-cli/src/comments/index.ts: resolveTicketId pattern using --ticket flag or HELIX_TICKET_ID env",
-        "helix-cli/src/inspect/index.ts: subcommand router with getFlag/getPositionalArgs helpers",
-        "helix-cli/src/lib/http.ts line 43: basePath option defaults to '/api/inspect'"
+        "Context7 GitHub Actions docs confirm: 'store your npm authentication token as a secret, such as a repository secret named NPM_TOKEN'",
+        "Context7 shows setup-node with registry-url creates .npmrc for authentication",
+        "NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} is the documented pattern",
+        "Package is scoped @projectxinnovation/helix-cli, currently published with MIT license (public access)"
       ]
     },
     {
-      "answer": "The ticket's terminology partially mismatches the actual implementation. The server does NOT use the GitHub Actions Artifacts API. Instead, GitHub URLs are conditionally built when organization.commitArtifactsToGithub is true - these are artifacts committed to GitHub branches, not Actions artifacts. 'Vercel storage' correctly maps to the server's Vercel Blob storage (private access, @vercel/blob) used for step artifact content. The CLI's artifact commands should call the existing Helix server endpoints rather than directly calling GitHub or Vercel APIs. The server is the single source of truth and handles both storage backends transparently.",
+      "answer": "Follow the established pattern from src/comments/: create src/artifacts/index.ts as a command router with subcommand files, reuse hxFetch with basePath '/api', resolve ticket ID via --ticket flag or HELIX_TICKET_ID env var. The server API provides two endpoints: GET /api/tickets/:ticketId/artifacts?runId=X for listing and GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId?repoKey=X for fetching content.",
       "evidence": [
-        "helix-global-server/src/services/ticket-service.ts: getTicketArtifactsForOrganization builds GitHub URLs conditionally",
-        "helix-global-server/src/services/blob-storage.ts: Vercel Blob storage for step artifacts",
-        "helix-global-server/src/controllers/ticket-controller.ts lines 303-321: two artifact endpoints return metadata and content"
+        "src/comments/index.ts: router pattern with resolveTicketId using --ticket flag and HELIX_TICKET_ID env var",
+        "src/comments/list.ts: hxFetch with basePath: '/api', typed response, client-side filtering",
+        "Server API shapes from scout: GET /api/tickets/:ticketId/artifacts returns { items, stepArtifactSummary }",
+        "Server API shapes from scout: GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId returns { stepId, repoKey, files }"
       ]
     }
   ],
-  "statement": "This is a feature-gap ticket with one cross-repo auth boundary issue. The CLI lacks documentation, CI/CD, and artifact commands. The critical technical finding is that the server's existing artifact endpoints are behind a session-only auth gate that rejects the CLI's hxi_ API keys. The server needs a small route-registration change (following the established comment-endpoint pattern) to make artifact endpoints accessible to inspection tokens. The CLI needs a new artifacts command module, a README, a GitHub Actions publish workflow, a prepublishOnly script, and a version-string fix. Both repos require changes.",
+  "statement": "helix-cli requires three categories of additive changes with no server-side changes needed: (1) a GitHub Actions publish workflow (.github/workflows/publish.yml) triggered on push to main, with NPM_TOKEN secret for npm auth; (2) a comprehensive README.md documenting installation, auth, commands, artifact retrieval, and publish setup instructions including GitHub/npm secret configuration; (3) a new src/artifacts/ command module following the established comments module pattern, consuming the already-accessible server artifact endpoints. Additionally, the version hardcode at src/index.ts:47 must be fixed, and a prepublishOnly script should be added to package.json. All changes are confined to the helix-cli repository. The prior diagnosis incorrectly claimed server-side auth changes were needed — direct source verification shows artifact endpoints are already before requireAuth with attachInspectionAuth middleware.",
   "followups": []
 }
