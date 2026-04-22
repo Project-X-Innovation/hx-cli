@@ -1,76 +1,84 @@
 {
   "questions": [
+    "What publish trigger and version detection strategy should the GitHub Actions workflow use?",
+    "What GitHub/npm secrets and configuration steps are required for the automated publish workflow?",
     "What architecture should the new artifact commands follow?",
     "How should the CLI read the version from package.json to fix the version drift?",
-    "What publish trigger and version detection strategy should the GitHub Actions workflow use?",
     "Should artifact commands call the server API or GitHub/Vercel APIs directly?",
-    "What output format should artifact commands use for human-readable and --json modes?",
-    "Should a CLI framework (commander, yargs) be introduced for argument parsing?",
+    "Are the server artifact endpoints already accessible with hxi_ API keys, or do server-side changes need to happen?",
+    "What output format should artifact commands use?",
     "What is the correct basePath for artifact API calls via hxFetch?"
   ],
   "answers": [
     {
-      "answer": "New artifact commands should follow the established module pattern: a new src/artifacts/ directory with index.ts (router) and subcommand files (ticket.ts, run.ts). The router follows the same pattern as src/comments/index.ts — it parses the subcommand, resolves ticket ID from --ticket flag or HELIX_TICKET_ID env var, and delegates to subcommand implementations. Each subcommand calls hxFetch() with basePath '/api' to reach the server's existing artifact endpoints. This keeps the architecture consistent with zero new dependencies.",
+      "answer": "The workflow triggers on push to main and publishes only when the package.json version differs from the npm registry. This satisfies the user requirement ('when we push to the main branch, the package should be published automatically') while avoiding npm 403 errors on duplicate versions. The version check uses 'npm view @projectxinnovation/helix-cli version' and compares to local package.json. If npm view fails (never published), it treats this as 'publish needed'. Uses actions/setup-node@v4 with registry-url for npm auth.",
       "evidence": [
-        "src/comments/index.ts: switch/case routing with resolveTicketId pattern using --ticket flag or HELIX_TICKET_ID env var",
-        "src/inspect/index.ts: subcommand router with getFlag/getPositionalArgs helpers",
+        "User continuation context: 'we want that when we push to the main branch on that repo, the package should be published automatically'",
+        "Context7 GitHub Actions docs: setup-node with registry-url configures .npmrc, NODE_AUTH_TOKEN env var for npm publish",
+        "npm registry state: two versions published manually (1.1.0, 1.2.0); no existing workflow",
+        "package.json: no publishConfig field, uses default npm registry"
+      ]
+    },
+    {
+      "answer": "One GitHub repository secret is required: NPM_TOKEN. On the npm side, generate an Automation-type access token (Classic) which bypasses org-level 2FA, or a Granular Access Token scoped to @projectxinnovation/helix-cli with Read/Write permissions. On the GitHub side, add it as a repository secret named NPM_TOKEN in Settings > Secrets and variables > Actions. GITHUB_TOKEN is automatically available in workflows — no manual setup needed. These instructions must be documented in the README maintainer section.",
+      "evidence": [
+        "Context7 GitHub Actions docs: 'store your npm authentication token as a secret, such as a repository secret named NPM_TOKEN'",
+        "Context7 shows setup-node with registry-url creates .npmrc for authentication",
+        "Package is scoped @projectxinnovation/helix-cli, currently published with MIT license (public access)",
+        "User continuation context explicitly requests: 'add to the artifacts the instructions to setup on our side the necessary env variables/secrets on GitHub/npm'"
+      ]
+    },
+    {
+      "answer": "New artifact commands follow the established module pattern: a new src/artifacts/ directory with index.ts (router) and subcommand files (ticket.ts, run.ts). The router follows the same pattern as src/comments/index.ts — parses subcommand, resolves ticket ID from --ticket flag or HELIX_TICKET_ID env var, and delegates. Each subcommand calls hxFetch() with basePath '/api' to reach the server's existing artifact endpoints. This keeps the architecture consistent with zero new dependencies.",
+      "evidence": [
+        "src/comments/index.ts: switch/case routing with resolveTicketId using --ticket flag or HELIX_TICKET_ID env var",
+        "src/inspect/index.ts: subcommand router pattern",
         "src/index.ts: top-level switch/case routes to module routers (runInspect, runComments, runLogin)"
       ]
     },
     {
-      "answer": "Use createRequire from node:module to read package.json at runtime. The call createRequire(import.meta.url) creates a require function scoped to the current file, and require('../package.json') resolves to the root package.json — which npm always includes in published packages regardless of the files field. This works in ESM (module: Node16), requires no build step changes, and keeps the zero-dependency policy intact. The alternative of JSON import assertions (import pkg from '../package.json' with { type: 'json' }) is not stable across all Node 18.x versions and would require resolveJsonModule in tsconfig.",
+      "answer": "Use createRequire from node:module to read package.json at runtime. createRequire(import.meta.url) creates a require function scoped to the current file, and require('../package.json') resolves to the root package.json — which npm always includes in published packages. This works in ESM (module: Node16), requires no build step changes, and maintains zero-dependency policy. JSON import assertions (import with { type: 'json' }) are not stable across all Node 18.x versions.",
       "evidence": [
         "tsconfig.json: module Node16, target ES2022 (ESM)",
-        "package.json: type module, files ['dist'] — but npm always includes package.json regardless",
+        "package.json: type module, files ['dist'] — npm always includes package.json regardless",
         "src/index.ts line 47: currently hardcodes '0.1.0', needs dynamic version",
-        "Node.js docs: createRequire is stable since Node 12.x"
+        "Node.js docs: createRequire stable since Node 12.x"
       ]
     },
     {
-      "answer": "The workflow should trigger on push to main and only publish when the package.json version differs from what's on the npm registry. This is safer than publishing on every push (which causes npm 403 errors on duplicate versions) and more automated than requiring GitHub Releases. The version check uses 'npm view @projectxinnovation/helix-cli version' and compares to the local package.json version. If the package has never been published, the npm view command will fail, which should be handled as a 'publish needed' case. The prepublishOnly script (npm run build) acts as a safety net for manual publishes too.",
+      "answer": "Artifact commands call the Helix server's existing API endpoints exclusively. The server abstracts over Vercel Blob storage and optional GitHub branch commits. The ticket's mentions of 'GitHub Actions artifacts' and 'Vercel storage' map to server endpoints that handle both transparently. Direct GitHub/Vercel API calls would duplicate server logic, require additional auth credentials, and violate the thin-client architecture.",
       "evidence": [
-        "GitHub Actions docs: setup-node with registry-url configures .npmrc for auth, NODE_AUTH_TOKEN env var for npm publish",
-        "package.json: no publishConfig field (uses default npm registry), no existing workflows",
-        "package.json scripts: only build (tsc) and typecheck (tsc --noEmit), no prepublishOnly",
-        "package.json files: ['dist'] — dist/ must exist before publish"
+        "product/product.md: 'CLI as thin client — the CLI calls the Helix server existing endpoints rather than accessing GitHub or Vercel APIs directly'",
+        "diagnosis/apl.json: confirmed CLI should use server API exclusively",
+        "Server endpoints abstract Vercel Blob + optional GitHub branch commits transparently"
       ]
     },
     {
-      "answer": "Artifact commands should call the Helix server's existing API endpoints exclusively. The server is the single source of truth — it abstracts over Vercel Blob storage and optional GitHub branch commits. The ticket's mention of 'GitHub Actions artifacts' and 'Vercel storage' maps to the server's two endpoints: GET /api/tickets/:ticketId/artifacts (metadata with optional GitHub URLs) and GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId (content from Vercel Blob). Direct GitHub/Vercel API calls would duplicate server logic, require additional auth credentials, and violate the thin-client principle.",
+      "answer": "YES — artifact endpoints are ALREADY accessible with hxi_ API keys. No server-side changes needed. Direct reading of helix-global-server/src/routes/api.ts lines 236-240 definitively confirms: artifact routes (lines 237-238) are registered BEFORE apiRouter.use(requireAuth) at line 240, with attachInspectionAuth + requireCommentAuth middleware. Line 236 has an explicit code comment confirming this intentional placement. The helix-global-server diagnosis was incorrect — it cited stale line numbers (261, 274). The helix-cli diagnosis correctly identified this correction.",
       "evidence": [
-        "helix-global-server/src/services/ticket-service.ts lines 1850-1960: getTicketArtifactsForOrganization returns metadata with GitHub URLs built from committed branch artifacts",
-        "helix-global-server/src/services/ticket-service.ts lines 1965-2034: getStepArtifactsForOrganization fetches content from Vercel Blob via blob-storage service",
-        "product/product.md: 'CLI as thin client — the CLI calls the Helix server's existing endpoints rather than accessing GitHub or Vercel APIs directly'",
-        "diagnosis/apl.json: 'The CLI's artifact commands should call the existing Helix server endpoints rather than directly calling GitHub or Vercel APIs'"
+        "src/routes/api.ts line 236: '// Artifact routes registered before requireAuth so inspection tokens / API keys can reach them.'",
+        "src/routes/api.ts line 237: apiRouter.get('/tickets/:ticketId/artifacts', attachInspectionAuth, requireCommentAuth, getTicketArtifacts)",
+        "src/routes/api.ts line 238: apiRouter.get('/tickets/:ticketId/runs/:runId/step-artifacts/:stepId', attachInspectionAuth, requireCommentAuth, getStepArtifacts)",
+        "src/routes/api.ts line 240: apiRouter.use(requireAuth) — general auth gate is AFTER artifact routes"
       ]
     },
     {
-      "answer": "Human-readable output should follow the pattern established by comments list (src/comments/list.ts): iterate over results and format each line with key metadata. For ticket artifacts: display repo label, branch, run ID, GitHub URL (if available), and step artifact summary. For run step artifacts: display step ID, repo key, and file names with content preview. The --json flag outputs the raw API response via JSON.stringify(data, null, 2) to stdout. Human-readable output goes to stdout so it can be piped; error messages go to stderr (matching existing CLI behavior).",
+      "answer": "MVP uses human-readable output only, following the comments list pattern (console.log per line). --json structured output is explicitly out of scope for MVP per the product specification and can be added as a non-breaking enhancement later. Empty state shows 'No artifacts found.' message. Errors go to stderr via existing hxFetch error handling.",
       "evidence": [
-        "src/comments/list.ts: human-readable format with console.log per line, empty-state message 'No comments found.'",
-        "Server response shapes: getTicketArtifacts returns {items: [{id, label, repoUrl, runId, branch, path, url}], stepArtifactSummary: [{stepId, repoKey}]}",
-        "Server response shapes: getStepArtifacts returns {stepId, repoKey, files: [{name, content, contentType}]}"
+        "src/comments/list.ts: human-readable console.log per line, 'No comments found.' empty state",
+        "product/product.md: '--json structured output mode' listed as explicitly out of scope for MVP",
+        "product/product.md: 'Human-readable output by default' listed as essential feature"
       ]
     },
     {
-      "answer": "No. The CLI should continue using its custom argument parsing with getFlag/getPositionalArgs helpers and switch/case routing. The existing pattern handles three commands with subcommands cleanly, and adding one more (artifacts) does not justify introducing a framework dependency. The CLI has zero production dependencies (Node.js builtins only), and the product explicitly states 'No new dependencies'. Commander or yargs would be appropriate if the CLI grew to 10+ commands with complex option types, but that is not the case.",
+      "answer": "Artifact commands use basePath '/api' (not the default '/api/inspect'). The artifact endpoints are under /api/tickets/:ticketId/... — ticket-scoped routes, not inspection proxy routes. This matches the comments commands which also use basePath '/api'.",
       "evidence": [
-        "package.json: zero production dependencies, devDependencies only (typescript, @types/node)",
-        "product/product.md: 'No new dependencies: The CLI currently has zero production dependencies (Node.js builtins only). Prefer keeping it that way.'",
-        "src/index.ts: simple switch/case routing handles 4 commands (login, inspect, comments, --version)",
-        "src/comments/index.ts, src/inspect/index.ts: getFlag/getPositionalArgs helpers are simple and sufficient"
-      ]
-    },
-    {
-      "answer": "Artifact commands must use basePath '/api' (not the default '/api/inspect'). The artifact endpoints are registered under /api/tickets/:ticketId/artifacts and /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId — these are ticket-scoped routes under /api, not inspection proxy routes under /api/inspect. This matches the pattern used by comments commands, which also use basePath '/api'.",
-      "evidence": [
-        "helix-global-server/src/routes/api.ts line 261: apiRouter.get('/tickets/:ticketId/artifacts', ...)",
-        "helix-global-server/src/routes/api.ts line 274: apiRouter.get('/tickets/:ticketId/runs/:runId/step-artifacts/:stepId', ...)",
-        "helix-cli/src/comments/list.ts line 25-26: hxFetch(config, '/tickets/${ticketId}/comments', { basePath: '/api' })",
-        "helix-cli/src/lib/http.ts line 43: basePath defaults to '/api/inspect'"
+        "src/routes/api.ts line 237-238: artifact routes under /tickets/:ticketId/... prefix",
+        "src/comments/list.ts line 25-26: hxFetch(config, '/tickets/${ticketId}/comments', { basePath: '/api' })",
+        "src/lib/http.ts line 43: basePath defaults to '/api/inspect' — must be overridden to '/api'"
       ]
     }
   ],
-  "statement": "The technical direction for helix-cli is to add a new src/artifacts/ command module following the established router pattern, fix the version string using createRequire to read package.json at runtime, add a GitHub Actions workflow that publishes on version change, and add a prepublishOnly script. The CLI remains a thin client calling the server's existing two artifact endpoints via hxFetch with basePath '/api'. For helix-global-server, the only change is moving two artifact route registrations before the requireAuth gate and adding attachInspectionAuth + requireCommentAuth middleware, following the established comment-endpoint pattern. No new dependencies, no handler changes, no schema changes.",
+  "statement": "The technical direction for helix-cli is to: (1) add a GitHub Actions workflow (.github/workflows/publish.yml) triggered on push to main that builds, typechecks, and publishes to npm only when the version changes, using NPM_TOKEN as a repository secret; (2) add a comprehensive README.md including step-by-step GitHub/npm secrets setup instructions for maintainers; (3) add a new src/artifacts/ command module following the established comments module pattern, consuming the server's existing and already-accessible artifact endpoints via hxFetch with basePath '/api'; (4) fix the version hardcode at src/index.ts:47 using createRequire; and (5) add a prepublishOnly script. Zero new production dependencies. No helix-global-server changes are needed — direct verification of api.ts lines 236-240 confirms artifact routes are already before requireAuth with correct middleware.",
   "followups": []
 }
