@@ -7,9 +7,9 @@
     },
     {
       "repoKey": "helix-global-server",
-      "intent": "target",
-      "rationale": "Requires a small but critical change: move two artifact route registrations in src/routes/api.ts (lines 261, 274) before the requireAuth gate (line 236) and add attachInspectionAuth + requireCommentAuth middleware. This follows the established comment-endpoint pattern and enables CLI access with hxi_ API keys. No handler, service, or schema changes needed."
+      "intent": "context",
+      "rationale": "CORRECTION: Direct reading of src/routes/api.ts lines 236-240 confirms artifact endpoints (lines 237-238) are ALREADY registered before requireAuth (line 240) with attachInspectionAuth + requireCommentAuth middleware. No server-side route changes are needed. The prior diagnosis claim that routes need to be moved was based on outdated line numbers. helix-global-server is context for understanding the artifact API shape that the CLI will consume."
     }
   ],
-  "updatedBy": "diagnosis"
+  "updatedBy": "scout"
 }
