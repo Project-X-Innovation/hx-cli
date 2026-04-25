@@ -121,3 +121,5 @@ A few possible reasons for this:
 Would you like me to pull up the **code analysis** or **planning** output to see exactly what Helix found and why it targeted that repo? That should clarify where the CLI code was detected.
 - **Helix** (2026-04-22T19:32:52.397Z) [Agent]: I'm working on this, I'll get back to you when ready.
 - **Helix** (2026-04-25T18:41:12.525Z) [Agent]: I'm working on this, I'll get back to you when ready.
+- **Darshan** (2026-04-25T19:13:40.864Z): @Luis i added workflow to the PAT. there's 2 'workflows' in the settings - we missed one
+- **Darshan** (2026-04-25T19:17:57.672Z): hopefully it goes through

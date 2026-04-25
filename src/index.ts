@@ -25,7 +25,7 @@ Usage:
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
-  hlx artifacts ticket <ticket-id>
+  hlx artifacts ticket <ticket-id> [--run <run-id>]
                                 List artifacts for a ticket
   hlx artifacts run <run-id> --ticket <id> --step <step-id> --repo-key <key>
                                 Retrieve step artifacts for a run

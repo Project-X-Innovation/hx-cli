@@ -21,7 +21,7 @@ function resolveTicketId(args: string[]): string {
 
 function artifactsUsage(): never {
   console.error(`Usage:
-  hlx artifacts ticket <ticket-id>
+  hlx artifacts ticket <ticket-id> [--run <run-id>]
                                 List artifacts for a ticket
   hlx artifacts run <run-id> --ticket <id> --step <step-id> --repo-key <key>
                                 Retrieve step artifacts for a run`);
