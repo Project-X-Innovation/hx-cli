@@ -1,0 +1,107 @@
+{
+  "problem": "helix-cli needs a GitHub Actions workflow to auto-publish to npm on push to main, a README.md, and CLI artifact retrieval commands. No CI/CD infrastructure exists. The user's continuation context emphasizes the publish workflow and setup instructions for GitHub/npm secrets.",
+  "files": [
+    {
+      "path": "package.json",
+      "why": "Package metadata: name @projectxinnovation/helix-cli, version 1.2.0, bin hlx→dist/index.js, files: ['dist'], scripts build/typecheck only. No prepublishOnly or test script. dist/ is gitignored so it must be built during publish."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config: target ES2022, module Node16, rootDir src/, outDir dist/, strict mode, declaration files generated."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point with shebang. Routes commands: login, inspect, comments, --version. Line 47 hardcodes version '0.1.0' but package.json says '1.2.0' — version drift. New 'artifacts' command branch needed here."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config loader: env vars HELIX_API_KEY/HELIX_INSPECT_TOKEN/HELIX_INSPECT_API_KEY + HELIX_URL/HELIX_INSPECT_BASE_URL/HELIX_INSPECT_URL. Fallback: ~/.hlx/config.json. Exports HxConfig type {apiKey, url}. Needed for README documentation."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch) with retry (3 attempts, exponential backoff, 30s timeout). Auth: hxi_ prefix → X-API-Key header, else Bearer. Default basePath /api/inspect, overridable per call. Artifact commands will reuse this."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository name/ID resolution helper. Lists repos via GET /api/inspect/repositories."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "OAuth browser flow and manual API key entry. Saves to ~/.hlx/config.json."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Inspect command router (repos/db/logs/api). Established module pattern for new commands."
+    },
+    {
+      "path": "src/inspect/repos.ts",
+      "why": "Lists inspection repos. Shows standard subcommand pattern: import config, call hxFetch, print output."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Database query command. POST request pattern with resolve-repo."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Log query command with optional --limit flag."
+    },
+    {
+      "path": "src/inspect/api.ts",
+      "why": "API inspection with query params."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comments command router (list/post). Uses basePath '/api'. Resolves ticket ID via --ticket flag or HELIX_TICKET_ID env var. Pattern reference for artifacts module."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Comments list: typed response, hxFetch with basePath '/api', client-side filtering, human-readable output."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Posts comments via POST /api/tickets/:ticketId/comments."
+    },
+    {
+      "path": ".gitignore",
+      "why": "Ignores node_modules/ and dist/. Confirms dist must be built during publish workflow."
+    }
+  ],
+  "facts": [
+    "Package is @projectxinnovation/helix-cli, scoped under @projectxinnovation npm org",
+    "Two versions published on npm: 1.1.0 and 1.2.0. Latest is 1.2.0, published 2 weeks ago manually by usherpx@projectxinnovation.com",
+    "No .github/ directory exists — zero CI/CD workflows of any kind",
+    "No README.md exists at repository root",
+    "No test files exist (no .test.ts, .spec.ts, __tests__/); no test script in package.json",
+    "No .npmrc or .npmignore files exist",
+    "dist/ is gitignored and does not exist in repo. npm pack --dry-run without build produces only package.json (371 bytes). Published 1.2.0 is 14.5 kB — prior publishes included built dist/",
+    "package.json version is 1.2.0 but src/index.ts line 47 hardcodes '0.1.0' for --version output",
+    "package.json scripts: build (tsc), typecheck (tsc --noEmit). No test, lint, prepublishOnly, or prepack scripts",
+    "package.json files field restricts published content to ['dist'] directory only",
+    "package.json engines: node >=18. Package type is 'module' (ESM-only)",
+    "Package license is MIT",
+    "CLI bin entry: hlx → dist/index.js",
+    "Zero runtime dependencies — all Node.js builtins + global fetch",
+    "Auth sends hxi_ keys via X-API-Key header, other tokens via Authorization: Bearer header",
+    "Config resolution: env vars (HELIX_API_KEY + HELIX_URL) → config file (~/.hlx/config.json)",
+    "CORRECTION: Server artifact endpoints ARE accessible via inspection auth tokens. Direct reading of helix-global-server/src/routes/api.ts lines 236-240 shows: artifact routes at lines 237-238 are registered BEFORE requireAuth at line 240, with attachInspectionAuth + requireCommentAuth middleware",
+    "GET /api/tickets/:ticketId/artifacts?runId=X returns { items: [{ id, label, repoUrl, runId, branch, path, url }], stepArtifactSummary: [{ stepId, repoKey }] }",
+    "GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId?repoKey=X returns { stepId, repoKey, files: [{ name, content, contentType }] }",
+    "HELIX_TICKET_ID env var is already used by comments commands for ticket resolution — artifact commands should follow same pattern",
+    "Artifacts stored in Vercel Blob at paths like artifacts/{runId}/{repoKey}/{stepId}/{filename}",
+    "GitHub artifact URLs optionally built from committed branch artifacts (controlled by org.commitArtifactsToGithub)",
+    "No ORM or database in helix-cli — no migration awareness needed"
+  ],
+  "unknowns": [
+    "Whether the npm @projectxinnovation org requires 2FA for publishing and whether Automation tokens bypass it",
+    "Whether the package should remain public (current MIT license suggests yes) or restricted access",
+    "Whether team prefers publish-on-every-push-to-main vs publish-only-on-version-bump strategy",
+    "Whether npm access token should be Classic Automation type or Granular Access Token scoped to package",
+    "What the npm org's publish permission model is (which accounts have publish rights)",
+    "Whether version hardcode at src/index.ts:47 should be dynamically read from package.json at runtime or derived during build",
+    "Whether the ticket's reference to 'GitHub Actions artifacts' means the GitHub Actions Artifact API, or the Helix artifacts stored in Vercel Blob + GitHub branches",
+    "Whether Vercel-specific artifact storage exists separately from the blob storage served through the existing Helix server API",
+    "What format the OAuth login flow returns — session JWT or hxi_ API key — affects whether OAuth-obtained credentials work with artifact endpoints",
+    "Whether HELIX_RUN_ID env var should be supported alongside --run flag for artifact commands",
+    "Whether artifact retrieval should support --json output mode from the start"
+  ]
+}

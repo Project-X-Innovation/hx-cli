@@ -1,0 +1,38 @@
+{
+  "questions": [
+    "What is the correct step ordering for implementing all helix-cli changes?",
+    "Are there cross-repo dependencies that affect implementation sequencing?",
+    "What verification checks can be performed in the dev environment vs requiring external infrastructure?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation proceeds in 9 ordered steps: (1) Add prepublishOnly script to package.json. (2) Fix version hardcode in src/index.ts using createRequire to read package.json at runtime. (3) Create src/artifacts/index.ts router. (4) Create src/artifacts/ticket.ts subcommand. (5) Create src/artifacts/run.ts subcommand. (6) Wire artifacts command into src/index.ts switch/case and update usage text. (7) Create .github/workflows/publish.yml with version-change-only publish strategy. (8) Create README.md with full documentation and GitHub/npm secrets setup instructions. (9) Final build and typecheck verification. Steps 1-2 are independent housekeeping. Steps 3-6 build the artifact feature incrementally (3-5 must precede 6). Steps 7-8 are independent documentation/CI that should come after code changes they document. Step 9 is the final gate.",
+      "evidence": [
+        "src/index.ts line 47: hardcoded 0.1.0 — fixed in step 2",
+        "src/comments/index.ts: router pattern that artifacts module must follow (steps 3-5)",
+        "tech-research/tech-research.md: architecture decisions for module structure, version fix, workflow design",
+        "product/product.md: explicit feature list, scope constraints, zero-dependency policy"
+      ]
+    },
+    {
+      "answer": "No cross-repo dependencies exist. Direct reading of helix-global-server/src/routes/api.ts lines 236-240 confirms artifact endpoints are ALREADY registered before requireAuth with attachInspectionAuth + requireCommentAuth middleware. The helix-global-server diagnosis was incorrect — it cited stale line numbers (261, 274 after requireAuth). The actual code at lines 237-238 shows the routes are correctly placed, with an explicit comment at line 236 confirming this. All changes are confined to the helix-cli repository. No server-side changes, no deployment coordination required.",
+      "evidence": [
+        "src/routes/api.ts line 236: '// Artifact routes registered before requireAuth so inspection tokens / API keys can reach them.'",
+        "src/routes/api.ts line 237: apiRouter.get('/tickets/:ticketId/artifacts', attachInspectionAuth, requireCommentAuth, getTicketArtifacts)",
+        "src/routes/api.ts line 238: apiRouter.get('/tickets/:ticketId/runs/:runId/step-artifacts/:stepId', attachInspectionAuth, requireCommentAuth, getStepArtifacts)",
+        "src/routes/api.ts line 240: apiRouter.use(requireAuth) — general auth gate is AFTER artifact routes"
+      ]
+    },
+    {
+      "answer": "Build, typecheck, version output, usage text, flag validation, and static file checks (CHK-01 through CHK-03, CHK-05 through CHK-09) can all be performed in the dev environment without external dependencies. Live artifact retrieval testing (CHK-04) requires valid hxi_ API credentials and a running Helix server with test data. The NPM_TOKEN secret verification (CHK-06) is limited to static workflow file inspection since the secret must be configured on GitHub by a maintainer. If live credentials are unavailable, CHK-04 should verify the command produces a clear authentication error rather than crashing.",
+      "evidence": [
+        "package.json: build and typecheck scripts are available locally",
+        "No external services needed for compilation or static checks",
+        "Helix server credentials not provided in dev setup config for helix-cli",
+        "NPM_TOKEN is a GitHub-side secret that cannot be tested locally"
+      ]
+    }
+  ],
+  "statement": "The helix-cli implementation plan covers 9 atomic steps across 4 categories: (1) housekeeping — prepublishOnly script and version hardcode fix; (2) artifact commands — router, ticket subcommand, and run subcommand following the established comments module pattern; (3) CI/CD — GitHub Actions publish workflow with version-change detection and NPM_TOKEN secret; (4) documentation — comprehensive README with install, auth, commands, artifact examples, and step-by-step GitHub/npm secrets setup instructions. All changes are in the helix-cli repository only. No helix-global-server changes are needed — direct verification of api.ts lines 236-240 confirms artifact routes are already before requireAuth with correct middleware. Zero new production dependencies.",
+  "followups": []
+}
