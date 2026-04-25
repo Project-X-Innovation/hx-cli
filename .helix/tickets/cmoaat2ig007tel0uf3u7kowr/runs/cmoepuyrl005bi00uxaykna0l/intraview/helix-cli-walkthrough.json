@@ -1,0 +1,61 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "helix-cli: Automated npm Publishing via GitHub Actions",
+  "description": "This tour walks through the addition of a GitHub Actions workflow that automates npm publishing for the helix-cli package. The change addresses a key gap identified in diagnosis: the CLI had no CI/CD pipeline, meaning releases were manual and the published package could drift from source. The workflow performs a version-change check before publishing, ensuring npm publishes only happen when the version in package.json differs from the currently published version.",
+  "steps": [
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 1,
+      "description": "Before this change, helix-cli had no .github/ directory at all — releases were manual. The diagnosis identified that the published npm package could be stale or inconsistent with source (e.g., --version output hardcoded 0.1.0 while package.json declared 1.2.0). This GitHub Actions workflow closes that gap by automatically publishing to npm on every push to main, but only when the version has actually changed.",
+      "title": "Overview: Why This Workflow Exists"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 4,
+      "description": "The workflow triggers exclusively on pushes to the main branch. This aligns with the version-change-only publish strategy: every merge to main is a candidate for release, but the subsequent version-check step (line 41) gates whether npm publish actually runs. This avoids the need for separate release branches or manual tag-based triggers.",
+      "title": "Trigger: Push to main Only"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 9,
+      "description": "Only two permissions are granted: contents:read (to check out the repo) and id-token:write (required for npm provenance attestation with --access public). No write permissions to contents or packages are needed because publishing is handled entirely via the NPM_TOKEN secret, not GitHub's GITHUB_TOKEN. This follows least-privilege principles.",
+      "title": "Permissions: Minimal Required Surface"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 22,
+      "description": "The setup-node action is configured with registry-url pointing to the official npm registry. This is a required step — without registry-url, the NODE_AUTH_TOKEN environment variable injected at publish time (line 58) would not be wired into the npm config. Node 20 matches the runtime target for the CLI's ESM output.",
+      "title": "Node Setup with npm Registry URL"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 27,
+      "description": "The workflow runs the full local development pipeline in order: npm ci (clean install from lockfile), npm run build (compiles TypeScript to dist/), and npm run typecheck (validates types without emitting). This mirrors what a developer would run locally before publishing, ensuring the dist/ artifact is always fresh and type-correct before the publish gate is evaluated.",
+      "title": "Build Pipeline: Install, Build, Typecheck"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 33,
+      "description": "An explicit shell check confirms dist/index.js exists before proceeding. This guards against a scenario where the build step exits 0 but produces no output (e.g., misconfigured tsconfig outDir). Without this check, the workflow could publish an empty or stale dist/ directory. The exit 1 ensures the job fails fast and visibly rather than silently publishing a broken package.",
+      "title": "Build Output Verification"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 41,
+      "description": "This step compares the local package.json version against the currently published npm version for @projectxinnovation/helix-cli. The `npm view ... 2>/dev/null || echo '0.0.0'` fallback handles the case where the package has never been published. If versions match, should_publish=false is written to GITHUB_OUTPUT and the publish step is skipped. This means developers control releases purely by bumping package.json — no manual workflow dispatch or git tags required. Data flow: package.json version → LOCAL_VERSION → compared to npm registry → GITHUB_OUTPUT.should_publish → conditional publish step.",
+      "title": "Version Change Gate: The Core Publish Strategy"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 55,
+      "description": "The publish step only runs when should_publish=true from the version check. It uses `npm publish --access public` to publish the scoped package (@projectxinnovation/helix-cli) as publicly accessible. The NODE_AUTH_TOKEN environment variable is populated from the NPM_TOKEN repository secret, which setup-node (line 22) automatically maps into the npm config as the authToken for the configured registry. This completes the data flow: NPM_TOKEN secret → NODE_AUTH_TOKEN env → npm config authToken → authenticated publish.",
+      "title": "Conditional npm Publish with Auth"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 1,
+      "description": "The workflow establishes a clean, auditable release path: (1) push to main triggers the job, (2) full build + typecheck runs, (3) build output is verified, (4) version is compared to npm registry, (5) publish runs only on version bump. No manual steps remain in the publish flow. Combined with the version string fix in src/index.ts (reading version from package.json at runtime via createRequire) and the artifact command additions, the CLI is now self-documenting, consistently versioned, and automatically released. The only prerequisite for a release is incrementing the version field in package.json.",
+      "title": "Summary: Clean Code Path Confirmation"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "questions": [
+    "What is the correct step ordering for implementing all helix-cli changes?",
+    "Are there cross-repo dependencies that affect implementation sequencing?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation proceeds in 7 atomic steps: (1) Fix version string drift in src/index.ts using createRequire to read package.json at runtime. (2) Add prepublishOnly script to package.json. (3) Create src/artifacts/index.ts router and src/artifacts/ticket.ts subcommand. (4) Create src/artifacts/run.ts subcommand. (5) Register the artifacts command in src/index.ts switch/case and update usage text. (6) Add .github/workflows/publish.yml with version-change-only publish strategy. (7) Add README.md with installation, auth, config, command reference, and maintainer notes. Steps 1-2 are independent foundational fixes. Steps 3-5 build the artifact feature incrementally. Steps 6-7 are independent documentation/CI additions that can happen in any order relative to each other but should come after the code changes they document.",
+      "evidence": [
+        "src/index.ts line 47: hardcoded 0.1.0 must be replaced before artifact case is added",
+        "src/comments/index.ts: router pattern that artifacts module must follow",
+        "tech-research/tech-research.md: architecture decisions for module structure, version fix, workflow design",
+        "product/product.md: explicit feature list and scope constraints"
+      ]
+    },
+    {
+      "answer": "Yes. The helix-global-server auth boundary fix (moving artifact routes before requireAuth) is a prerequisite for the CLI artifact commands to work with hxi_ API keys. However, both repos can be implemented in parallel — the server change must be deployed before the CLI is published to npm, but the code changes are independent. For local testing during development, the server fix must be applied first to the local server instance before CLI artifact commands can be verified end-to-end.",
+      "evidence": [
+        "diagnosis/diagnosis-statement.md (helix-cli): 'Auth boundary is the critical cross-repo issue'",
+        "tech-research/tech-research.md (helix-global-server): 'server change must be deployed before CLI publish'",
+        "product/product.md (helix-cli): 'CLI as thin client — the CLI calls the Helix server's existing endpoints'"
+      ]
+    }
+  ],
+  "statement": "The helix-cli implementation plan covers 7 atomic steps: version fix, prepublishOnly script, artifact command module (router + ticket subcommand + run subcommand), CLI entrypoint wiring, GitHub Actions publish workflow, and README documentation. All steps follow established patterns from the existing codebase, introduce zero new dependencies, and keep the CLI as a thin client calling the server's existing artifact endpoints. The plan coordinates with the helix-global-server auth boundary fix which must be applied for end-to-end artifact retrieval to work.",
+  "followups": []
+}

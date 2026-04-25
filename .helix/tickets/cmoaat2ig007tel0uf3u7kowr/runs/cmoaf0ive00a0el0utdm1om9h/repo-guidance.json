@@ -1,0 +1,15 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "All three deliverables target this repo: (1) .github/workflows/publish.yml for automated npm publish on push to main, (2) README.md with installation, auth, commands, artifact retrieval, and GitHub/npm secret setup instructions, (3) new src/artifacts/ command module following the comments module pattern. Also needs version hardcode fix at src/index.ts:47 and prepublishOnly script in package.json."
+    },
+    {
+      "repoKey": "helix-global-server",
+      "intent": "context",
+      "rationale": "Server artifact endpoints (GET /api/tickets/:ticketId/artifacts, GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId) are already registered BEFORE requireAuth at api.ts:240 with attachInspectionAuth + requireCommentAuth middleware (lines 237-238). The code comment at line 236 explicitly states these routes are before requireAuth for inspection token access. No server-side changes are needed. This repo is context only for understanding the API contract the CLI consumes."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
