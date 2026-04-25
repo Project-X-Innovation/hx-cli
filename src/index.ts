@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { requireConfig } from "./lib/config.js";
 import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
+import { runArtifacts } from "./artifacts/index.js";
+
+const require = createRequire(import.meta.url);
+const pkgVersion = (require("../package.json") as { version: string }).version;
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -20,6 +25,10 @@ Usage:
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
+  hlx artifacts ticket <ticket-id>
+                                List artifacts for a ticket
+  hlx artifacts run <run-id> --ticket <id> --step <step-id> --repo-key <key>
+                                Retrieve step artifacts for a run
   hlx --version                 Show version`);
   process.exit(1);
 }
@@ -42,9 +51,15 @@ try {
       break;
     }
 
+    case "artifacts": {
+      const config = requireConfig();
+      await runArtifacts(config, args.slice(1));
+      break;
+    }
+
     case "--version":
     case "-v":
-      console.log("0.1.0");
+      console.log(pkgVersion);
       break;
 
     default:

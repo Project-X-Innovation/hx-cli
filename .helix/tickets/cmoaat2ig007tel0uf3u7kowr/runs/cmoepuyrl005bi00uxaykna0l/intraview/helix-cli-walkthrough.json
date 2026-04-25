@@ -1,0 +1,66 @@
+{
+  "title": "HLX-299: helix-cli packaging, docs, and artifact commands",
+  "description": "Walkthrough of all changes: version fix, artifact commands, CI workflow, and README",
+  "steps": [
+    {
+      "file": "package.json",
+      "line": 12,
+      "title": "prepublishOnly safety script",
+      "description": "Added prepublishOnly script that runs npm run build before any npm publish. Prevents broken publishes where dist/ is empty."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 3,
+      "title": "Dynamic version via createRequire",
+      "description": "Import createRequire from node:module to read package.json version at runtime. This replaces the hardcoded '0.1.0' that was out of sync with package.json's 1.2.0."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 10,
+      "title": "Version resolution from package.json",
+      "description": "createRequire resolves ../package.json relative to dist/index.js at runtime. The version is read once at startup and used in the --version case."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 54,
+      "title": "Artifacts command routing",
+      "description": "New case in the main switch routes 'artifacts' to runArtifacts, following the same pattern as 'comments' and 'inspect' — requireConfig() then delegate to module."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 28,
+      "title": "Usage text with artifact commands",
+      "description": "Updated usage function to document the new artifact commands with their flag syntax."
+    },
+    {
+      "file": "src/artifacts/index.ts",
+      "line": 31,
+      "title": "Artifact command router",
+      "description": "Routes to ticket or run subcommands. Mirrors src/comments/index.ts pattern: resolveTicketId with --ticket flag/HELIX_TICKET_ID env var, getFlag helper, switch/case routing."
+    },
+    {
+      "file": "src/artifacts/ticket.ts",
+      "line": 26,
+      "title": "Ticket artifact listing command",
+      "description": "Calls GET /api/tickets/:ticketId/artifacts via hxFetch. Supports optional --run filter. Displays items (repo, branch, URL) and step artifact summary."
+    },
+    {
+      "file": "src/artifacts/run.ts",
+      "line": 20,
+      "title": "Run step-artifact retrieval command",
+      "description": "Calls GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId?repoKey=X. Validates --step and --repo-key as required flags. Prints raw file content for each artifact."
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 1,
+      "title": "GitHub Actions npm publish workflow",
+      "description": "Triggered on push to main. Builds, typechecks, verifies dist/index.js exists, compares local version to published npm version, and publishes only if version changed. Uses NPM_TOKEN secret."
+    },
+    {
+      "file": "README.md",
+      "line": 1,
+      "title": "Comprehensive CLI documentation",
+      "description": "Covers installation, auth (OAuth + manual + env vars + config file), all commands with examples, artifact retrieval, and maintainer publishing setup with step-by-step npm token and GitHub secret instructions."
+    }
+  ]
+}
