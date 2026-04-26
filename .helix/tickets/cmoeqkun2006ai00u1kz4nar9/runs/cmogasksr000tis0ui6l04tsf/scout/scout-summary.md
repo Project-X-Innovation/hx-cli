@@ -8,89 +8,102 @@ Expand `helix-cli` from a narrow inspection tool (inspect + comments) into an or
 
 ### Current CLI State
 
-The CLI is a lightweight, zero-production-dependency TypeScript tool at version 1.2.0. It provides three command groups today:
+The implementation is complete. The CLI has been expanded from 3 command groups (login, inspect, comments) to 5 (adding org and tickets), with 13 new source files across `src/org/` (4 files) and `src/tickets/` (10 files including router). Typecheck passes cleanly with zero errors.
 
-- **login**: OAuth browser flow or manual API key entry; saves `{apiKey, url}` to `~/.hlx/config.json`
-- **inspect**: Read-only production inspection (repos, db queries, logs, API probes) via `/api/inspect/*` endpoints
-- **comments**: List and post ticket comments via `/api/tickets/:ticketId/comments`
+### Implementation Structure
+
+**Org commands** (`src/org/`):
+- `current` - GET /api/auth/me, displays org name, ID, user name, email
+- `list` - GET /api/auth/me, displays availableOrganizations with current marker
+- `switch` - Resolves org by name or CUID, POST /api/auth/switch-org, saves new accessToken + orgId/orgName to `~/.hlx/config.json`
+
+**Ticket discovery** (`src/tickets/`):
+- `list` - GET /api/tickets with filters: `--archived`, `--status-not-in`, `--sprint`, `--user` (resolved via /organization/members), `--status` (client-side)
+- `latest` - Fetches list, takes first item, prints full detail via `printTicketDetail`
+- `get` - GET /api/tickets/:ticketId, prints title/shortId/status/branch/reporter/repos/runs/merge-status
+
+**Ticket actions**:
+- `create` - POST /api/tickets with `--title`, `--description`, `--repos`
+- `rerun` - POST /api/tickets/:id/rerun with empty body
+- `continue` - POST /api/tickets/:id/rerun with `{continuationContext}` from positional args
+
+**Artifact inspection**:
+- `artifacts` - GET /api/tickets/:id/artifacts, displays items and stepArtifactSummary
+- `artifact` - GET /api/tickets/:id/runs/:runId/step-artifacts/:stepId?repoKey=, prints raw file content
+- `bundle` - Creates deterministic local directory: `ticket.json`, `manifest.json`, `artifacts/<stepId>/<repoKey>/<filename>`
 
 ### Architecture Patterns
 
-- **Command routing**: Manual switch-based dispatch in `src/index.ts`. Each command group has an `index.ts` router and individual handler files.
-- **Flag parsing**: Manual `indexOf`-based `getFlag()` helper. No CLI framework.
-- **HTTP**: Single `hxFetch()` function in `src/lib/http.ts` with retry, timeout, and auth header logic. Default `basePath` is `/api/inspect`; comments already use `basePath: "/api"`.
-- **Auth tokens**: `hxi_` prefix tokens use `X-API-Key` header; other tokens use `Authorization: Bearer`. Config is `{apiKey, url}` only.
+- **Command routing**: Manual switch-based dispatch in `src/index.ts` (unchanged pattern)
+- **Flag parsing**: Manual `indexOf`-based `getFlag()` helper (unchanged, `src/lib/flags.ts`)
+- **HTTP**: Single `hxFetch()` with retry, timeout, auth headers. New commands use `basePath: "/api"`
+- **Auth**: `hxi_` prefix -> `X-API-Key`, other tokens -> `Authorization: Bearer`. Org switch saves new JWT as `apiKey`.
+- **Config**: `HxConfig` now includes `orgId?` and `orgName?` persisted across commands
+- **Zero dependencies**: All new code uses Node built-ins only (fs, path, os)
 
-### Key Observations for the Expansion
+### Quality Gates
 
-1. **Auth gap for org switching**: `POST /api/auth/switch-org` returns a new `accessToken` (session JWT). The current config schema `{apiKey, url}` has no notion of org. The CLI must persist the new token after switching and ensure subsequent requests use it.
+| Gate | Command | Result |
+|---|---|---|
+| Typecheck | `tsc --noEmit` | Passes (0 errors) |
+| Build | `tsc` | Available |
+| Tests | N/A | No tests exist |
+| Lint | N/A | No lint configured |
 
-2. **BasePath convention**: All new ticket/org commands target `/api/*` routes (not `/api/inspect/*`), so they must use `basePath: "/api"`.
+### Key Observations
 
-3. **Ticket routes require session auth**: Server ticket routes (list, create, rerun) sit behind `requireAuth` middleware which needs session JWTs. The CLI login OAuth flow returns a `key` parameter. Whether this key is a session JWT or inspection API key depends on the server's `/auth/cli` redirect flow.
+1. **Config model updated**: `HxConfig` type now includes `orgId?` and `orgName?`. The `saveConfig` function persists these. Org switch replaces `apiKey` with the new `accessToken` from the server.
 
-4. **Backend API coverage**: Most CLI commands map directly to existing backend endpoints. The one gap is the `--user` filter: the server's `GET /api/tickets` does not currently accept a `userId` or `reporterUserId` query parameter for filtering (the existing `userId` param is only for comment unread tracking).
+2. **User resolution for --user filter**: CLI resolves user input (email or name) to a `reporterUserId` via GET /api/organization/members. Server-side filter added (see helix-global-server scout).
 
-5. **No existing org/ticket commands**: The entire org and tickets command surface must be built from scratch.
+3. **Status filter split**: `--status-not-in` maps to server query param; `--status` is client-side filtered. The backend supports `statusNotIn` but not a positive `status` filter.
 
-6. **Pattern consistency**: The existing comments commands show a clean, repeatable pattern: subcommand router + individual handler files + shared `hxFetch`.
+4. **Bundle structure**: Deterministic layout with `ticket.json` (full detail), `manifest.json` (ticketId, bundledAt, cliVersion), and `artifacts/<stepId>/<repoKey>/<filename>`.
 
-7. **Version mismatch**: `src/index.ts` reports version "0.1.0" while `package.json` says "1.2.0".
+5. **Error handling**: Artifact fetch failures in bundle are caught and warned (not fatal). Command validation uses `process.exit(1)` with clear error messages.
 
-### API Endpoints the CLI Will Consume
-
-| CLI Command | Backend Endpoint | Method | Notes |
-|---|---|---|---|
-| `hlx org current` | `/api/auth/me` | GET | Returns user + org + availableOrganizations |
-| `hlx org list` | `/api/auth/me` | GET | Uses `availableOrganizations` array |
-| `hlx org switch <org>` | `/api/auth/switch-org` | POST | Returns new accessToken; must persist |
-| `hlx tickets list` | `/api/tickets` | GET | Supports `archived`, `statusNotIn`, `sprintId` params |
-| `hlx tickets latest` | `/api/tickets` | GET | Client-side: take first from sorted list |
-| `hlx tickets get <id>` | `/api/tickets/:ticketId` | GET | Full detail with runs, repos, branch |
-| `hlx tickets create` | `/api/tickets` | POST | Body: `{title, description, repositoryIds}` |
-| `hlx tickets rerun <id>` | `/api/tickets/:ticketId/rerun` | POST | Optional body fields |
-| `hlx tickets continue <id>` | `/api/tickets/:ticketId/rerun` | POST | Body: `{continuationContext}` |
-| `hlx tickets artifacts <id>` | `/api/tickets/:ticketId/artifacts` | GET | Returns items + stepArtifactSummary |
-| `hlx tickets artifact <id>` | `/api/tickets/:id/runs/:runId/step-artifacts/:stepId` | GET | Needs `?repoKey=` param |
-| `hlx tickets bundle <id>` | Multiple endpoints | GET | Compose detail + artifacts into local files |
-| `hlx comments list` | `/api/tickets/:ticketId/comments` | GET | Already implemented |
-| `hlx comments post` | `/api/tickets/:ticketId/comments` | POST | Already implemented |
-
-### New Source Files Needed
-
-Based on the existing pattern, the expansion would likely introduce:
-- `src/org/index.ts` - Org command router
-- `src/org/current.ts`, `src/org/list.ts`, `src/org/switch.ts` - Org handlers
-- `src/tickets/index.ts` - Tickets command router
-- `src/tickets/list.ts`, `src/tickets/latest.ts`, `src/tickets/get.ts` - Discovery handlers
-- `src/tickets/create.ts`, `src/tickets/rerun.ts`, `src/tickets/continue.ts` - Action handlers
-- `src/tickets/artifacts.ts`, `src/tickets/bundle.ts` - Artifact/bundle handlers
+6. **Ticket ID resolution**: Shared pattern across tickets commands - supports `--ticket` flag, `HELIX_TICKET_ID` env var, or positional argument.
 
 ## Relevant Files
 
 | File | Role |
 |---|---|
-| `src/index.ts` | CLI entry point, command router (must add org, tickets) |
-| `src/lib/config.ts` | Auth config storage (may need org awareness for switch) |
+| `src/index.ts` | CLI entry point, command router (login, inspect, comments, org, tickets) |
+| `src/lib/config.ts` | Auth config storage with orgId/orgName support |
 | `src/lib/http.ts` | HTTP client with retry, auth, basePath |
-| `src/lib/resolve-repo.ts` | Repo resolution utility (pattern reference) |
-| `src/login.ts` | OAuth/manual login (auth flow context) |
-| `src/comments/index.ts` | Comment router (pattern reference for new groups) |
-| `src/comments/list.ts` | Comment list handler (pattern reference) |
-| `src/comments/post.ts` | Comment post handler (pattern reference) |
-| `src/inspect/index.ts` | Inspect router (pattern reference) |
+| `src/lib/flags.ts` | Shared flag parsing utilities |
+| `src/lib/resolve-repo.ts` | Repo resolution utility (inspect commands) |
+| `src/login.ts` | OAuth/manual login flow |
+| `src/org/index.ts` | Org command router (current, list, switch) |
+| `src/org/current.ts` | Display current org and user |
+| `src/org/list.ts` | List available organizations |
+| `src/org/switch.ts` | Switch org, persist new JWT and org metadata |
+| `src/tickets/index.ts` | Tickets command router (9 subcommands) |
+| `src/tickets/list.ts` | List tickets with filters |
+| `src/tickets/latest.ts` | Get latest ticket detail |
+| `src/tickets/get.ts` | Get ticket detail (branch/repos/runs/merge) |
+| `src/tickets/create.ts` | Create ticket |
+| `src/tickets/rerun.ts` | Rerun ticket |
+| `src/tickets/continue.ts` | Continue ticket with continuationContext |
+| `src/tickets/artifacts.ts` | List artifacts for ticket |
+| `src/tickets/artifact.ts` | Read step artifact content |
+| `src/tickets/bundle.ts` | Bundle ticket context for Codex |
+| `src/comments/index.ts` | Comment command router (pre-existing) |
+| `src/comments/list.ts` | List comments (pre-existing) |
+| `src/comments/post.ts` | Post comment (pre-existing) |
 | `package.json` | Project manifest, scripts, bin config |
-| `tsconfig.json` | TypeScript config (ES2022, Node16) |
+| `tsconfig.json` | TypeScript config (ES2022, Node16, strict) |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |---|---|---|
 | ticket.md | Primary ticket specification | Defined full command surface, filters, constraints, and acceptance criteria |
-| src/index.ts | CLI entry point inspection | Current switch-based router supports login/inspect/comments; new groups must follow same pattern |
-| src/lib/config.ts | Auth config understanding | Stores {apiKey, url} only; org switching needs token persistence strategy |
-| src/lib/http.ts | HTTP client capabilities | Supports retry, auth headers, basePath, queryParams; basePath '/api' needed for new commands |
-| src/comments/index.ts | Existing command pattern | Shows subcommand routing, flag parsing, ticket ID resolution via --ticket/env var |
-| src/comments/list.ts | Data fetch pattern | Shows hxFetch with basePath '/api', response typing, console output formatting |
-| src/comments/post.ts | Write operation pattern | Shows POST with body via hxFetch, positional arg collection |
-| package.json | Build/dep context | Zero prod deps, tsc build, ESM module, bin entry 'hlx' |
+| src/index.ts | CLI entry point inspection | Updated with org+tickets routing, new usage text, version 1.2.0 |
+| src/lib/config.ts | Auth config understanding | HxConfig now includes orgId/orgName; saveConfig persists after org switch |
+| src/lib/http.ts | HTTP client capabilities | basePath '/api' used by all new commands; retry/auth logic unchanged |
+| src/lib/flags.ts | Flag parsing utilities | getFlag, hasFlag, getPositionalArgs, requireFlag used throughout |
+| src/org/*.ts | Org command implementation | 3 commands, all using GET /api/auth/me or POST /api/auth/switch-org |
+| src/tickets/*.ts | Ticket command implementation | 9 commands covering discovery, actions, artifacts, and bundling |
+| package.json | Build/dep context | Zero prod deps, tsc build, ESM module, typecheck passes |
+| typecheck output | Quality gate verification | tsc --noEmit produces 0 errors |
