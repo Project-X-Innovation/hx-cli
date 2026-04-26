@@ -1,0 +1,55 @@
+{
+  "questions": [
+    "What is the correct implementation step ordering to avoid dependency conflicts?",
+    "Which files need to be created vs modified?",
+    "How should the auto-update hook be positioned relative to command dispatch in src/index.ts?",
+    "What verification checks can be run by an automated agent in this environment?",
+    "Does helix-global-server need any implementation plan artifacts?"
+  ],
+  "answers": [
+    {
+      "answer": "The config system fix (Step 1) must come first because all subsequent update modules depend on persisting metadata to ~/.hlx/config.json. The version reader (Step 2) and SHA check (Step 3) are independent foundations. The self-update executor (Step 4) depends on the SHA check. The update command handler (Step 5) depends on all prior modules. The CLI entry point wiring (Step 6) depends on Steps 2 and 5. The prepare script (Step 7) is independent but placed last for clean sequencing.",
+      "evidence": [
+        "src/lib/config.ts:35-38 — saveConfig is lossy and must be fixed before any code persists autoUpdate or installSource",
+        "tech-research/tech-research.md — install-source metadata and autoUpdate both persist via saveConfig",
+        "src/index.ts:28-53 — switch dispatcher is the wiring target, depends on update module exports"
+      ]
+    },
+    {
+      "answer": "Modified files: src/lib/config.ts (extend type + fix saveConfig), src/index.ts (add update command, auto-update hook, fix version), package.json (add prepare script). New files: src/update/version.ts, src/update/check.ts, src/update/perform.ts, src/update/index.ts. Total: 3 modified, 4 new.",
+      "evidence": [
+        "ticket.md Allowed Files: src/index.ts, src/lib/config.ts, new src/update/* files, package.json",
+        "tech-research/tech-research.md Dependencies section: lists exact new and modified files",
+        "tsconfig.json include=['src'] — new files under src/ are auto-included in compilation"
+      ]
+    },
+    {
+      "answer": "The auto-update hook (checkAutoUpdate) must be inserted after argument parsing but before the switch statement in src/index.ts. It should be guarded to skip for --version, -v, update, and --help commands, which should execute immediately without update overhead. The hook must also not require authentication (it doesn't need apiKey/url), so it runs independently of requireConfig().",
+      "evidence": [
+        "src/index.ts:8-9 — args parsed at top level before try block",
+        "src/index.ts:27-53 — try/switch is the dispatch point",
+        "ticket Required Behavior #4 — 'every CLI invocation must perform a lightweight GitHub main HEAD check before executing the requested command'",
+        "tech-research Technical Decision #7 — 'Insert the auto-update check after parsing the command but before the switch dispatcher'"
+      ]
+    },
+    {
+      "answer": "Nine verification checks are defined. Static checks (typecheck, build, file existence, package.json parse) are fully runnable. Behavioral checks (version output, config round-trip, update command recognition, auto-update skip behavior) are runnable by building the CLI and executing it via node dist/index.js. The git ls-remote check depends on network access to github.com, which may or may not be available in the sandbox. All checks are unconditional — network dependency is noted in Pre-conditions.",
+      "evidence": [
+        "Verified: npx tsc --noEmit exits 0 in current sandbox (typecheck baseline confirmed)",
+        "Verified: node_modules/ exists with typescript installed (build tooling available)",
+        "Verified: git is available in sandbox (git ls-remote can be attempted)",
+        "/tmp/helix-inspect/manifest.json — runtime inspection only for helix-global-server (not relevant to CLI)"
+      ]
+    },
+    {
+      "answer": "No. helix-global-server is context-only with no changes needed. The ticket explicitly forbids server-side CLI update logic, and diagnosis/scout confirmed no relevant server code exists. Implementation plan artifacts are written only for helix-cli.",
+      "evidence": [
+        "repo-guidance.json — helix-global-server intent is 'context'",
+        "ticket.md Forbidden Changes — 'Do not add server version endpoints or server-side CLI update logic'",
+        "diagnosis/apl.json answer 5 — 'The ticket explicitly forbids server-side CLI update logic... All changes are contained in helix-cli'"
+      ]
+    }
+  ],
+  "statement": "The implementation plan for HLX-316 is fully defined with 7 atomic, sequenced steps covering all required changes in helix-cli. The plan follows tech-research decisions exactly: git ls-remote for SHA checks, npm install -g from GitHub for self-update, read-merge-write config pattern, readFileSync + import.meta.url for version reading, and a prepare script for git-based npm install. Step ordering ensures the config system fix (foundation) comes first, followed by independent modules, then wiring, then package.json. The verification plan includes 9 required checks covering typecheck, build, version output, config persistence, SHA check connectivity, update command recognition, prepare script presence, and auto-update skip behavior. helix-global-server requires no changes.",
+  "followups": []
+}
