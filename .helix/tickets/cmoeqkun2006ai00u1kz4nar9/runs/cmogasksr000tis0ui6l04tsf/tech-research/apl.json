@@ -1,66 +1,80 @@
 {
   "questions": [
-    "Q1: What is the right architecture for expanding the CLI with org and ticket commands while maintaining zero production dependencies?",
-    "Q2: How should the --user ticket filter resolve user input (email/name) to a backend reporterUserId?",
-    "Q3: What should the deterministic bundle folder structure look like for Codex consumption?",
-    "Q4: How should org switching handle token lifecycle and config persistence?",
-    "Q5: What is the minimal backend change needed and what are the cross-repo deployment considerations?",
-    "Q6: Should flag parsing utilities be consolidated or kept duplicated per command group?"
+    "Q1: What is the right CLI architecture pattern for adding 13 new command handlers while maintaining zero production dependencies?",
+    "Q2: How should org switching persist state so all subsequent commands use the switched org?",
+    "Q3: What is the correct technical approach for the --user filter given the backend only stores reporterUserId, not email/name?",
+    "Q4: How should the --status positive filter work when the backend only supports statusNotIn?",
+    "Q5: Is the continue command correctly implemented as a rerun with continuationContext rather than a new concept?",
+    "Q6: What bundle format supports deterministic Codex context loading?",
+    "Q7: Are there blocking dependency or compatibility risks?"
   ],
   "answers": [
     {
-      "answer": "Extend the existing switch-based routing pattern. Add two new command groups (src/org/ and src/tickets/) following the same architecture as src/comments/ and src/inspect/: a group router (index.ts) with subcommand dispatch, individual handler files per command, and shared hxFetch with basePath '/api'. This requires ~12-15 new source files. A CLI framework (commander/yargs) was rejected because it violates the zero-production-dependency constraint. The existing manual pattern is proven across 3 command groups and sufficient for the expansion scope.",
+      "answer": "Extend the existing manual switch-based command routing pattern. src/index.ts dispatches to command group routers (src/org/index.ts, src/tickets/index.ts), which dispatch to individual handler files. This maintains the zero-deps constraint, follows established patterns from comments/ and inspect/, and keeps the codebase consistent. Each handler is a single file with a single exported async function. Flag parsing is consolidated in src/lib/flags.ts.",
       "evidence": [
-        "helix-cli/src/index.ts:28-53 - switch-based routing for login/inspect/comments",
-        "helix-cli/src/comments/index.ts - subcommand router pattern with getFlag and switch dispatch",
-        "helix-cli/src/inspect/index.ts - same subcommand pattern with getFlag/getPositionalArgs",
-        "helix-cli/package.json - zero production dependencies, only @types/node and typescript as devDeps",
-        "product/product.md - Key Design Principle 4: 'Zero production dependencies'"
+        "src/index.ts: switch on command -> runOrg, runTickets, runComments, runInspect, runLogin (verified via direct code inspection)",
+        "src/tickets/index.ts: switch on subcommand -> 9 individual handlers (verified via direct code inspection)",
+        "src/org/index.ts: switch on subcommand -> current, list, switch (verified via direct code inspection)",
+        "package.json: zero production dependencies - only @types/node and typescript as devDependencies (verified)",
+        "Product spec: 'Zero production dependencies: Node.js built-in APIs only. No CLI framework.'"
       ]
     },
     {
-      "answer": "The CLI fetches org members via GET /api/organization/members (returns [{id, email, name}]), then resolves the user input with exact email match first, falling back to case-insensitive name match. If no match, error with available users listed. The resolved user ID is sent as reporterUserId query param to GET /api/tickets. Fuzzy/partial matching was rejected as adding ambiguity inappropriate for CLI tooling.",
+      "answer": "Org switch calls POST /api/auth/switch-org, receives a new accessToken JWT scoped to the target org, and replaces the stored apiKey in ~/.hlx/config.json. It also persists orgId and orgName for display in hlx org current. Org is resolved by name (case-insensitive match against availableOrganizations from /auth/me) or directly by CUID pattern (/^c[a-z0-9]{20,}$/i). Write-on-success: config only updated after successful response.",
       "evidence": [
-        "helix-global-server/src/controllers/organization-controller.ts:5-19 - getOrganizationMembers returns {members: [{id, email, name}]}",
-        "helix-global-server/prisma/schema.prisma:306 - Ticket model has reporterUserId String field",
-        "helix-global-server/src/services/ticket-service.ts:1522-1530 - where-clause needs reporterUserId addition"
+        "src/org/switch.ts: saveConfig({...config, apiKey: data.accessToken, orgId: data.organization.id, orgName: data.organization.name}) (verified via direct inspection)",
+        "src/org/switch.ts: isCuid check /^c[a-z0-9]{20,}$/i for direct ID resolution (verified)",
+        "src/lib/config.ts: HxConfig type includes orgId?: string, orgName?: string (verified)",
+        "Server: POST /api/auth/switch-org returns {accessToken, organization: {id, name}, ...}"
       ]
     },
     {
-      "answer": "Bundle structure: <out-dir>/ticket.json (full ticket detail), <out-dir>/artifacts/<step-id>/<repo-key>/<filename> (raw artifact files), <out-dir>/manifest.json (bundle metadata with ticket ID, timestamp, CLI version). This mirrors the backend's stepArtifactSummary structure and provides deterministic, reproducible output. A flat layout was rejected as ambiguous when multiple repos/steps share similar filenames.",
+      "answer": "Two-step resolution: (1) CLI calls GET /api/organization/members to get the member list, resolves the --user input to a reporterUserId by trying exact email match (case-insensitive) then case-insensitive name match, (2) passes reporterUserId as a query parameter to GET /api/tickets. The server-side filter is a ~5-line change (conditional Prisma WHERE clause). On no match, the CLI lists available members and exits with error.",
       "evidence": [
-        "helix-global-server/src/services/ticket-service.ts:1996-1999 - stepArtifactSummary returns [{stepId, repoKey}]",
-        "helix-global-server/src/services/ticket-service.ts:2048-2051 - step artifacts response: {stepId, repoKey, files[{name, content, contentType}]}",
-        "product/product.md - 'deterministic local context folder for Codex consumption'"
+        "src/tickets/list.ts: resolveUserId() calls /organization/members, matches by email.toLowerCase() then name.toLowerCase() (verified via direct inspection)",
+        "src/tickets/list.ts: queryParams.reporterUserId = await resolveUserId(config, userInput) (verified)",
+        "Server ticket-controller.ts lines 206-209: parses reporterUserId from req.query (verified via direct inspection)",
+        "Server ticket-service.ts line 1530: ...(options?.reporterUserId ? { reporterUserId: options.reporterUserId } : {}) (verified)",
+        "Runtime DB: reporterUserId column exists, 381/381 tickets populated (from diagnosis)"
       ]
     },
     {
-      "answer": "Write-on-success only: call POST /api/auth/switch-org, and only overwrite apiKey in config with the new accessToken if the response succeeds. Also store orgId and orgName from the response for hlx org current without a network call. The config type extends to {apiKey, url, orgId?, orgName?} - backward-compatible since the new fields are optional. Existing env-var priority (HELIX_API_KEY, HELIX_URL) is unchanged.",
+      "answer": "Client-side filtering. The backend GET /api/tickets only supports statusNotIn (negative filter). The CLI fetches the full ticket list and filters by status.toLowerCase() match. This is an acceptable MVP trade-off at current scale (~381 tickets). Adding server-side positive status filter would require additional server changes for minimal gain.",
       "evidence": [
-        "helix-global-server/src/services/org-switch-service.ts:34-57 - switchOrganization returns {accessToken, user, organization, availableOrganizations, expiresIn}",
-        "helix-cli/src/lib/config.ts:35-38 - saveConfig writes config to ~/.hlx/config.json",
-        "helix-cli/src/lib/config.ts:13-19 - loadConfig checks env vars first, then config file",
-        "ticket.md - 'Do not redesign auth'"
+        "src/tickets/list.ts: items = items.filter(t => t.status.toLowerCase() === statusFilter.toLowerCase()) (verified via direct inspection)",
+        "Server ticket-service.ts: only statusNotIn in WHERE clause, no positive status param (verified via direct inspection)",
+        "Product spec: '--status positive filter is client-side because the backend only supports statusNotIn. This is an acceptable trade-off for MVP.'"
       ]
     },
     {
-      "answer": "The only backend change is adding reporterUserId query parameter support to GET /api/tickets. This requires ~3 lines: (1) parse reporterUserId from req.query in ticket-controller.ts getTickets function, (2) add reporterUserId to the service options type, (3) add reporterUserId condition to the Prisma where-clause. No schema migration needed - the column exists. For deployment timing, the extra query param is ignored by the current backend (not an error), so the CLI can ship before the backend update. The --user filter simply becomes a no-op until the backend is updated.",
+      "answer": "Yes. src/tickets/continue.ts calls POST /api/tickets/:ticketId/rerun with {continuationContext} from positional args joined with spaces. The server rerun endpoint already accepts continuationContext as an optional string (max 10000 chars) stored in SandboxRun.continuationContext. No separate backend continue concept was created, satisfying the non-negotiable constraint.",
       "evidence": [
-        "helix-global-server/src/controllers/ticket-controller.ts:190-208 - getTickets parses archived, statusNotIn, sprintId but not reporterUserId",
-        "helix-global-server/src/services/ticket-service.ts:1479 - options type already has userId (for comments), needs reporterUserId",
-        "helix-global-server/src/services/ticket-service.ts:1522-1530 - where-clause uses organizationId, isArchived, status, sprintFilter only",
-        "helix-global-server/prisma/schema.prisma:306 - Ticket.reporterUserId field exists"
+        "src/tickets/continue.ts: hxFetch(config, `/tickets/${ticketId}/rerun`, {method: 'POST', body: {continuationContext}}) (verified via direct inspection)",
+        "src/tickets/continue.ts: continuationContext = getPositionalArgs(args, ['--ticket']).join(' ').trim() (verified)",
+        "Ticket constraint: 'Do not create a separate backend continue concept'",
+        "Server: POST /api/tickets/:ticketId/rerun accepts {continuationContext?: string}"
       ]
     },
     {
-      "answer": "Consolidate flag parsing into a shared src/lib/flags.ts module. getFlag() is currently duplicated in src/comments/index.ts, src/comments/list.ts, and src/inspect/index.ts. The new module exports getFlag, hasFlag (for boolean flags like --archived), getPositionalArgs, and requireFlag. All existing and new command files import from this shared module. This eliminates duplication across ~15+ files that would otherwise each copy the utility.",
+      "answer": "Deterministic directory: ticket.json (full ticket detail), manifest.json (ticketId, bundledAt ISO timestamp, cliVersion '1.2.0'), artifacts/<stepId>/<repoKey>/<filename>. This layout provides machine-readable ticket context, provenance metadata, and organized artifacts mirroring the backend's stepArtifactSummary structure. Artifact fetch failures are warned (not fatal) producing partial bundles.",
       "evidence": [
-        "helix-cli/src/comments/index.ts:5-9 - getFlag duplicate #1",
-        "helix-cli/src/comments/list.ts:15-19 - getFlag duplicate #2",
-        "helix-cli/src/inspect/index.ts:7-11 - getFlag duplicate #3 (plus getPositionalArgs:13-20)"
+        "src/tickets/bundle.ts: writeFileSync(join(outDir, 'ticket.json'), ...) (verified via direct inspection)",
+        "src/tickets/bundle.ts: manifest = {ticketId, bundledAt: new Date().toISOString(), cliVersion: '1.2.0'} (verified)",
+        "src/tickets/bundle.ts: join(outDir, 'artifacts', entry.stepId, entry.repoKey) for artifact dirs (verified)",
+        "src/tickets/bundle.ts: catch block warns 'Could not fetch artifact' and continues (verified)"
+      ]
+    },
+    {
+      "answer": "No blocking dependency or compatibility risks. The CLI requires Node.js >= 18 (for built-in fetch). Zero production dependencies avoids npm supply chain risks. TypeScript 6.x with strict mode provides compile-time safety (typecheck passes with 0 errors). The server change is backward-compatible (optional parameter with empty-object spread when absent). Cross-repo deployment is also safe: the extra reporterUserId query param is silently ignored by Express if the backend hasn't been updated yet.",
+      "evidence": [
+        "package.json: engines.node >= 18, no dependencies field (verified)",
+        "tsconfig.json: strict: true, target ES2022, module Node16 (verified)",
+        "tsc --noEmit passes with 0 errors (from diagnosis evidence)",
+        "Server: conditional spread produces {} when reporterUserId undefined (verified via direct inspection)",
+        "Express silently ignores unknown query parameters (standard behavior)"
       ]
     }
   ],
-  "statement": "The CLI expansion follows the existing switch-based routing and zero-dependency architecture. Two new command groups (src/org/ with 3 commands and src/tickets/ with 10+ commands) use the proven subcommand pattern from comments/inspect. Config extends minimally with optional orgId/orgName fields for org switching UX. The --user filter resolves users via the org members endpoint (email then name match) and sends reporterUserId to the backend. Bundle output uses a deterministic ticket.json + artifacts/<step>/<repo>/<file> + manifest.json layout. The only backend change is adding reporterUserId to the GET /api/tickets where-clause (~3 lines, no migration). Flag parsing is consolidated into a shared module. All decisions are grounded in existing code patterns and the zero-dependency constraint.",
+  "statement": "The helix-cli expansion uses the existing manual switch-based routing pattern with zero production dependencies. 13 new source files across src/org/ (4) and src/tickets/ (10) implement all 12 CLI commands as thin HTTP wrappers over pre-existing Helix backend endpoints. The only server change is ~5 lines adding reporterUserId as an optional query parameter on GET /api/tickets. Key technical decisions: org switch replaces stored JWT with org-scoped token; --user resolves via /organization/members + server-side reporterUserId filter; --status filters client-side; continue reuses rerun endpoint; bundle writes deterministic directory with graceful artifact failure handling; flag parsing consolidated in shared module. No blocking risks; deferred items include pagination, --json output, server-side status filter, and test suite.",
   "followups": []
 }

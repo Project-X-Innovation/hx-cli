@@ -1,273 +1,249 @@
-# Tech Research: Turn helix-cli into an org-aware Helix workbench for Codex
+# Tech Research: helix-cli
 
 ## Technology Foundation
 
-- **Runtime**: Node.js >= 18 (per `package.json` engines field)
-- **Language**: TypeScript 6.x, strict mode, ESM (`"module": "Node16"`)
-- **Build**: `tsc` only; no bundler. Output to `dist/`, bin entry at `dist/index.js`
-- **Dependencies**: Zero production dependencies (only `@types/node` and `typescript` as devDeps). This constraint is maintained for all new code.
-- **HTTP Client**: Built-in `fetch` API (Node 18+) via existing `hxFetch` wrapper in `src/lib/http.ts`
-- **Filesystem**: Node.js built-in `fs`, `path`, `os` modules for config and bundle output
-- **Backend**: helix-global-server (Express 5 + Prisma + Zod). Requires only a ~3-line change to expose `reporterUserId` on ticket listing.
+| Aspect | Value |
+|---|---|
+| Runtime | Node.js >= 18 |
+| Language | TypeScript 6.x, strict mode |
+| Module system | ESM (`"type": "module"`, Node16 resolution, `.js` extensions) |
+| Target | ES2022 |
+| Dependencies | Zero production dependencies; `@types/node` + `typescript` dev-only |
+| Build | `tsc` (produces `dist/` output) |
+| Quality gates | `tsc --noEmit` (typecheck, passes with 0 errors); no lint or test configured |
+| Distribution | `"bin": { "hlx": "dist/index.js" }` via npm package `@projectxinnovation/helix-cli` |
+| Version | 1.2.0 (bumped from 0.1.0) |
+
+The CLI uses only Node.js built-in APIs (`fs`, `path`, `os`, `fetch`) and has zero npm production dependencies. This is a deliberate architectural constraint maintained by this ticket.
 
 ## Architecture Decision
 
-### Option A: CLI Framework (commander/yargs) - REJECTED
+### Options Considered
 
-Introduce a CLI framework like `commander` or `yargs` for parsing and routing.
+| Option | Description | Pros | Cons |
+|---|---|---|---|
+| **A. Manual switch-based routing (chosen)** | Extend the existing manual command dispatch pattern: `src/index.ts` switch -> command group routers (`src/org/index.ts`, `src/tickets/index.ts`) -> individual handler files | Zero deps maintained; consistent with existing `comments/` and `inspect/` patterns; simple and auditable | Manual flag parsing is verbose; no built-in help generation or argument validation |
+| B. CLI framework (commander/yargs) | Adopt a CLI framework for structured command parsing, help generation, and argument validation | Better DX for complex commands; auto-generated help; type-safe args | Adds production dependency (violates zero-deps constraint); migration cost for existing commands; framework lock-in |
+| C. Monolithic single-file handler | Add all new commands directly in `src/index.ts` | Minimal new files | Unreadable at scale; no separation of concerns; hard to maintain |
 
-- **Pro**: Automatic help generation, flag parsing, validation, subcommand nesting
-- **Con**: Violates the zero-production-dependency constraint. The existing manual pattern works well and is already battle-tested across 3 command groups (login, inspect, comments).
-- **Rejected because**: The ticket explicitly requires zero production dependencies. The existing manual routing pattern is sufficient for the expansion scope.
+### Chosen Option: A. Manual switch-based routing
 
-### Option B: Extend Existing Patterns - CHOSEN
-
-Add new command groups (`org`, `tickets`) following the same architecture as existing `comments` and `inspect`:
-
-1. **Top-level router**: `src/index.ts` switch-case adds `"org"` and `"tickets"` cases
-2. **Group router**: `src/org/index.ts` and `src/tickets/index.ts` handle subcommand dispatch
-3. **Individual handlers**: One file per command (e.g., `src/tickets/list.ts`, `src/org/switch.ts`)
-4. **Shared HTTP**: All commands use `hxFetch` with `basePath: "/api"`
-5. **Shared flag parsing**: Extract `getFlag()`, `getPositionalArgs()`, and `hasFlag()` into `src/lib/flags.ts` to eliminate duplication across `comments/index.ts`, `comments/list.ts`, `inspect/index.ts`, and all new command files
-
-**Rationale**: Maintains zero-dep constraint, follows established patterns (minimizes learning curve for contributors), and keeps the codebase consistent. The manual switch-based routing is adequate for ~14 subcommands.
-
-### Option C: Config Redesign for Org Awareness - REJECTED
-
-Redesign config schema to store org ID, org name, token type, multi-org tokens, etc.
-
-- **Rejected because**: The ticket says "do not redesign auth." The existing `{apiKey, url}` schema is sufficient. On org switch, POST `/api/auth/switch-org` returns a new `accessToken` (JWT encoding the new orgId). The CLI simply overwrites `apiKey` with the new JWT. Optionally storing org name/id is a minor UX enhancement, not a redesign.
-
-### Chosen Approach: Minimal Config Extension
-
-Extend `HxConfig` type to:
-```
-{ apiKey: string; url: string; orgId?: string; orgName?: string }
-```
-- `orgId` and `orgName` are set on successful org switch (allows `hlx org current` without a network call)
-- `loadConfig()` reads them if present but does not require them (backward-compatible)
-- `saveConfig()` writes them when provided
-- Existing env-var priority (`HELIX_API_KEY`, `HELIX_URL`) remains unchanged
+**Rationale**: The ticket explicitly requires "zero production dependencies" (confirmed in product spec and existing architecture). The manual dispatch pattern is already established in `src/comments/index.ts` and `src/inspect/index.ts`. Extending it to `src/org/` and `src/tickets/` is the smallest correct change. The 13 new source files follow a clean 1-file-per-handler pattern that is easy to navigate.
 
 ## Core API/Methods
 
-### Backend Endpoints Consumed by New CLI Commands
+### CLI-to-Backend API Mapping
 
-| CLI Command | Method | Endpoint | Key Request Params | Key Response Fields |
-|---|---|---|---|---|
-| `hlx org current` | GET | `/api/auth/me` | - | `user.{id,email,name,organizationId}`, `organization.{id,name}` |
-| `hlx org list` | GET | `/api/auth/me` | - | `availableOrganizations[{id,name}]` |
-| `hlx org switch` | POST | `/api/auth/switch-org` | `{organizationId}` | `{accessToken, user, organization, availableOrganizations}` |
-| `hlx tickets list` | GET | `/api/tickets` | `?archived&statusNotIn&sprintId&reporterUserId` | `{items[{id,title,status,shortId,branchName,reporter,...}]}` |
-| `hlx tickets latest` | GET | `/api/tickets` | (same, client takes first) | (same, first item) |
-| `hlx tickets get` | GET | `/api/tickets/:ticketId` | - | Full ticket detail incl. `runs[]`, `repositories[]`, `branchName`, `mergeQueueStatus` |
-| `hlx tickets create` | POST | `/api/tickets` | `{title, description, repositoryIds[]}` | `{ticket:{id,title,status,repositories[],runId}}` |
-| `hlx tickets rerun` | POST | `/api/tickets/:ticketId/rerun` | `{}` (empty body) | `{started, runId, ticket}` |
-| `hlx tickets continue` | POST | `/api/tickets/:ticketId/rerun` | `{continuationContext}` | (same as rerun) |
-| `hlx tickets artifacts` | GET | `/api/tickets/:ticketId/artifacts` | `?runId` (optional) | `{items[{id,label,repoUrl,runId,branch,path,url}], stepArtifactSummary[{stepId,repoKey}]}` |
-| `hlx tickets artifact` | GET | `/api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId` | `?repoKey` | `{stepId, repoKey, files[{name,content,contentType}]}` |
-| `hlx tickets bundle` | Multiple GETs | (ticket detail + artifacts + step artifacts) | - | Composed locally |
-| `--user` resolution | GET | `/api/organization/members` | - | `{members[{id,email,name}]}` |
+All CLI commands are thin wrappers over existing Helix backend endpoints. The only new endpoint behavior is `reporterUserId` on `GET /api/tickets`.
 
-### Backend Change: reporterUserId Filter
+| CLI Command | HTTP Method | Endpoint | Notes |
+|---|---|---|---|
+| `hlx org current` | GET | `/api/auth/me` | Returns user + org + availableOrgs |
+| `hlx org list` | GET | `/api/auth/me` | Extracts `availableOrganizations` array |
+| `hlx org switch <org>` | POST | `/api/auth/switch-org` | Body: `{organizationId}`. Returns new `accessToken` |
+| `hlx tickets list` | GET | `/api/tickets` | Query: `archived`, `statusNotIn`, `sprintId`, `reporterUserId` |
+| `hlx tickets latest` | GET | `/api/tickets` | Takes first item from list (sorted by `updatedAt desc`) |
+| `hlx tickets get <id>` | GET | `/api/tickets/:ticketId` | Full detail: branch, repos, runs, merge status |
+| `hlx tickets create` | POST | `/api/tickets` | Body: `{title, description, repositoryIds}` |
+| `hlx tickets rerun <id>` | POST | `/api/tickets/:ticketId/rerun` | Body: `{}` |
+| `hlx tickets continue <id>` | POST | `/api/tickets/:ticketId/rerun` | Body: `{continuationContext}` |
+| `hlx tickets artifacts <id>` | GET | `/api/tickets/:ticketId/artifacts` | Returns `items[]` + `stepArtifactSummary[]` |
+| `hlx tickets artifact <id>` | GET | `/api/tickets/:id/runs/:rid/step-artifacts/:sid` | Query: `repoKey`. Returns `files[{filename, content}]` |
+| `hlx tickets bundle <id>` | Multiple | GET ticket detail + GET artifacts + GET each step artifact | Writes deterministic local directory |
+| `hlx comments post` | POST | `/api/tickets/:id/comments` | Pre-existing |
 
-The only backend change needed is adding `reporterUserId` support to `GET /api/tickets`:
+### Shared Infrastructure
 
-1. **ticket-controller.ts:190-208** (`getTickets`): Parse `reporterUserId` from `req.query`, pass to service options
-2. **ticket-service.ts:1522-1530** (`listTicketsForOrganization`): Add `...(options?.reporterUserId ? { reporterUserId: options.reporterUserId } : {})` to the Prisma where-clause
-3. **ticket-service.ts:1479** (options type): Add `reporterUserId?: string` to the options type
-
-The `Ticket` model already has `reporterUserId` as a String field (schema.prisma:306). No schema migration needed. The `userId` option already exists but is used only for comment unread tracking (lines 1626-1629); `reporterUserId` is a separate filter concern.
+- **`hxFetch(config, path, options)`** (`src/lib/http.ts`): Unified HTTP client with 3-attempt retry, exponential backoff (2s base + jitter), 30s timeout, Retry-After support for 429s. Auth dispatch: `hxi_*` -> `X-API-Key`, else -> `Bearer`. New commands use `basePath: "/api"` (vs. `/api/inspect` for inspection commands).
+- **`loadConfig() / saveConfig()`** (`src/lib/config.ts`): Persists `{apiKey, url, orgId?, orgName?}` to `~/.hlx/config.json`. Env vars (`HELIX_API_KEY`, `HELIX_URL`) take priority. Org switch replaces `apiKey` with new session JWT.
+- **`getFlag() / hasFlag() / requireFlag() / getPositionalArgs()`** (`src/lib/flags.ts`): Consolidated manual `indexOf`-based flag parsing shared across all command groups.
+- **`resolveTicketId(args)`** (`src/tickets/index.ts`): Resolves ticket ID from `--ticket` flag -> `HELIX_TICKET_ID` env var -> first positional arg.
 
 ## Technical Decisions
 
-### 1. `--user` Resolution Strategy
+### 1. Auth model: Session JWT for ticket routes, inspection tokens for inspect/comments
 
-**Decision**: Exact-match on email first; fall back to case-insensitive name match.
+**Decision**: The CLI stores a single `apiKey` field. When the token starts with `hxi_`, it sends `X-API-Key`; otherwise it sends `Authorization: Bearer`. Ticket CRUD routes require session JWTs (behind `requireAuth` middleware). Inspection and comment routes accept either token type.
 
-**Implementation**:
-1. CLI calls `GET /api/organization/members` to fetch `[{id, email, name}]`
-2. Try exact email match: `members.find(m => m.email === userInput)`
-3. If no match, try case-insensitive name match: `members.find(m => m.name?.toLowerCase() === userInput.toLowerCase())`
-4. If still no match, error with "User not found. Available users: ..."
-5. Pass the resolved `id` as `reporterUserId` query param to `GET /api/tickets`
+**Rationale**: This matches the existing server auth architecture with zero changes. OAuth login produces session JWTs that work for all routes. Manual login (`hlx login --manual`) with `hxi_` keys works only for inspect/comments (the original scope).
 
-**Rejected alternative**: Fuzzy/partial matching. Adds complexity and ambiguity; exact match is clearer and more predictable for a CLI tool.
+**Rejected alternative**: Refactoring auth to make inspection tokens work for ticket CRUD. This would violate the "do not redesign auth" constraint.
 
-### 2. Bundle Folder Structure
+### 2. Org switch: Replace stored JWT with new org-scoped token
 
-**Decision**: Deterministic nested layout:
+**Decision**: `hlx org switch` calls `POST /api/auth/switch-org`, receives a new `accessToken` JWT scoped to the target org, and replaces the stored `apiKey` in `~/.hlx/config.json`. Also persists `orgId` and `orgName` for display. Org is resolved by name (via `/auth/me` availableOrganizations) or directly by CUID.
 
-```
-<out-dir>/
-  ticket.json              # Full ticket detail (GET /api/tickets/:id response)
-  artifacts/
-    <step-id>/
-      <repo-key>/
-        <filename>         # Raw artifact file content
-  manifest.json            # Bundle metadata (ticket ID, bundle timestamp, CLI version)
-```
+**Rationale**: The server issues new JWTs with `orgId` in the payload on org switch. The CLI must store this new token because all subsequent API calls need to authenticate against the new org. Write-on-success only: config is only updated after a successful switch.
 
-**Rationale**:
-- `ticket.json` gives Codex the full ticket context (title, description, branch, repos, runs, status)
-- Artifacts organized by step/repo mirror the backend's `stepArtifactSummary` structure
-- `manifest.json` provides provenance metadata for deterministic reproducibility
-- Files use the original filenames from the step-artifacts response (`files[].name`)
+**Risk**: Token TTL is 24h (configurable via `ACCESS_TOKEN_TTL_MINUTES`). No refresh flow exists; expired tokens fail all commands. Users must re-login. Accepted as out of scope per product spec.
 
-**Rejected alternative**: Flat file layout (all artifacts in one directory). Too ambiguous when multiple repos/steps share similar filenames.
+### 3. `--user` filter: Client-side user resolution + server-side `reporterUserId` query
 
-### 3. `hlx tickets latest` Implementation
+**Decision**: The CLI resolves `--user <email-or-name>` to a `reporterUserId` by calling `GET /api/organization/members`. It tries exact email match first, then case-insensitive name match. The resolved ID is sent as a query parameter to `GET /api/tickets?reporterUserId=<id>` (new server-side filter).
 
-**Decision**: Client-side (take first item from the sorted ticket list response).
+**Rationale**: The backend had no user resolution endpoint that accepts email/name and returns a user ID for filtering. The two-step approach (resolve user -> filter tickets) uses two existing endpoints with one ~5-line server change to accept `reporterUserId`. This is the minimal path.
 
-The backend already returns tickets sorted by `updatedAt: "desc"`. The CLI fetches the list and takes `items[0]`.
+**Rejected alternative**: Fuzzy/partial matching -- adds ambiguity inappropriate for CLI tooling. Also rejected: server-side email/name resolution -- mixes concerns in the ticket controller.
 
-**Rationale**: Avoids adding a backend endpoint for a convenience shortcut. The list response includes enough data for a detail view. If ticket volume becomes a concern, the backend can later accept a `limit` query param.
+### 4. `--status` filter: Client-side positive match
 
-**Rejected alternative**: Dedicated backend endpoint. Over-engineering for MVP; the sorted list already provides this.
+**Decision**: The `--status` flag filters tickets client-side because the backend `GET /api/tickets` only supports `statusNotIn` (negative filter), not a positive `status` filter.
 
-### 4. Token Lifecycle on Org Switch
+**Rationale**: Adding a server-side positive status filter would require additional server changes for minimal gain at current ticket volumes (~381 tickets). The client-side approach is a pragmatic MVP trade-off.
 
-**Decision**: Write-on-success only.
+**Trade-off**: This fetches the full ticket list before filtering. Acceptable at current scale; documented as a future optimization opportunity.
 
-1. Call `POST /api/auth/switch-org` with `{organizationId}`
-2. Only if response is successful (200), overwrite `apiKey` in config with the new `accessToken`
-3. Also persist `orgId` and `orgName` from the response for UX
+### 5. `continue` command: Reuse `rerun` endpoint with `continuationContext`
 
-**Rationale**: If the request fails, the existing token remains valid. The user does not need to re-login after a failed switch attempt.
+**Decision**: `hlx tickets continue <id> "context"` calls `POST /api/tickets/:id/rerun` with `{continuationContext}` in the body. The server's rerun endpoint already accepts `continuationContext?: string` (max 10000 chars, stored in `SandboxRun.continuationContext`).
 
-### 5. Auth Error Handling for hxi_ Keys
+**Rationale**: Non-negotiable constraint: "Do not create a separate backend 'continue' concept." The rerun endpoint already supports this exact behavior. The CLI simply exposes it as a user-friendly command. Positional args after the ticket ID are joined with spaces to form the context string.
 
-**Decision**: When a command requires session auth and the stored token starts with `hxi_`, surface a clear error before making the request.
+### 6. Bundle format: Deterministic local directory
 
-```
-Error: This command requires OAuth authentication. 
-Your current session uses an inspection key (hxi_...).
-Run `hlx login <server-url>` to authenticate with OAuth.
-```
+**Decision**: `hlx tickets bundle <id> --out <dir>` writes:
+- `ticket.json` -- full ticket detail (raw JSON from GET /api/tickets/:id)
+- `manifest.json` -- `{ticketId, bundledAt, cliVersion}` (cliVersion hardcoded as "1.2.0")
+- `artifacts/<stepId>/<repoKey>/<filename>` -- step artifact content files
 
-**Rationale**: The backend returns a generic 401/403 for inspection keys on ticket routes. A client-side pre-check provides a better UX by directing the user to the fix immediately.
+**Rationale**: Codex/AI agents need a predictable, self-contained directory layout. The `manifest.json` provides provenance. Artifact files are organized by step and repo, mirroring the backend's `stepArtifactSummary` structure. Partial bundles with warnings are acceptable.
 
-### 6. Flag Parsing Consolidation
+**Rejected alternative**: Flat file layout -- ambiguous when multiple repos/steps share similar filenames.
 
-**Decision**: Extract shared flag utilities into `src/lib/flags.ts`.
+### 7. Error handling: Graceful degradation for artifact fetches
 
-Functions:
-- `getFlag(args, flag)` — returns flag value or undefined
-- `hasFlag(args, flag)` — returns boolean for presence-only flags (e.g., `--archived`)
-- `getPositionalArgs(args, excludeFlags)` — returns non-flag args
-- `requireFlag(args, flag, errorMsg)` — getFlag + error if missing
+**Decision**: Bundle artifact fetch failures log a warning to stderr and continue (not fatal). All other command errors use `process.exit(1)` with clear error messages. Missing ticket ID errors list the three resolution options (--ticket, HELIX_TICKET_ID, positional).
 
-**Rationale**: `getFlag` is currently duplicated in `src/comments/index.ts`, `src/comments/list.ts`, and `src/inspect/index.ts`. New command groups would add more duplication. A single shared module eliminates this.
+**Rationale**: Some artifacts may be unavailable (permissions, incomplete runs, non-terminal ticket status). A partial bundle with warnings is more useful than a fatal error that produces nothing.
 
-### 7. Version Fix
+### 8. Flag parsing: Consolidated shared module
 
-**Decision**: Read version from `package.json` at runtime or align the hardcoded value.
+**Decision**: Flag utilities consolidated in `src/lib/flags.ts` with `getFlag()`, `hasFlag()`, `requireFlag()`, `getPositionalArgs()`. All command groups import from this shared module.
 
-The current `src/index.ts:47` hardcodes `"0.1.0"` while `package.json` says `"1.2.0"`. Fix by importing from a version constant or using `createRequire` to read `package.json`.
+**Rationale**: Eliminates duplication that previously existed across `comments/index.ts`, `comments/list.ts`, `inspect/index.ts`. New ticket commands add ~10 more consumers of these utilities.
 
-Simplest approach: update the hardcoded string to match `package.json`. (Zero-dep constraint makes dynamic `package.json` reading slightly awkward in ESM, but doable via `import.meta.url` + `readFileSync`.)
+### 9. `hlx tickets latest`: Client-side first-item selection
+
+**Decision**: Fetches the full ticket list (backend returns sorted by `updatedAt desc`), takes `items[0]`, then calls `printTicketDetail` for full output.
+
+**Rationale**: Avoids a new backend endpoint for a convenience shortcut. Wasteful at scale; optimizable with `limit=1` query param later.
 
 ## Cross-Platform Considerations
 
-- **Config path**: `~/.hlx/config.json` via `os.homedir()` — works on macOS, Linux, Windows
-- **Bundle output**: Uses `node:fs` and `node:path` — cross-platform by default
-- **Browser open (login)**: Already handles macOS (`open`), Linux (`xdg-open`), Windows (`start`) in `src/login.ts`
-- **ESM imports**: All use `.js` extensions as required by Node16 module resolution
+- **Config path**: `~/.hlx/config.json` uses `os.homedir()`, which works on macOS, Linux, and Windows.
+- **File operations**: Uses `node:fs` built-ins with `mkdirSync(..., {recursive: true})`, portable across platforms.
+- **Path separators**: Uses `node:path.join()`, handles OS-specific separators.
+- **Browser open (login)**: Already handles macOS (`open`), Linux (`xdg-open`), Windows (`start`).
+- **Node.js >= 18**: Required for built-in `fetch` API. This is the minimum viable version.
 
 ## Performance Expectations
 
-- **CLI startup**: Near-instant. No framework initialization, no dependency loading.
-- **Network latency**: Dominated by backend response times. `hxFetch` has 30s timeout with 3 retries + exponential backoff.
-- **Bundle command**: Sequential fetches (ticket detail → artifact list → step artifacts for each step/repo). For a ticket with N step-artifact entries, this is O(N+2) HTTP requests. Acceptable for interactive use; could be parallelized in future if needed.
-- **Memory**: Minimal. All responses are small JSON payloads. Artifact files may be larger (markdown/JSON documents) but are written to disk immediately via streaming.
+| Operation | Expected behavior | Scale concern |
+|---|---|---|
+| Ticket list | Single HTTP request, returns full list | ~381 tickets currently; acceptable. Pagination deferred. |
+| `--status` filter | Client-side filter on full list | Linear scan, negligible at current scale |
+| `--user` filter | 2 HTTP requests (members + filtered tickets) | Members list is small per org; server-side filter limits ticket response |
+| `hlx tickets latest` | Fetches full list, takes first item | Wasteful at scale; optimizable with `limit=1` query param later |
+| Bundle | 1 + N+1 HTTP requests (detail + artifacts summary + N step-artifact fetches) | Sequential fetches. Acceptable for typical artifact counts (~10-20). Parallelization deferred. |
+| HTTP retry | 3 attempts, exponential backoff (2s base + jitter) | 30s timeout per request. Retry-After header respected for 429s. |
+| CLI startup | Near-instant; no framework initialization, no dependency loading | N/A |
 
 ## Dependencies
 
-### helix-cli
-- **No new production dependencies.** All functionality uses Node.js built-in APIs.
-- **Dev dependencies unchanged**: `@types/node ^25.5.0`, `typescript ^6.0.2`
+### helix-cli (primary target)
 
-### helix-global-server
-- **No new dependencies.** The ~3-line change uses existing Prisma client and Express infrastructure.
-- **No database migration.** The `reporterUserId` column already exists on the `Ticket` model.
+| Dependency | Type | Purpose |
+|---|---|---|
+| Node.js >= 18 | Runtime | Built-in `fetch`, ESM support, `fs`, `path`, `os` |
+| TypeScript ^6.0.2 | Dev | Compilation, type checking |
+| @types/node ^25.5.0 | Dev | Node.js type definitions |
 
-### Cross-Repo Dependency
-- helix-cli's `--user` filter requires the helix-global-server `reporterUserId` backend change to be deployed first (or simultaneously). If the backend change is not yet live, the `--user` filter will receive an error or be ignored by the server. The CLI should handle this gracefully (the extra query param is ignored by the current backend, so no hard failure).
+**Zero production dependencies** -- maintained by design.
+
+### Backend API Dependencies (External)
+
+The CLI depends on these pre-existing Helix backend endpoints being available and stable:
+
+- `GET /api/auth/me` -- User/org context
+- `POST /api/auth/switch-org` -- Org switch + new JWT
+- `GET /api/tickets` -- Ticket list with filters (modified: added `reporterUserId`)
+- `GET /api/tickets/:id` -- Ticket detail
+- `POST /api/tickets` -- Ticket creation
+- `POST /api/tickets/:id/rerun` -- Rerun/continue
+- `GET /api/tickets/:id/artifacts` -- Artifact discovery
+- `GET /api/tickets/:id/runs/:rid/step-artifacts/:sid` -- Step artifact content
+- `GET /api/organization/members` -- User resolution for `--user` filter
+- `GET/POST /api/tickets/:id/comments` -- Comment list/post (pre-existing)
+
+### Cross-Repo Deployment Dependency
+
+The CLI's `--user` filter requires the server-side `reporterUserId` query param to be deployed. If the backend change is not yet live, the extra query param is silently ignored by Express (no error) and the filter becomes a no-op. The CLI can ship before or simultaneously with the backend update.
 
 ## Risks
 
-| # | Risk | Severity | Mitigation |
-|---|---|---|---|
-| 1 | **Backend deploy timing**: CLI `--user` depends on backend `reporterUserId` support | Low | Extra query param is ignored by current backend; filter silently becomes a no-op until backend is updated |
-| 2 | **Token expiry during bundle**: Long bundle operations may see JWT expire mid-flight | Low | `hxFetch` retry logic handles 401; user can re-login. Bundle can be re-run idempotently |
-| 3 | **Large ticket lists without pagination**: Orgs with many tickets may receive large responses | Low | Defer pagination to future iteration per product decision; current response sizes are manageable |
-| 4 | **Artifact content size**: Step artifacts could be large markdown files | Low | Files are written directly to disk; no in-memory accumulation concern beyond the JSON response |
-| 5 | **Breaking change to backend API**: Future backend changes could break CLI assumptions | Low | CLI is a thin wrapper; tight coupling is intentional and version-aligned |
+| # | Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| 1 | Inspection tokens (`hxi_`) cannot access ticket CRUD routes | Medium | Users who used `hlx login --manual` cannot use new ticket commands | Server returns 401/403; clear error directs to re-login with OAuth |
+| 2 | Token expiration (24h TTL) with no refresh flow | Certain | Users must re-login after 24h | Out of scope per product spec; CLI error message directs to re-login |
+| 3 | `--status` client-side filter fetches full list | Low (current scale) | Performance degradation at high ticket counts | Monitor ticket volumes; add server-side positive status filter later |
+| 4 | `hlx tickets latest` fetches full list | Low (current scale) | Unnecessary data transfer at scale | Add `limit=1` query param to backend later |
+| 5 | No tests for any CLI commands | Medium | Regressions undetectable without manual testing | Out of scope per product spec; runtime verification planned |
+| 6 | Bundle artifact fetch errors produce partial bundles | Low | Users may not notice missing artifacts | Warnings printed to stderr for each failed artifact |
+| 7 | Backend deploy timing for `--user` filter | Low | `--user` becomes no-op if backend not updated | Extra query param silently ignored; no error |
 
 ## Deferred to Round 2
 
-- **Pagination**: Add `--page` / `--limit` flags and backend `limit`/`offset` support when ticket volume demands it
-- **`--json` output mode**: Add `--json` flag for all commands to support piping and scripting
-- **Artifact syntax highlighting**: Richer terminal rendering for markdown/JSON artifacts
-- **Parallel bundle fetches**: Speed up `hlx tickets bundle` by fetching step artifacts in parallel
-- **Auto-update**: CLI version checking and self-update mechanism
-- **Tab completion**: Shell completion scripts for bash/zsh
+- **Pagination**: Backend returns all matching tickets; add `limit`/`offset` when volume grows.
+- **`--json` output flag**: All commands output human-readable text; machine-readable JSON output deferred.
+- **Server-side positive `--status` filter**: Replace client-side filtering once backend supports it.
+- **Token refresh flow**: Automatic JWT refresh for long-lived sessions.
+- **Bundle parallelization**: Fetch step artifacts in parallel instead of sequentially.
+- **Richer artifact rendering**: Syntax highlighting, truncation controls for terminal output.
+- **Test suite**: Unit and integration tests for CLI commands.
+- **Tab completion**: Shell completion scripts for bash/zsh.
 
 ## Summary Table
 
-| Aspect | Decision |
+| Dimension | Decision |
 |---|---|
-| **Primary repo** | helix-cli (~12-15 new source files) |
-| **Secondary repo** | helix-global-server (~3-line change) |
-| **Architecture** | Extend existing switch-based routing pattern |
-| **Dependencies** | Zero new production deps |
-| **Config change** | Add optional `orgId`/`orgName` to `HxConfig` |
-| **Auth** | Existing OAuth → session JWT works; no redesign |
-| **Backend change** | Add `reporterUserId` query param to `GET /api/tickets` |
-| **Migration** | None needed |
-| **Bundle layout** | `ticket.json` + `artifacts/<step>/<repo>/<file>` + `manifest.json` |
-| **User resolution** | Email exact match → name case-insensitive match → error |
-| **Latest ticket** | Client-side (first from sorted list) |
-| **Flag parsing** | Extract shared `src/lib/flags.ts` utility |
-| **Version fix** | Align hardcoded version with `package.json` |
+| Architecture | Thin CLI client over existing Helix backend API; switch-based manual command routing |
+| New CLI files | 13 files across `src/org/` (4) and `src/tickets/` (10), plus config model update and entry point routing |
+| Server change | ~5 lines across 2 files: `reporterUserId` query param on `GET /api/tickets` |
+| Dependencies | Zero production deps maintained; Node.js >= 18 built-in APIs only |
+| Auth model | Session JWT for ticket routes; inspection tokens for inspect/comments only |
+| Org switching | New JWT persisted on switch; `orgId`/`orgName` in config for display |
+| User filter | 2-step: resolve via `/organization/members` -> filter via `reporterUserId` server param |
+| Status filter | `statusNotIn` server-side; positive `status` client-side |
+| Continue | Reuses `POST /tickets/:id/rerun` with `{continuationContext}` |
+| Bundle | Deterministic directory: `ticket.json`, `manifest.json`, `artifacts/<step>/<repo>/<file>` |
+| Error handling | Graceful degradation for artifact fetches; `process.exit(1)` for input errors |
+| Flag parsing | Consolidated shared `src/lib/flags.ts` module |
+| Version | 1.2.0 (aligned between package.json and src/index.ts) |
 
 ## APL Statement Reference
 
-See `tech-research/apl.json` for the complete APL record. Key findings:
-- The CLI expansion is a feature-addition task following clean existing patterns.
-- Backend API coverage is near-complete; only `reporterUserId` filter is missing.
-- Auth compatibility is confirmed: OAuth login produces session JWTs that pass `requireAuth`.
-- Zero-dep constraint is maintained throughout.
-- Bundle structure and `--user` resolution are the two design decisions not specified in the ticket that this research resolves.
+See `tech-research/apl.json`. All questions resolved with followups=[].
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |---|---|---|
-| `helix-cli/ticket.md` | Primary specification | Defined full command surface, constraints, acceptance criteria |
-| `helix-global-server/ticket.md` | Cross-repo specification | Confirmed same ticket scope applies to both repos |
-| `helix-cli/diagnosis/diagnosis-statement.md` | Root cause analysis | Confirmed feature-addition gap, auth compatibility, clean patterns |
-| `helix-cli/diagnosis/apl.json` | Diagnosis evidence | Confirmed OAuth JWT flow, config sufficiency, backend API mapping |
-| `helix-global-server/diagnosis/diagnosis-statement.md` | Backend gap analysis | Confirmed only `reporterUserId` is missing; ~3 lines, no migration |
-| `helix-global-server/diagnosis/apl.json` | Backend evidence | Confirmed all endpoints present; single filter gap |
-| `helix-cli/product/product.md` | Product direction | Defined command surface, UX principles, open questions, bundle concept |
-| `helix-global-server/product/product.md` | Cross-repo product context | Same product spec confirms server scope is minimal |
-| `helix-cli/scout/scout-summary.md` | CLI architecture analysis | Mapped current command surface, patterns, and expansion plan |
-| `helix-cli/scout/reference-map.json` | CLI file inventory | Identified 11 relevant files, zero-dep constraint, version mismatch |
-| `helix-global-server/scout/scout-summary.md` | Backend API mapping | Confirmed all needed endpoints exist with response shapes |
-| `helix-global-server/scout/reference-map.json` | Backend file inventory | Confirmed endpoint signatures, auth middleware, TicketStatus enum |
-| `repo-guidance.json` | Repo intent | Confirmed helix-cli as primary target, helix-global-server as minor target |
-| `src/index.ts` (helix-cli) | Direct code inspection | Verified switch-based routing pattern, version mismatch |
-| `src/lib/config.ts` (helix-cli) | Direct code inspection | Verified `{apiKey, url}` schema, env var priority, saveConfig behavior |
-| `src/lib/http.ts` (helix-cli) | Direct code inspection | Verified hxFetch auth header routing, retry logic, basePath convention |
-| `src/comments/index.ts` (helix-cli) | Direct code inspection | Verified subcommand routing pattern, flag parsing, ticket ID resolution |
-| `src/comments/list.ts` (helix-cli) | Direct code inspection | Verified GET handler pattern with hxFetch and basePath "/api" |
-| `src/comments/post.ts` (helix-cli) | Direct code inspection | Verified POST handler pattern with body via hxFetch |
-| `src/inspect/index.ts` (helix-cli) | Direct code inspection | Verified getFlag/getPositionalArgs utilities, subcommand pattern |
-| `src/login.ts` (helix-cli) | Direct code inspection | Verified OAuth callback stores key as apiKey; session JWT confirmed |
-| `src/controllers/ticket-controller.ts` (server) | Direct code inspection | Verified getTickets params (lines 190-208), rerun schema (line 329), artifact endpoints |
-| `src/services/ticket-service.ts` (server) | Direct code inspection | Verified where-clause gap (lines 1522-1530), userId usage (lines 1626-1629), artifact response shapes |
-| `src/controllers/auth-controller.ts` (server) | Direct code inspection | Verified getMe response shape, postSwitchOrg delegates to service |
-| `src/controllers/organization-controller.ts` (server) | Direct code inspection | Verified members endpoint returns `[{id, email, name}]` |
-| `src/services/org-switch-service.ts` (server) | Direct code inspection | Verified switchOrganization response shape with accessToken |
+| `helix-cli ticket.md` | Primary ticket specification | Full command surface, 9 ticket + 3 org subcommands, non-negotiable constraints, acceptance criteria |
+| `helix-cli scout/reference-map.json` | File inventory and implementation facts | 25 files mapped; 13 new files; typecheck passes; zero deps; ESM with .js extensions |
+| `helix-cli scout/scout-summary.md` | Architecture patterns and quality gates | Switch-based routing, manual flag parsing, hxFetch shared client, config persistence model |
+| `helix-cli diagnosis/diagnosis-statement.md` | Gap analysis and completeness check | All acceptance criteria met; no blocking gaps; non-blocking concerns (no tests, no token refresh) |
+| `helix-cli diagnosis/apl.json` | Evidence-backed diagnostic answers | Thin client confirmed; continue uses rerun correctly; --status client-side intentional |
+| `helix-cli product/product.md` | Product vision and scope | Two audiences (human + Codex); org-scoped design; zero deps constraint; deferred features listed |
+| `helix-global-server scout/scout-summary.md` | Backend API surface and change scope | 14+ routes pre-existed; ~5 lines changed; Prisma ORM; auth architecture |
+| `helix-global-server diagnosis/diagnosis-statement.md` | Server change correctness | reporterUserId filter backward-compatible; column 100% populated; no migration needed |
+| `helix-global-server diagnosis/apl.json` | Server change risk assessment | Follows established filter pattern; zero risk to existing behavior |
+| `helix-global-server product/product.md` | Cross-repo product scope | Server is minor target; only reporterUserId addition |
+| `repo-guidance.json` | Cross-repo intent | helix-cli = primary target, helix-global-server = minor target |
+| `src/index.ts` (helix-cli, direct inspection) | CLI entry point | Verified 5 command groups routed; version 1.2.0; usage text covers all commands |
+| `src/lib/http.ts` (helix-cli, direct inspection) | HTTP client | Retry/timeout/auth logic verified; basePath routing confirmed |
+| `src/lib/config.ts` (helix-cli, direct inspection) | Config model | HxConfig type with orgId/orgName; env var priority; saveConfig persistence |
+| `src/tickets/*.ts` (helix-cli, direct inspection) | Command implementations | All 9 subcommands verified; patterns consistent; error handling present |
+| `src/org/switch.ts` (helix-cli, direct inspection) | Org switch | CUID detection; name resolution via /auth/me; new JWT + org metadata saved |
+| `src/controllers/ticket-controller.ts` (server, direct inspection) | Controller change | Lines 206-209: reporterUserId parsed; line 211: passed to service |
+| `src/services/ticket-service.ts` (server, direct inspection) | Service change | Line 1479: signature updated; line 1530: conditional WHERE clause |
+| Runtime inspection manifest | Available checks | DATABASE and LOGS for helix-global-server; used by diagnosis for column/population verification |
