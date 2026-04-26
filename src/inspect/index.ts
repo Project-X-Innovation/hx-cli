@@ -1,23 +1,9 @@
 import type { HxConfig } from "../lib/config.js";
+import { getFlag, getPositionalArgs } from "../lib/flags.js";
 import { cmdRepos } from "./repos.js";
 import { cmdDb } from "./db.js";
 import { cmdLogs } from "./logs.js";
 import { cmdApi } from "./api.js";
-
-function getFlag(args: string[], flag: string): string | undefined {
-  const idx = args.indexOf(flag);
-  if (idx === -1 || idx + 1 >= args.length) return undefined;
-  return args[idx + 1];
-}
-
-function getPositionalArgs(args: string[], excludeFlags: string[]): string[] {
-  const flagValues = new Set<string>();
-  for (const flag of excludeFlags) {
-    const val = getFlag(args, flag);
-    if (val) flagValues.add(val);
-  }
-  return args.filter((a) => !a.startsWith("--") && !flagValues.has(a));
-}
 
 function inspectUsage(): never {
   console.error(`Usage:

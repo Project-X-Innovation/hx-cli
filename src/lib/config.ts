@@ -5,6 +5,8 @@ import { homedir } from "node:os";
 export type HxConfig = {
   apiKey: string;
   url: string;
+  orgId?: string;
+  orgName?: string;
 };
 
 const CONFIG_DIR = join(homedir(), ".hlx");
@@ -23,7 +25,12 @@ export function loadConfig(): HxConfig | null {
     const raw = readFileSync(CONFIG_FILE, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (typeof parsed.apiKey === "string" && typeof parsed.url === "string") {
-      return { apiKey: parsed.apiKey, url: parsed.url.replace(/\/+$/, "") };
+      return {
+        apiKey: parsed.apiKey,
+        url: parsed.url.replace(/\/+$/, ""),
+        orgId: typeof parsed.orgId === "string" ? parsed.orgId : undefined,
+        orgName: typeof parsed.orgName === "string" ? parsed.orgName : undefined,
+      };
     }
   } catch {
     // No config file or invalid
@@ -34,7 +41,10 @@ export function loadConfig(): HxConfig | null {
 
 export function saveConfig(config: HxConfig): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf8");
+  const data: Record<string, string> = { apiKey: config.apiKey, url: config.url };
+  if (config.orgId) data.orgId = config.orgId;
+  if (config.orgName) data.orgName = config.orgName;
+  writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 
 export function requireConfig(): HxConfig {

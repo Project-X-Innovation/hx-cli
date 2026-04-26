@@ -4,23 +4,30 @@ import { requireConfig } from "./lib/config.js";
 import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
+import { runOrg } from "./org/index.js";
+import { runTickets } from "./tickets/index.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
 
 function usage(): never {
-  console.error(`hlx — Helix CLI for production inspection
+  console.error(`hlx — Helix CLI workbench
 
 Usage:
-  hlx login <server-url>       Authenticate with a Helix server
-  hlx login --manual           Paste API key manually
-  hlx inspect repos             List repositories and inspection types
+  hlx login <server-url>          Authenticate with a Helix server
+  hlx login --manual              Paste API key manually
+  hlx org current|list|switch     Manage org context
+  hlx tickets list|latest|get     Discover and inspect tickets
+  hlx tickets create|rerun|continue  Ticket actions
+  hlx tickets artifacts|artifact  Inspect step artifacts
+  hlx tickets bundle <id> --out <dir>  Bundle for Codex
+  hlx inspect repos               List repositories and inspection types
   hlx inspect db --repo <name> "<sql>"
   hlx inspect logs --repo <name> "<query>"
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
-  hlx --version                 Show version`);
+  hlx --version                   Show version`);
   process.exit(1);
 }
 
@@ -42,9 +49,21 @@ try {
       break;
     }
 
+    case "org": {
+      const config = requireConfig();
+      await runOrg(config, args.slice(1));
+      break;
+    }
+
+    case "tickets": {
+      const config = requireConfig();
+      await runTickets(config, args.slice(1));
+      break;
+    }
+
     case "--version":
     case "-v":
-      console.log("0.1.0");
+      console.log("1.2.0");
       break;
 
     default:

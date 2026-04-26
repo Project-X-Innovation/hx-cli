@@ -1,12 +1,7 @@
 import type { HxConfig } from "../lib/config.js";
+import { getFlag } from "../lib/flags.js";
 import { cmdList } from "./list.js";
 import { cmdPost } from "./post.js";
-
-function getFlag(args: string[], flag: string): string | undefined {
-  const idx = args.indexOf(flag);
-  if (idx === -1 || idx + 1 >= args.length) return undefined;
-  return args[idx + 1];
-}
 
 function resolveTicketId(args: string[]): string {
   const flagValue = getFlag(args, "--ticket");
