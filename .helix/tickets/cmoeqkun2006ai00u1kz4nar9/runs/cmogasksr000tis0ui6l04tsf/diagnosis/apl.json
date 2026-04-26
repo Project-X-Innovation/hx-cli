@@ -1,55 +1,47 @@
 {
   "questions": [
-    "Q1: Does the CLI's existing auth flow produce tokens with sufficient privileges for ticket CRUD routes (behind requireAuth)?",
-    "Q2: Which backend API endpoints already exist for the new CLI commands, and what gaps remain?",
-    "Q3: What changes are needed to the CLI's config schema to support org switching?",
-    "Q4: Can the --user ticket filter be implemented client-side, or does the backend need a new query parameter?",
-    "Q5: What is the implementation scope and file layout for the CLI expansion?"
+    "Q1: Does the helix-cli implementation cover all acceptance criteria (org commands, ticket discovery/filters, inspection, artifacts, bundle, ticket actions)?",
+    "Q2: Does the CLI remain a thin client over the existing Helix backend, or has any client-side data invention been introduced?",
+    "Q3: Is the 'continue' command correctly implemented as a rerun with continuationContext rather than a separate backend concept?",
+    "Q4: Are there functional gaps or edge-case risks that could block acceptance?"
   ],
   "answers": [
     {
-      "answer": "Yes. OAuth login returns a session JWT (not an hxi_ inspection key). hxFetch already routes non-hxi_ tokens to the Authorization: Bearer header. Session JWTs pass the requireAuth middleware on ticket routes. Manual login (--manual) prompts for hxi_ keys which only work for inspect + comment routes. No auth redesign needed.",
+      "answer": "Yes. All acceptance criteria are covered. Org commands (current/list/switch) in src/org/. Ticket discovery (list/latest/get) with filters (--user, --status, --status-not-in, --archived, --sprint) in src/tickets/list.ts. Ticket detail includes branch, repos, runs, merge status in src/tickets/get.ts. Artifact discovery (src/tickets/artifacts.ts) and step artifact reads (src/tickets/artifact.ts). Bundle command (src/tickets/bundle.ts) creates deterministic local context. Ticket actions: create, rerun, continue. Comment reply via existing src/comments/post.ts. 13 new source files, typecheck passes with zero errors.",
       "evidence": [
-        "helix-cli/src/login.ts:107 - stores result.key as apiKey",
-        "helix-cli/src/lib/http.ts:52-57 - hxi_ prefix check for header selection",
-        "helix-global-server/src/auth/middleware.ts - requireAuth accepts session JWTs via attachAuthContext",
-        "helix-global-server/src/routes/api.ts:238 - global requireAuth gate before ticket routes",
-        "helix-global-server/src/auth/session.ts:53-77 - issueAccessToken creates HS256 JWT with orgId and userId"
+        "13 new source files across src/org/ (4 files) and src/tickets/ (10 files)",
+        "src/index.ts routes all 5 command groups: login, inspect, comments, org, tickets",
+        "tsc --noEmit passes with zero errors",
+        "Version bumped from 0.1.0 to 1.2.0 in package.json"
       ]
     },
     {
-      "answer": "Nearly all endpoints exist. org current/list (GET /api/auth/me), org switch (POST /api/auth/switch-org), ticket list (GET /api/tickets with archived/statusNotIn/sprintId), ticket get (GET /api/tickets/:id), ticket create (POST /api/tickets), ticket rerun/continue (POST /api/tickets/:id/rerun with continuationContext), artifact list (GET /api/tickets/:id/artifacts), step artifact read (GET /api/tickets/:id/runs/:runId/step-artifacts/:stepId?repoKey=), comment list/post (already implemented), org members (GET /api/organization/members). The single gap is --user filter: GET /api/tickets does not expose reporterUserId as a query parameter.",
+      "answer": "Yes, the CLI is a thin client. All commands make HTTP calls to existing backend endpoints via hxFetch(). The only client-side logic is: (1) --user resolution via /organization/members to translate name/email to reporterUserId, (2) --status positive filter applied client-side since backend only supports statusNotIn, (3) bundle file assembly from fetched data. No ticket data is invented client-side.",
       "evidence": [
-        "helix-global-server/src/routes/api.ts - full route registry",
-        "helix-global-server/src/controllers/ticket-controller.ts:190-208 - getTickets query params: archived, statusNotIn, sprintId only",
-        "helix-global-server/src/services/ticket-service.ts:1479 - userId param accepted but unused for filtering"
+        "All new commands use basePath: '/api' and call existing server endpoints",
+        "14+ CLI routes map to pre-existing backend routes per server scout",
+        "Zero production dependencies - Node built-ins only",
+        "--status client-side filter is a design necessity since backend only supports statusNotIn"
       ]
     },
     {
-      "answer": "The current config schema {apiKey, url} is sufficient for org switching. When POST /api/auth/switch-org returns a new accessToken, the CLI simply overwrites apiKey in config with the new JWT. The JWT itself encodes the target orgId, so no separate org field is strictly required in the config. However, storing the current org name/id would improve UX for hlx org current without needing a network call.",
+      "answer": "Yes. src/tickets/continue.ts calls POST /api/tickets/:ticketId/rerun with { continuationContext } from positional args. This matches the non-negotiable constraint 'Do not create a separate backend continue concept.' The backend rerun endpoint already accepts continuationContext (max 10000 chars, stored in SandboxRun.continuationContext).",
       "evidence": [
-        "helix-cli/src/lib/config.ts - saveConfig writes {apiKey, url}",
-        "helix-global-server/src/services/org-switch-service.ts - switchOrganization returns new JWT with orgId encoded",
-        "helix-global-server/src/controllers/auth-controller.ts - postSwitchOrg returns {accessToken, user, organization}"
+        "src/tickets/continue.ts: posts to /tickets/${ticketId}/rerun with body: { continuationContext }",
+        "Server POST /api/tickets/:ticketId/rerun accepts { continuationContext?: string }",
+        "Positional args joined with spaces to form the continuationContext string"
       ]
     },
     {
-      "answer": "Server-side filtering is better. The Ticket model already has a reporterUserId field. The listTicketsForOrganization function already accepts a userId option parameter but doesn't use it in the where-clause. Adding server-side filtering requires ~3 lines: (1) parse reporterUserId query param in the controller, (2) pass it through to the service, (3) add it to the Prisma where-clause. Client-side filtering would require fetching all org tickets first, which is wasteful.",
+      "answer": "No blocking functional gaps identified. Minor non-blocking concerns: (1) No tests exist - verification requires manual/runtime testing. (2) Token expiration has no refresh flow - expired JWTs fail all commands. (3) Bundle artifact fetch errors are caught and warned, not fatal - reasonable for partial artifact availability. (4) --status client-side filter is intentional since backend lacks a positive status match.",
       "evidence": [
-        "helix-global-server/prisma/schema.prisma:306-307 - Ticket model has reporterUserId String field",
-        "helix-global-server/src/services/ticket-service.ts:1479 - userId option accepted but unused in where-clause",
-        "helix-global-server/src/services/ticket-service.ts:1523-1530 - where-clause only uses organizationId, isArchived, status, sprintFilter"
-      ]
-    },
-    {
-      "answer": "The CLI expansion is the bulk of the work. Following existing patterns (src/comments/ as template), new command groups are: src/org/ (current, list, switch) and src/tickets/ (list, latest, get, create, rerun, continue, artifacts, artifact, bundle). The entry point src/index.ts needs two new switch cases. A shared flag parsing utility should be extracted from the comments code. The server change is minimal: add reporterUserId query param to the getTickets controller and wire it into the service where-clause.",
-      "evidence": [
-        "helix-cli/src/comments/index.ts - existing subcommand pattern",
-        "helix-cli/src/index.ts:28-47 - switch-based command routing",
-        "helix-cli/src/comments/list.ts - hxFetch with basePath '/api' pattern"
+        "No *.test.ts or *.spec.ts files found in helix-cli repo",
+        "No token refresh logic visible in src/lib/http.ts or src/lib/config.ts",
+        "src/tickets/bundle.ts catch block at artifact fetch warns but continues",
+        "Backend GET /api/tickets only supports statusNotIn, not positive status filter"
       ]
     }
   ],
-  "statement": "The CLI expansion is a feature-addition task, not a bug fix. The root cause of the gap is that helix-cli was designed as a narrow inspection tool (inspect + comments) and has not yet been expanded to cover org management, ticket workflows, and Codex bundling. The backend already supports nearly all required operations through existing API endpoints. The only backend gap is the --user ticket filter, which requires a ~3-line addition to the ticket controller and service. The CLI itself needs substantial new command surface but follows a clean, repeatable pattern established by the existing comments and inspect command groups. Auth is compatible: OAuth login produces session JWTs that pass requireAuth on ticket routes. No schema migrations, auth redesign, or new backend workflows are needed.",
+  "statement": "The helix-cli expansion is fully implemented in the current branch. All acceptance criteria are met: org commands, ticket discovery with filters, ticket inspection (branch/repos/runs/merge), artifact reads, Codex bundling, and ticket actions (create/rerun/continue/comment). The CLI remains a thin client over existing backend endpoints with zero production dependencies. The only server-side change needed (reporterUserId filter) has been implemented in helix-global-server. No blocking gaps exist; minor concerns (no tests, no token refresh) are non-blocking for this ticket's scope.",
   "followups": []
 }

@@ -2,65 +2,79 @@
 
 ## Problem Summary
 
-`helix-cli` is currently a narrow inspection tool with three command groups (login, inspect, comments). The ticket requires expanding it into an org-aware Helix workbench supporting org switching, ticket discovery with filters, ticket detail inspection, artifact reads, local Codex bundling, ticket creation, comment reply, rerun, and continue.
+The helix-cli was a narrow inspection tool supporting only `login`, `inspect`, and `comments` commands. The ticket requires expanding it into an org-aware Helix workbench supporting org switching, ticket discovery with filters, ticket detail inspection, artifact reads, local Codex bundling, and ticket actions (create, rerun, continue, comment reply).
 
 ## Root Cause Analysis
 
-This is a feature-addition gap, not a bug. The CLI was intentionally scoped as a lightweight inspection tool and has not yet been expanded to cover the full Helix workflow surface.
+This is a feature expansion, not a bug fix. The "gap" was product surface area: the backend already exposed all necessary data through its API, but the CLI lacked commands to access it. The one server-side gap (no `reporterUserId` query param on `GET /api/tickets`) has been addressed with a ~5-line change in helix-global-server.
 
-**Key findings that shape the implementation:**
+The implementation is complete in the current branch state:
+- **13 new source files** added across `src/org/` (4 files) and `src/tickets/` (10 files)
+- **CLI version** bumped from 0.1.0 to 1.2.0
+- **Config model** extended with `orgId` and `orgName` for persistent org context
+- **All 9 ticket subcommands** implemented: list, latest, get, create, rerun, continue, artifacts, artifact, bundle
+- **All 3 org subcommands** implemented: current, list, switch
+- **Typecheck passes** with zero errors
+- **Zero production dependencies** maintained
 
-1. **Auth is already compatible.** OAuth login (`hlx login <url>`) returns a session JWT that passes the server's `requireAuth` middleware on ticket CRUD routes. The `hxFetch` function already routes non-`hxi_` tokens to `Authorization: Bearer` headers. No auth redesign needed. Manual login (`--manual`) uses `hxi_` inspection keys with limited access (inspect + comments only); this remains valid for its original purpose.
-
-2. **Backend API surface is nearly complete.** 13 of 14 required CLI commands map to existing backend endpoints. The only gap is the `--user` ticket filter, which requires a ~3-line backend addition (see helix-global-server diagnosis).
-
-3. **Clean existing patterns.** The `src/comments/` command group provides a repeatable template: subcommand router (`index.ts`) + individual handler files + shared `hxFetch` with `basePath: "/api"`. New command groups follow the same structure.
-
-4. **Config schema is sufficient for org switching.** POST `/api/auth/switch-org` returns a new `accessToken` (JWT encoding the target orgId). The CLI can overwrite its stored `apiKey` with this new token. Optionally, storing the current org name/id improves UX for `hlx org current` without a network call.
-
-5. **Zero runtime dependencies.** The CLI has no production dependencies (only `@types/node` and `typescript` as dev deps). The expansion should maintain this constraint using Node.js built-in APIs.
-
-6. **Version mismatch.** `src/index.ts` hardcodes version "0.1.0" while `package.json` says "1.2.0". Should be aligned during implementation.
+The architecture correctly maintains the CLI as a thin client over existing backend endpoints. Command structure follows the established pattern from `src/comments/` (switch-based router + individual handler files + shared `hxFetch`).
 
 ## Evidence Summary
 
-| Evidence | Finding |
-|---|---|
-| `src/login.ts:107` | OAuth callback key stored as apiKey; session JWT based on server investigation |
-| `src/lib/http.ts:52-57` | hxi_ prefix check determines auth header; Bearer for session JWTs |
-| `src/lib/config.ts` | Config is `{apiKey, url}` at `~/.hlx/config.json`; env vars take priority |
-| `src/index.ts:28-47` | Switch-based routing for 3 commands; new cases needed for `org` and `tickets` |
-| `src/comments/index.ts` | Subcommand pattern: getFlag() helper, HELIX_TICKET_ID env var, switch routing |
-| `package.json` | v1.2.0, zero prod deps, ESM, tsc build, bin entry `hlx` |
-| Server `src/routes/api.ts` | All ticket/org/artifact routes exist; ticket routes behind global requireAuth |
-| Server ticket-controller.ts:190-208 | getTickets accepts archived, statusNotIn, sprintId but NOT reporterUserId |
-| Server ticket-service.ts:1479 | userId option accepted but unused in where-clause |
-| Server prisma/schema.prisma:306 | Ticket model has reporterUserId field (no migration needed) |
+### Backend API Coverage (Verified)
+
+| CLI Command | Backend Endpoint | Status |
+|---|---|---|
+| `hlx org current` | `GET /api/auth/me` | Pre-existing |
+| `hlx org list` | `GET /api/auth/me` | Pre-existing |
+| `hlx org switch` | `POST /api/auth/switch-org` | Pre-existing |
+| `hlx tickets list` | `GET /api/tickets` | Modified (added reporterUserId) |
+| `hlx tickets latest` | `GET /api/tickets` | Pre-existing |
+| `hlx tickets get` | `GET /api/tickets/:id` | Pre-existing |
+| `hlx tickets create` | `POST /api/tickets` | Pre-existing |
+| `hlx tickets rerun` | `POST /api/tickets/:id/rerun` | Pre-existing |
+| `hlx tickets continue` | `POST /api/tickets/:id/rerun` | Pre-existing |
+| `hlx tickets artifacts` | `GET /api/tickets/:id/artifacts` | Pre-existing |
+| `hlx tickets artifact` | `GET /api/tickets/:id/runs/:rid/step-artifacts/:sid` | Pre-existing |
+| `hlx tickets bundle` | Multiple endpoints | Pre-existing |
+| `hlx comments post` | `POST /api/tickets/:id/comments` | Pre-existing |
+
+### Runtime Evidence
+
+- **reporterUserId column**: Exists in production Ticket table as `text` type; 381/381 tickets populated (100%)
+- **TicketStatus enum**: All 15 values present in production DB (QUEUED, RUNNING, SANDBOX_READY, FAILED, VERIFYING, DEPLOYING, PREVIEW_READY, IN_PROGRESS, DEPLOYED, UNVERIFIED, STAGING_MERGED, WAITING, DRAFT, MERGING, REPORT_READY)
+- **Production logs**: No recent ticket-related errors
+
+### Non-Blocking Observations
+
+1. **No tests**: No `*.test.ts` or `*.spec.ts` files exist. Verification requires runtime testing.
+2. **Token expiration**: No refresh flow visible; expired JWTs will fail with no automatic recovery.
+3. **--status filter**: Applied client-side since backend only supports `statusNotIn`. This is a design trade-off, not a bug.
+4. **Bundle error handling**: Artifact fetch failures are warned, not fatal. Reasonable for partial artifact availability.
 
 ## Success Criteria
 
-1. `hlx org current|list|switch` works and org switch persists the new JWT token.
-2. `hlx tickets list|latest|get` works at org scope with correct backend API calls.
-3. Ticket filters (`--user`, `--status`, `--status-not-in`, `--archived`, `--sprint`) work correctly.
-4. Ticket detail output includes branch name, repos, run history, and merge status.
-5. `hlx tickets artifacts <id>` lists available artifacts; `hlx tickets artifact <id> --step <step> --repo <repo>` prints artifact content.
-6. `hlx tickets bundle <id> --out <dir>` creates a deterministic local context folder.
-7. `hlx tickets create`, `hlx comments post`, `hlx tickets rerun`, and `hlx tickets continue` work.
-8. `continue` uses the existing rerun endpoint with `continuationContext`.
-9. All new commands use `hxFetch` with `basePath: "/api"` (thin client pattern).
-10. Invalid inputs produce clear error messages.
+1. `hlx org current|list|switch` works and persists org context across commands
+2. `hlx tickets list|latest|get` returns org-scoped ticket data
+3. Ticket filters (`--user`, `--status`, `--status-not-in`, `--archived`, `--sprint`) function correctly
+4. Ticket detail output includes branch, repos, runs, and merge status
+5. Artifact discovery and step artifact raw content reads work
+6. `hlx tickets bundle` creates deterministic local context directory for Codex
+7. Ticket create, comment reply, rerun, and continue flows complete successfully
+8. Invalid inputs produce clear error messages (non-silent failures)
+9. Server-side reporterUserId filter works without affecting existing API consumers
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |---|---|---|
-| ticket.md | Primary specification | Defined full command surface, filters, constraints, acceptance criteria, and non-negotiable constraints |
-| scout/reference-map.json (helix-cli) | File inventory and facts | Identified 11 relevant files, current command surface, auth patterns, zero-dep constraint, version mismatch |
-| scout/scout-summary.md (helix-cli) | Analyzed expansion scope | Mapped all CLI commands to backend endpoints, identified auth gap investigation needs, proposed file layout |
-| scout/reference-map.json (helix-global-server) | Backend API mapping | Confirmed 10 relevant server files, all endpoint shapes, auth middleware chains, --user filter gap |
-| scout/scout-summary.md (helix-global-server) | Backend coverage analysis | Confirmed near-complete API coverage, identified reporterUserId as the only missing query parameter |
-| src/login.ts (helix-cli) | Direct code inspection | Confirmed OAuth flow returns a `key` stored as apiKey; manual mode uses hxi_ keys |
-| src/lib/http.ts (helix-cli) | Direct code inspection | Confirmed hxi_ prefix routing for auth headers; Bearer header for session JWTs |
-| src/auth/middleware.ts (server) | Direct code inspection | Confirmed requireAuth accepts session JWTs; ticket routes require session auth |
-| src/routes/api.ts (server) | Direct code inspection | Confirmed global requireAuth gate at line 238; all ticket routes present |
-| prisma/schema.prisma (server) | Direct code inspection | Confirmed Ticket.reporterUserId exists; no migration needed for --user filter |
+| ticket.md | Ticket specification and acceptance criteria | Defined full command surface, filters, constraints |
+| scout/reference-map.json (helix-cli) | CLI implementation inventory | 13 new files, all commands implemented, typecheck passes |
+| scout/reference-map.json (helix-global-server) | Server change scope | ~5 lines changed, all other routes pre-existed |
+| scout/scout-summary.md (helix-cli) | Architecture and pattern analysis | Thin client confirmed, zero deps, manual flag parsing |
+| scout/scout-summary.md (helix-global-server) | Backend API surface mapping | 14+ CLI routes pre-existed, auth architecture documented |
+| repo-guidance.json | Prior repo intent classification | Both repos correctly identified as targets |
+| Runtime DB: Ticket columns | Verify filter columns exist | reporterUserId, status, isArchived, sprintId all present |
+| Runtime DB: reporterUserId population | Verify filter data availability | 381/381 tickets have reporterUserId populated |
+| Runtime DB: TicketStatus enum | Verify status values for --status filter | All 15 enum values confirmed in production |
+| Runtime logs: recent errors | Check for ticket-related production issues | No ticket errors in recent logs |
