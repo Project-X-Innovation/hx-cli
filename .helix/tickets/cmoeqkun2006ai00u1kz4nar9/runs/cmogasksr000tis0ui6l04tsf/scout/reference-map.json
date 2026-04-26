@@ -1,0 +1,71 @@
+{
+  "problem": "Expand helix-cli from a narrow inspection tool (inspect + comments) into an org-aware Helix workbench supporting org switching, ticket discovery/filtering, ticket detail inspection (branch/repos/runs/artifacts), local Codex bundling, ticket creation, comment reply, rerun, and continue.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and top-level command router. Currently handles: login, inspect, comments, --version. All new command groups (org, tickets) must be registered here."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Auth config storage (~/.hlx/config.json). Currently stores {apiKey, url}. Org switching (switch-org returns new JWT) requires persisting the new accessToken. May need to store current org metadata."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch) with retry, auth headers, basePath. Default basePath is '/api/inspect'. New ticket/org commands need basePath '/api'. Already supports GET/POST, queryParams, body."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository resolution utility. Uses '/api/inspect/repositories' endpoint. May serve as pattern reference for new org/ticket resolution."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "OAuth + manual login flow. Saves config via saveConfig(). The OAuth callback returns a key (API key), while org switching returns a session JWT (accessToken) - different auth header behavior."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Existing comment command router. Uses getFlag() helper, resolveTicketId() for --ticket/HELIX_TICKET_ID. Pattern reference for new command groups."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Existing comment list command. Uses hxFetch with basePath '/api'. Shows pattern for fetching and displaying data."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Existing comment post command. Uses hxFetch POST with basePath '/api'. Pattern for write operations."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Inspect subcommand router. Uses getFlag() and getPositionalArgs() helpers. Pattern reference for new subcommand routing."
+    },
+    {
+      "path": "package.json",
+      "why": "Project manifest. Version 1.2.0, zero production deps, bin entry 'hlx'. Scripts: build (tsc), typecheck (tsc --noEmit). ESM module type."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. Target ES2022, module Node16, strict, declaration. Imports use .js extensions for ESM."
+    }
+  ],
+  "facts": [
+    "CLI entry point is src/index.ts with shebang, uses switch-based routing for top-level commands (login, inspect, comments)",
+    "Package is @projectxinnovation/helix-cli v1.2.0, zero production dependencies, TypeScript only dev deps",
+    "Auth config stored at ~/.hlx/config.json as {apiKey: string, url: string}. Env vars HELIX_API_KEY/HELIX_URL take priority",
+    "Tokens starting with 'hxi_' use X-API-Key header; others use Authorization: Bearer header (src/lib/http.ts:53-57)",
+    "hxFetch default basePath is '/api/inspect'. Comments already use basePath '/api'. New commands will need basePath '/api'",
+    "Manual flag parsing throughout (indexOf-based getFlag helper). No CLI framework (commander, yargs, etc.)",
+    "No tests exist. No testing framework configured. No test scripts in package.json",
+    "No README exists in the repository",
+    "Current command surface: hlx login, hlx inspect (repos|db|logs|api), hlx comments (list|post), hlx --version",
+    "ESM module with .js extension imports required for Node16 module resolution",
+    "hxFetch supports retry (3 attempts, exponential backoff), 30s timeout, 429 Retry-After handling",
+    "HELIX_TICKET_ID env var resolves ticket context for comments commands (src/comments/index.ts:12-18)",
+    "Version is hardcoded as '0.1.0' in src/index.ts:47 (mismatches package.json 1.2.0)"
+  ],
+  "unknowns": [
+    "How should org switch persist the new JWT token? switch-org returns accessToken (session JWT), but current config stores apiKey which may be an hxi_ key. The CLI may need to store both or distinguish between session tokens and API keys.",
+    "Should 'hlx tickets latest' be a dedicated backend endpoint or client-side (first item from sorted list)?",
+    "What is the expected local bundle structure for 'hlx tickets bundle'? The ticket says 'deterministic local context folder' but the exact file layout is not specified.",
+    "How should the CLI resolve user IDs for the --user filter? By email, name, or ID? The backend org members endpoint (GET /api/organization/members) returns {id, email, name}.",
+    "Should the CLI support pagination for ticket listing, or is the current backend behavior (return all matching tickets) sufficient?"
+  ]
+}
