@@ -1,0 +1,42 @@
+{
+  "problem": "The ego agent concept requires understanding the CLI's role as the interface between in-sandbox agents and the server. The CLI currently provides comment commands (list/post) for agent-to-user communication and an HTTP client for server communication. The CLI is the vehicle through which agents in the sandbox interact with the outside world — relevant to how an ego agent would maintain persistent communication channels.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point — manual argv routing to command modules. Zero-dependency design. The ego agent may need new CLI commands or extended capabilities."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Comment listing command — fetches comments via GET /api/tickets/:ticketId/comments with optional filters (isHelixTagged, since date). Used by orchestrator agents to read discussion context."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Comment posting command — POST /api/tickets/:ticketId/comments with isHelixTagged=true for agent comments. This is the primary channel for in-sandbox agent-to-user communication."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client with retry logic (3 attempts, exponential backoff, 30s timeout). Handles both inspector tokens (hxi_ prefix → X-API-Key) and bearer tokens. The ego agent would use this same transport layer."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config loading from environment — HELIX_INSPECT_TOKEN, HELIX_INSPECT_BASE_URL, HELIX_TICKET_ID. Defines the agent's identity and connectivity context within the sandbox."
+    },
+    {
+      "path": "package.json",
+      "why": "Zero runtime dependencies by design — only devDependencies (typescript, @types/node). Build: tsc, typecheck: tsc --noEmit."
+    }
+  ],
+  "facts": [
+    "The CLI has zero runtime dependencies by design (package.json devDependencies only: @types/node, typescript)",
+    "CLI commands are routed via manual argv parsing in src/index.ts — no CLI framework",
+    "Agent comments are posted with isHelixTagged=true via src/comments/post.ts (line 27)",
+    "The CLI authenticates via environment variables: HELIX_INSPECT_TOKEN (hxi_ prefix for API key, else bearer) and HELIX_INSPECT_BASE_URL (src/lib/config.ts)",
+    "HTTP client has retry logic: 3 attempts, exponential backoff with jitter, 30s timeout (src/lib/http.ts lines 37-130)",
+    "HELIX_TICKET_ID environment variable provides ticket context to in-sandbox agents (src/lib/config.ts)",
+    "Build: tsc targeting ES2022 with Node16 modules"
+  ],
+  "unknowns": [
+    "Whether the ego agent would need additional CLI commands beyond the existing comment list/post (e.g., commands for reading/writing shared state, triggering step re-execution)",
+    "Whether the CLI's zero-dependency constraint would be impacted by ego agent requirements"
+  ]
+}
