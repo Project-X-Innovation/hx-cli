@@ -7,6 +7,8 @@ type TicketDetail = {
   runs: Array<{ id: string }>;
 };
 
+type TicketResponse = { ticket: TicketDetail };
+
 type StepArtifactResponse = {
   files: Array<{
     filename: string;
@@ -28,7 +30,8 @@ export async function cmdTicketsArtifact(config: HxConfig, ticketId: string, arg
 
   // If no run ID provided, fetch latest from ticket detail
   if (!runId) {
-    const ticket = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketDetail;
+    const resp = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
+    const ticket = resp.ticket;
     runId = ticket.currentRun?.id ?? ticket.runs[0]?.id;
     if (!runId) {
       console.error("Error: No runs found for this ticket. Specify --run explicitly.");

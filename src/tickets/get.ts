@@ -20,8 +20,11 @@ type TicketDetail = {
   isArchived: boolean;
 };
 
+type TicketResponse = { ticket: TicketDetail };
+
 export async function printTicketDetail(config: HxConfig, ticketId: string): Promise<void> {
-  const ticket = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketDetail;
+  const data = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
+  const ticket = data.ticket;
 
   console.log(`Title:        ${ticket.title}`);
   console.log(`Short ID:     ${ticket.shortId}`);

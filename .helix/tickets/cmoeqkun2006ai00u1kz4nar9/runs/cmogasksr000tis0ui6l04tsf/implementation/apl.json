@@ -1,37 +1,44 @@
 {
   "questions": [
-    "Q1: Were all 9 implementation steps from the plan completed?",
-    "Q2: Does the CLI typecheck and build cleanly?",
-    "Q3: Do the new commands route correctly?"
+    "Q1: What code changes were needed beyond the pre-existing implementation?",
+    "Q2: Do all CLI commands work correctly at runtime?",
+    "Q3: How many verification checks pass?"
   ],
   "answers": [
     {
-      "answer": "Yes. All 9 steps were completed: (1) shared flag utilities in src/lib/flags.ts, (2) config extended with orgId/orgName, (3) org command group (current/list/switch), (4) tickets router + discovery commands (list/latest/get), (5) ticket actions (create/rerun/continue), (6) artifact inspection (artifacts/artifact), (7) bundle command, (8) entry point registration + version fix, (9) refactored existing flag parsing to use shared module.",
+      "answer": "Three files needed fixing: get.ts, artifact.ts, and bundle.ts. All three expected the ticket detail API to return flat TicketDetail data, but the backend wraps it in { ticket: {...} }. Added TicketResponse wrapper type and unwrapped data.ticket in each file. This was a runtime bug discovered during Step 5 testing when tickets get crashed with 'Cannot read properties of undefined (reading name)'.",
       "evidence": [
-        "12 new files created in src/org/ and src/tickets/",
-        "1 new file created in src/lib/flags.ts",
-        "5 existing files modified (index.ts, config.ts, comments/index.ts, comments/list.ts, inspect/index.ts)",
-        "npm run typecheck and npm run build both pass with exit code 0",
-        "dist/ directory contains all new compiled files"
+        "src/tickets/get.ts line 23: added type TicketResponse = { ticket: TicketDetail }; line 26: changed to const data = (...) as TicketResponse; const ticket = data.ticket",
+        "src/tickets/artifact.ts line 10: added TicketResponse type; line 33: changed to const resp = (...) as TicketResponse; const ticket = resp.ticket",
+        "src/tickets/bundle.ts line 13: added TicketResponse type; line 33: changed to const resp = (...) as TicketResponse; const ticket = resp.ticket",
+        "Runtime test: curl GET /api/tickets/:id returns { ticket: {...} } wrapper confirmed via JSON.parse inspection"
       ]
     },
     {
-      "answer": "Yes. Both `npm run typecheck` (tsc --noEmit) and `npm run build` (tsc) exit with code 0 and no errors.",
+      "answer": "Yes. All 5 command groups route correctly (org, tickets, login, inspect, comments). Org commands (current/list/switch) work against the live API. Ticket discovery (list/latest/get) works with filters. Artifacts listing works. Bundle creates deterministic output. Error handling produces clear messages. The only partially verified command is tickets artifact (step artifact content reading) due to no step artifacts in the test database.",
       "evidence": [
-        "npm run typecheck output: clean exit",
-        "npm run build output: clean exit",
-        "dist/ contains org/, tickets/, lib/flags.js"
+        "org current: displays PX Cracked org info",
+        "org list: shows 1 org with (current) marker",
+        "org switch: confirms switch to PX Cracked",
+        "tickets list: returns 61 tickets",
+        "tickets list --status-not-in DEPLOYED,FAILED: 0 excluded statuses in output",
+        "tickets get: shows full detail (title, branch, repos, description)",
+        "tickets artifacts: lists 2 repo artifacts for HLX-11",
+        "tickets bundle: creates ticket.json + manifest.json with correct fields",
+        "Error handling: 4 scenarios all exit 1 with clear messages"
       ]
     },
     {
-      "answer": "Yes. Verified via direct invocation: `node dist/index.js --version` outputs '1.2.0'. `node dist/index.js org` shows org usage. `node dist/index.js tickets` shows tickets usage. All routing works correctly. Auth-required commands properly require config before dispatching.",
+      "answer": "14 of 15 total checks pass (11/12 helix-cli + 3/3 helix-global-server). CHK-10 (helix-cli artifact raw content read) is blocked because no step artifacts exist in the test database. The command code path runs correctly and hits the API, but raw content printing cannot be observed.",
       "evidence": [
-        "node dist/index.js --version -> 1.2.0",
-        "node dist/index.js org -> shows org usage with current/list/switch",
-        "node dist/index.js tickets -> shows tickets usage with all 9 subcommands"
+        "CHK-01 through CHK-09: pass (typecheck, build, org current/list/switch, tickets list/filter/get, artifacts)",
+        "CHK-10: blocked - no step artifacts in test DB, API returns 404",
+        "CHK-11: pass (bundle creates manifest.json + ticket.json)",
+        "CHK-12: pass (all error cases exit 1 with messages)",
+        "Server CHK-01 through CHK-03: pass (typecheck, code presence, runtime filter)"
       ]
     }
   ],
-  "statement": "Expanded helix-cli from a narrow inspection tool into an org-aware Helix workbench. Added 13 new files and modified 5 existing files across 9 implementation steps. New command groups: org (current/list/switch) and tickets (list/latest/get/create/rerun/continue/artifacts/artifact/bundle). Refactored flag parsing into shared module. Version updated to 1.2.0. Zero production dependencies maintained. TypeScript typecheck and build pass cleanly. Runtime API testing blocked by pre-existing server DB schema mismatch.",
+  "statement": "Fixed 3 files (get.ts, artifact.ts, bundle.ts) to unwrap the { ticket: {...} } API response wrapper that caused runtime crashes. All other pre-existing code was correct. TypeScript typecheck and build pass. 14 of 15 verification checks pass across both repos; CHK-10 blocked by test data limitations (no step artifacts in database).",
   "followups": []
 }

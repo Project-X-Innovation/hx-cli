@@ -10,6 +10,8 @@ type TicketDetail = {
   runs: Array<{ id: string }>;
 };
 
+type TicketResponse = { ticket: TicketDetail };
+
 type ArtifactsResponse = {
   stepArtifactSummary: Array<{
     stepId: string;
@@ -28,7 +30,8 @@ export async function cmdTicketsBundle(config: HxConfig, ticketId: string, args:
   const outDir = requireFlag(args, "--out", "--out <dir> is required.");
 
   // 1. Fetch ticket detail
-  const ticket = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketDetail;
+  const resp = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
+  const ticket = resp.ticket;
 
   const runId = ticket.currentRun?.id ?? ticket.runs[0]?.id;
   if (!runId) {
