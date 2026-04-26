@@ -1,0 +1,37 @@
+{
+  "questions": [
+    "Q1: What is the implementation plan for expanding helix-cli into an org-aware workbench?",
+    "Q2: How are the implementation steps ordered and what are their dependencies?",
+    "Q3: What verification checks cover the full acceptance criteria?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI expansion adds ~15 new source files across two new command groups (src/org/ and src/tickets/) plus a shared flags utility (src/lib/flags.ts) and a minimal config extension. The plan follows 9 atomic steps: (1) shared flags, (2) config extension, (3) org commands, (4) ticket discovery, (5) ticket actions, (6) artifact commands, (7) bundle command, (8) entry point registration + version fix, (9) refactor existing flag parsing. All new commands follow the existing pattern of subcommand router + individual handler + hxFetch with basePath '/api'. Zero production dependencies are maintained throughout.",
+      "evidence": [
+        "src/comments/index.ts - existing subcommand pattern to replicate",
+        "src/lib/http.ts - hxFetch with basePath '/api' for all new commands",
+        "src/lib/config.ts - config schema extended with optional orgId/orgName",
+        "package.json - zero prod deps constraint maintained",
+        "tech-research/tech-research.md - chose extend-existing-patterns architecture"
+      ]
+    },
+    {
+      "answer": "Steps are ordered by dependency: flags.ts (step 1) is needed by all subsequent command files. Config extension (step 2) is needed by org switch (step 3). Org commands (step 3) establish the pattern for tickets. Discovery (step 4) provides ticket IDs for actions (step 5), artifacts (step 6), and bundle (step 7). Entry point registration (step 8) depends on all command groups being built. Flag refactoring (step 9) is last as it modifies existing working code.",
+      "evidence": [
+        "src/index.ts - entry point imports org/index.ts and tickets/index.ts",
+        "src/org/switch.ts - uses saveConfig with orgId/orgName from step 2",
+        "src/tickets/bundle.ts - composes ticket detail (step 4) + artifacts (step 6)"
+      ]
+    },
+    {
+      "answer": "12 required verification checks: typecheck (CHK-01), build (CHK-02), org current (CHK-03), org list (CHK-04), org switch (CHK-05), tickets list (CHK-06), list with filters (CHK-07), tickets get (CHK-08), artifacts list (CHK-09), artifact read (CHK-10), bundle (CHK-11), and continue with continuationContext (CHK-12). All CLI checks run against the dev server at port 4000 using a session JWT obtained from the login endpoint with the provided dev credentials.",
+      "evidence": [
+        "Dev setup config - port 4000, login credentials, env vars",
+        "ticket.md acceptance criteria - maps to CHK-03 through CHK-12",
+        "package.json - typecheck and build scripts"
+      ]
+    }
+  ],
+  "statement": "The helix-cli implementation plan defines 9 atomic steps to expand the CLI from 3 command groups to 5, adding org management (3 commands), ticket discovery with filters (3 commands), ticket actions (3 commands), artifact inspection (2 commands), and a Codex bundle command. Steps are dependency-ordered. All new code follows existing patterns (switch routing, hxFetch, basePath '/api') with zero new production dependencies. Verification covers 12 required checks against the dev server at port 4000.",
+  "followups": []
+}
