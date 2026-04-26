@@ -1,0 +1,69 @@
+{
+  "questions": [
+    "What is the root cause of the version reporting drift (hlx --version shows '0.1.0' while package.json declares '1.2.0')?",
+    "Can the existing config system safely persist new fields like autoUpdate and update metadata without losing existing fields?",
+    "Is there any existing update, GitHub API, or self-update infrastructure in the CLI?",
+    "Can the existing HTTP client (hxFetch) be reused for GitHub API calls?",
+    "Does helix-global-server need any changes for this ticket?",
+    "What is the viable mechanism for reading package.json version at runtime in an ES module context?",
+    "What update mechanism should be used to reinstall from GitHub (not npm registry)?"
+  ],
+  "answers": [
+    {
+      "answer": "The version is hardcoded as a string literal '0.1.0' in src/index.ts:47 (`console.log(\"0.1.0\")`). The package.json declares version '1.2.0'. The hardcoded value was never updated when package.json version changed. Fix: read version from package.json at runtime.",
+      "evidence": [
+        "src/index.ts:47 — `console.log(\"0.1.0\");`",
+        "package.json:3 — `\"version\": \"1.2.0\"`"
+      ]
+    },
+    {
+      "answer": "No. The config system is lossy. saveConfig() at src/lib/config.ts:35-38 serializes only {apiKey, url} and overwrites the entire file. HxConfig type (lines 5-8) has exactly two fields. Adding autoUpdate or update metadata would be destroyed by any subsequent saveConfig() call (e.g., from login). Both the type and the save logic must be extended to preserve additional fields.",
+      "evidence": [
+        "src/lib/config.ts:5-8 — `export type HxConfig = { apiKey: string; url: string; };`",
+        "src/lib/config.ts:35-38 — saveConfig writes JSON.stringify(config) where config is HxConfig",
+        "src/login.ts:38,107 — saveConfig({ apiKey, url }) called during login, would destroy new fields"
+      ]
+    },
+    {
+      "answer": "No. Zero update-related code exists anywhere in src/. Grep for 'update', 'autoUpdate', 'self-update' found only the '--version' case in index.ts. No src/update/ directory exists. No GitHub API integration exists. This is entirely greenfield.",
+      "evidence": [
+        "grep results: only src/index.ts references 'version' (the --version flag)",
+        "src/ directory listing: 13 .ts files across comments/, inspect/, lib/, and root — no update-related files"
+      ]
+    },
+    {
+      "answer": "No. hxFetch in src/lib/http.ts is tightly coupled to Helix server auth: it attaches X-API-Key or Authorization: Bearer headers (lines 52-57) based on config.apiKey. GitHub API calls for a public repo should be unauthenticated. A separate lightweight fetch function or direct use of global fetch() is needed for GitHub API. Alternatively, child_process.execSync with 'git ls-remote' could be used (git is already used via exec in login.ts for browser opening, establishing child_process precedent).",
+      "evidence": [
+        "src/lib/http.ts:52-57 — Helix-specific auth headers",
+        "src/lib/http.ts:37-41 — hxFetch signature requires HxConfig",
+        "src/login.ts:3 — child_process.exec already imported and used"
+      ]
+    },
+    {
+      "answer": "No. The ticket explicitly forbids server-side CLI update logic. Scout found no CLI-related endpoints beyond /auth/cli (OAuth redirect for login, unrelated to updates). All changes are contained in helix-cli.",
+      "evidence": [
+        "Ticket: 'Do not add server version endpoints or server-side CLI update logic'",
+        "helix-global-server scout artifacts do not exist (no reference-map.json found)",
+        "Ticket out-of-scope: 'Server-driven version checks'"
+      ]
+    },
+    {
+      "answer": "The project uses ES modules (type: 'module' in package.json, module: 'Node16' in tsconfig). Standard require() is not available. Viable approaches: (1) createRequire(import.meta.url) from 'node:module' to require package.json, (2) readFileSync with fileURLToPath(import.meta.url) to resolve package.json path relative to the module, (3) import assertion with { type: 'json' }. Approach (2) using readFileSync + fileURLToPath is the most straightforward and has zero compatibility concerns with Node >=18.",
+      "evidence": [
+        "package.json:4 — `\"type\": \"module\"`",
+        "tsconfig.json:3-4 — `\"module\": \"Node16\", \"moduleResolution\": \"Node16\"`",
+        "package.json:13-15 — `\"engines\": { \"node\": \">=18\" }`"
+      ]
+    },
+    {
+      "answer": "The ticket mandates 'use the canonical GitHub source for reinstall/update, not npm [registry]'. The viable mechanism is `npm install -g github:Project-X-Innovation/helix-cli` which installs directly from the GitHub repo's main branch. This is a standard npm feature that fetches a tarball from GitHub without going through the npm registry. child_process.execSync is the natural execution mechanism, consistent with existing exec usage in login.ts.",
+      "evidence": [
+        "Ticket Required Behavior #8: 'The update implementation must use the canonical GitHub source for reinstall/update, not npm'",
+        "src/login.ts:3 — child_process.exec already used in codebase",
+        "package.json:6-8 — bin entry 'hlx' points to dist/index.js (standard npm global install structure)"
+      ]
+    }
+  ],
+  "statement": "This is a greenfield feature addition with one pre-existing bug (version drift). The CLI has no update infrastructure, the config system is lossy and cannot safely persist new fields, and the version output is hardcoded. All changes are scoped to helix-cli; helix-global-server needs no modifications. The implementation requires: (1) fixing config to preserve fields on save, (2) extending config type for autoUpdate and update metadata, (3) new update module(s) for GitHub SHA check and self-update, (4) wiring update command and auto-update hook into the CLI dispatcher, and (5) fixing version output to read from package metadata.",
+  "followups": []
+}
