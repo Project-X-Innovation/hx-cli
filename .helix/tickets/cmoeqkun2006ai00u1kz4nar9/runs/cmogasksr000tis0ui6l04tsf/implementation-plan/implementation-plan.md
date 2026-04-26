@@ -2,341 +2,203 @@
 
 ## Overview
 
-Expand `helix-cli` from a narrow inspection tool (login, inspect, comments) into an org-aware Helix workbench. Add two new command groups (`org`, `tickets`) following the existing command pattern. The CLI remains a thin client over the Helix backend API with zero production dependencies.
+The helix-cli expansion is already implemented in the current branch. All 13 new source files exist across `src/org/` (4 files) and `src/tickets/` (10 files), implementing the full command surface: org management (current/list/switch), ticket discovery with filters (list/latest/get), ticket actions (create/rerun/continue), artifact inspection (artifacts/artifact), and Codex bundling (bundle). The config model has been extended with `orgId`/`orgName`, the entry point routes all 5 command groups, and the version is bumped to 1.2.0. Typecheck was previously confirmed to pass with zero errors.
 
-New commands:
-- `hlx org current|list|switch` - org management
-- `hlx tickets list|latest|get` - ticket discovery with filters (`--user`, `--status`, `--status-not-in`, `--archived`, `--sprint`)
-- `hlx tickets create|rerun|continue` - ticket actions
-- `hlx tickets artifacts|artifact` - artifact inspection
-- `hlx tickets bundle` - local Codex context bundle
+The implementation step must:
+1. Verify the existing code compiles and builds correctly.
+2. Start the helix-global-server backend and test all CLI commands at runtime against the real API.
+3. Fix any issues discovered during runtime testing.
 
 ## Implementation Principles
 
-- Follow existing patterns: switch-based routing, subcommand routers, individual handler files, `hxFetch` with `basePath: "/api"`.
-- Zero production dependencies: use only Node.js built-in APIs.
-- Thin client: all data fetched from Helix backend; no client-side data invention.
-- ESM module: all imports use `.js` extensions per Node16 module resolution.
-- Backward-compatible: existing login, inspect, and comments commands unchanged.
+1. **Verify existing code**: All commands are already written. Focus on quality gates and runtime validation.
+2. **Test against real backend**: Use the dev server at port 4000 with provided credentials to test all CLI commands.
+3. **Fix-forward**: If runtime testing reveals issues, fix them in the existing files rather than rewriting.
+4. **Zero production dependencies**: Maintained throughout -- all code uses Node.js built-in APIs only.
+5. **Pattern consistency**: All new code follows the established switch-based routing + individual handler + `hxFetch` pattern.
 
 ## Implementation Steps Summary
 
 | Step | Goal | Deliverable |
-|---|---|---|
-| 1 | Shared flag parsing utilities | `src/lib/flags.ts` |
-| 2 | Extend config for org awareness | Modified `src/lib/config.ts` |
-| 3 | Org command group | `src/org/index.ts`, `current.ts`, `list.ts`, `switch.ts` |
-| 4 | Tickets router + discovery commands | `src/tickets/index.ts`, `list.ts`, `latest.ts`, `get.ts` |
-| 5 | Ticket action commands | `src/tickets/create.ts`, `rerun.ts`, `continue.ts` |
-| 6 | Artifact inspection commands | `src/tickets/artifacts.ts`, `artifact.ts` |
-| 7 | Bundle command | `src/tickets/bundle.ts` |
-| 8 | Register commands + fix version | Modified `src/index.ts` |
-| 9 | Refactor existing flag parsing | Modified `src/comments/index.ts`, `src/comments/list.ts`, `src/inspect/index.ts` |
+|------|------|-------------|
+| 1 | Set up dev environment for both repos | `.env` for server, `npm install` in both repos |
+| 2 | Run CLI quality gates | TypeScript typecheck and build pass |
+| 3 | Start backend server | Dev server running on port 4000 |
+| 4 | Authenticate and test org commands | Org current/list/switch verified at runtime |
+| 5 | Test ticket discovery commands | Ticket list/latest/get with filters verified |
+| 6 | Test ticket action commands | Create/rerun/continue verified |
+| 7 | Test artifact inspection commands | Artifacts list and raw content read verified |
+| 8 | Test bundle command | Deterministic local bundle created and verified |
+| 9 | Test error handling | Invalid input produces clear error messages |
 
 ## Detailed Implementation Steps
 
-### Step 1: Create Shared Flag Parsing Utilities
+### Step 1: Set up dev environment
 
-**Goal:** Eliminate flag parsing duplication and provide a consistent utility for all command groups.
+**Goal**: Prepare both repos for building and runtime testing.
 
-**What to Build:**
+**What to Build**:
+- Write `.env` file in helix-global-server root with all required env vars from dev setup config.
+- Run `npm install` in helix-global-server root.
+- Run `npm install` in helix-cli root.
 
-Create `src/lib/flags.ts` exporting:
-- `getFlag(args: string[], flag: string): string | undefined` - returns flag value or undefined (mirrors existing pattern from `comments/index.ts:5-9`)
-- `hasFlag(args: string[], flag: string): boolean` - returns true if flag is present (for boolean flags like `--archived`)
-- `getPositionalArgs(args: string[], excludeFlags: string[]): string[]` - returns non-flag args (mirrors existing pattern from `inspect/index.ts:13-20`)
-- `requireFlag(args: string[], flag: string, errorMsg: string): string` - getFlag + throws error if missing
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-cd /vercel/sandbox/workspaces/cmog2uk9t005pi00ufof780d9/helix-cli
-npx tsc --noEmit
+# In helix-global-server
+test -f .env && echo "server env exists"
+ls node_modules/.prisma/client/ 2>/dev/null | head -3
+
+# In helix-cli
+ls node_modules/typescript/bin/ 2>/dev/null | head -3
 ```
 
-**Success Criteria:**
-- Module compiles cleanly with strict TypeScript.
-- Exports all four functions with correct signatures.
+**Success Criteria**: Both repos have dependencies installed. Server has `.env` with database URL and auth secret.
 
-### Step 2: Extend Config for Org Awareness
+### Step 2: Run CLI quality gates
 
-**Goal:** Store current org metadata after org switch so `hlx org current` can work without a network call.
+**Goal**: Verify the helix-cli code compiles cleanly and produces a working build.
 
-**What to Build:**
+**What to Build**: No code changes. Run quality gates.
 
-Modify `src/lib/config.ts`:
-- Extend `HxConfig` type to add `orgId?: string` and `orgName?: string`.
-- Update `loadConfig()` to read `orgId`/`orgName` from config file when present (optional fields, backward-compatible).
-- Update `saveConfig()` to write `orgId`/`orgName` when present in the config object.
-- No changes to env-var priority logic.
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+cd /vercel/sandbox/workspaces/cmogasksr000tis0ui6l04tsf/helix-cli
+npm run typecheck
+npm run build
+ls dist/org/ dist/tickets/
 ```
 
-**Success Criteria:**
-- `HxConfig` type includes optional `orgId` and `orgName`.
-- Existing config files without these fields load correctly (backward-compatible).
+**Success Criteria**: `tsc --noEmit` passes with zero errors. `tsc` build produces `dist/` directory with compiled JS for all command groups including `dist/org/` and `dist/tickets/`.
 
-### Step 3: Create Org Command Group
+### Step 3: Start backend server
 
-**Goal:** Implement `hlx org current|list|switch` commands.
+**Goal**: Get the helix-global-server running on port 4000 for CLI testing.
 
-**What to Build:**
+**What to Build**: No code changes. Start the server.
 
-1. **`src/org/index.ts`** - Router function `runOrg(config, args)`:
-   - Switch-based subcommand dispatch for `current`, `list`, `switch`.
-   - Usage/error output for unknown subcommands.
-   - Follow the pattern of `src/comments/index.ts`.
-
-2. **`src/org/current.ts`** - `cmdOrgCurrent(config)`:
-   - Call `GET /api/auth/me` via `hxFetch(config, "/auth/me", { basePath: "/api" })`.
-   - Display: org name, org ID, user name, user email.
-   - If config has cached `orgId`/`orgName`, display those. Always fetch fresh data from server for accuracy.
-
-3. **`src/org/list.ts`** - `cmdOrgList(config)`:
-   - Call `GET /api/auth/me` via `hxFetch`.
-   - Display `availableOrganizations` array as a table: ID, name, with `(current)` marker for the active org.
-
-4. **`src/org/switch.ts`** - `cmdOrgSwitch(config, args)`:
-   - Take org identifier from positional args (can be org ID or org name).
-   - If input looks like a name (not a CUID), call `GET /api/auth/me` to resolve name to ID from `availableOrganizations`.
-   - Call `POST /api/auth/switch-org` with `{ organizationId }` via `hxFetch`.
-   - On success: overwrite config `apiKey` with new `accessToken`, store `orgId`/`orgName` from response.
-   - Call `saveConfig()` with the updated config.
-   - Display confirmation: "Switched to org: <name>".
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+cd /vercel/sandbox/workspaces/cmogasksr000tis0ui6l04tsf/helix-global-server
+npm run dev &
+# Wait for port 4000 to be available
+sleep 10
+curl -s http://localhost:4000/api/health | head -20
 ```
 
-**Success Criteria:**
-- All three commands compile and follow the hxFetch + basePath: "/api" pattern.
-- Org switch persists the new token and org metadata to config.
+**Success Criteria**: Server responds on port 4000.
 
-### Step 4: Create Tickets Router and Discovery Commands
+### Step 4: Authenticate and test org commands
 
-**Goal:** Implement `hlx tickets list|latest|get` with filter support.
+**Goal**: Verify `hlx org current|list|switch` work against the real backend.
 
-**What to Build:**
+**What to Build**: No code changes. Authenticate and test.
 
-1. **`src/tickets/index.ts`** - Router function `runTickets(config, args)`:
-   - Switch-based dispatch for: `list`, `latest`, `get`, `create`, `rerun`, `continue`, `artifacts`, `artifact`, `bundle`.
-   - Use `getFlag` from `src/lib/flags.ts` for ticket ID resolution (from `--ticket` flag or `HELIX_TICKET_ID` env var or positional arg).
-   - Usage/error output for unknown subcommands.
-
-2. **`src/tickets/list.ts`** - `cmdTicketsList(config, args)`:
-   - Build `queryParams` from flags:
-     - `--status-not-in <statuses>` -> `statusNotIn=<statuses>`
-     - `--archived` (boolean flag) -> `archived=true`
-     - `--sprint <id>` -> `sprintId=<id>`
-     - `--status <status>` -> `statusNotIn` set to all other statuses (invert to match API), OR client-side filter (simpler: fetch all, filter by status client-side since the API doesn't have a direct `status` param)
-     - `--user <email-or-name>` -> resolve to `reporterUserId` (see user resolution below)
-   - **User resolution for `--user`**: Call `GET /api/organization/members` via `hxFetch(config, "/organization/members", { basePath: "/api" })`. Match input against member email (exact) then name (case-insensitive). If no match, error with available users listed. Use resolved `id` as `reporterUserId` query param.
-   - Call `GET /api/tickets` via `hxFetch` with built `queryParams`.
-   - Display as a table: shortId, title, status, reporter name/email, updatedAt.
-
-3. **`src/tickets/latest.ts`** - `cmdTicketsLatest(config, args)`:
-   - Call `GET /api/tickets` via `hxFetch` (same as list, respects same filters).
-   - Take `items[0]` from response (backend returns sorted by `updatedAt: desc`).
-   - Display full ticket summary (same format as `hlx tickets get`).
-
-4. **`src/tickets/get.ts`** - `cmdTicketsGet(config, ticketId)`:
-   - Call `GET /api/tickets/<ticketId>` via `hxFetch`.
-   - Display comprehensive detail:
-     - Title, short ID, status
-     - Branch name
-     - Repositories (name, URL)
-     - Run history (run ID, status, timestamps)
-     - Merge queue status (if present)
-     - Reporter name/email
-     - Description (truncated if very long)
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+# Authenticate to get session JWT
+TOKEN=$(curl -s -X POST http://localhost:4000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"support@projectxinnovation.com","password":"=(ohR58-w"}' \
+  | node -e "process.stdin.on('data',d=>{const j=JSON.parse(d);console.log(j.accessToken||j.token)})")
+
+# Test org commands
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js org current
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js org list
 ```
 
-**Success Criteria:**
-- List command supports all five filter flags.
-- User resolution works via org members endpoint.
-- Get command displays branch, repos, runs, merge status.
-- Latest is a convenience shortcut over list.
+**Success Criteria**: `org current` displays org name, ID, user name, email. `org list` shows available organizations with current marker.
 
-### Step 5: Create Ticket Action Commands
+### Step 5: Test ticket discovery commands
 
-**Goal:** Implement `hlx tickets create|rerun|continue`.
+**Goal**: Verify `hlx tickets list|latest|get` with filters work at runtime.
 
-**What to Build:**
+**What to Build**: No code changes. Test commands.
 
-1. **`src/tickets/create.ts`** - `cmdTicketsCreate(config, args)`:
-   - Parse flags: `--title <title>`, `--description <desc>`, `--repos <repo1,repo2>`.
-   - All three flags are required; error if missing.
-   - Call `POST /api/tickets` with `{ title, description, repositoryIds: repos.split(",") }` via `hxFetch`.
-   - Display: created ticket ID, short ID, status, run ID.
-
-2. **`src/tickets/rerun.ts`** - `cmdTicketsRerun(config, ticketId)`:
-   - Call `POST /api/tickets/<ticketId>/rerun` with empty body `{}` via `hxFetch`.
-   - Display: "Rerun started" with new run ID.
-
-3. **`src/tickets/continue.ts`** - `cmdTicketsContinue(config, ticketId, args)`:
-   - Collect continuation context from positional args (everything not a flag, joined with spaces).
-   - If no context provided, error with clear message.
-   - Call `POST /api/tickets/<ticketId>/rerun` with `{ continuationContext }` via `hxFetch`.
-   - Display: "Continue started" with new run ID.
-   - **Critical**: This uses the existing rerun endpoint. Do NOT create a separate backend "continue" concept.
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+# List tickets
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets list
+
+# List with status filter
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets list --status-not-in DEPLOYED,FAILED
+
+# Get latest
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets latest
+
+# Get specific ticket
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets get <ticket-id-from-list>
 ```
 
-**Success Criteria:**
-- Create validates required flags and calls POST /api/tickets.
-- Rerun calls POST /api/tickets/:id/rerun with empty body.
-- Continue calls POST /api/tickets/:id/rerun with `continuationContext` in body.
+**Success Criteria**: List shows tickets with short ID, status, reporter, title. Filters narrow results. Get shows branch, repos, runs, merge status.
 
-### Step 6: Create Artifact Inspection Commands
+### Step 6: Test ticket action commands
 
-**Goal:** Implement `hlx tickets artifacts|artifact` for discovering and reading step artifacts.
+**Goal**: Verify create, rerun, and continue commands work.
 
-**What to Build:**
+**What to Build**: No code changes. Test commands. Note: create and rerun/continue are destructive operations (create tickets, trigger runs). Test with caution or verify the command structure without executing if creating real tickets is undesirable.
 
-1. **`src/tickets/artifacts.ts`** - `cmdTicketsArtifacts(config, ticketId)`:
-   - Call `GET /api/tickets/<ticketId>/artifacts` via `hxFetch`.
-   - Display two sections:
-     - **Artifacts**: list `items[]` with label, repo URL, branch, path.
-     - **Step Artifact Summary**: list `stepArtifactSummary[]` with step ID, repo key. This is the data needed for the `artifact` command.
-
-2. **`src/tickets/artifact.ts`** - `cmdTicketsArtifact(config, ticketId, args)`:
-   - Parse flags: `--step <stepId>`, `--repo <repoKey>`, `--run <runId>` (optional).
-   - `--step` and `--repo` are required.
-   - If `--run` is not provided, need the latest run ID. Call `GET /api/tickets/<ticketId>` to get `currentRun.id` or the latest from `runs[]`.
-   - Call `GET /api/tickets/<ticketId>/runs/<runId>/step-artifacts/<stepId>?repoKey=<repoKey>` via `hxFetch`.
-   - Print each file's content directly to stdout (raw markdown/JSON). If multiple files, print filename header between each.
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+# Test continue (uses rerun endpoint with continuationContext)
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets continue <ticket-id> "test context"
 ```
 
-**Success Criteria:**
-- Artifacts command lists both items and step artifact summaries.
-- Artifact command fetches and prints raw file content.
-- Step and repo flags are required; run is optional (defaults to latest).
+**Success Criteria**: Commands call the correct backend endpoints. Continue sends `continuationContext` via the rerun endpoint. Error responses from the backend are displayed clearly.
 
-### Step 7: Create Bundle Command
+### Step 7: Test artifact inspection commands
 
-**Goal:** Implement `hlx tickets bundle <ticket-id> --out <dir>` for local Codex context.
+**Goal**: Verify artifact discovery and raw content reads work.
 
-**What to Build:**
+**What to Build**: No code changes. Test commands.
 
-Create `src/tickets/bundle.ts` - `cmdTicketsBundle(config, ticketId, args)`:
-
-1. Parse `--out <dir>` flag (required).
-2. Fetch ticket detail: `GET /api/tickets/<ticketId>`.
-3. Fetch artifacts: `GET /api/tickets/<ticketId>/artifacts`.
-4. Create output directory structure:
-   ```
-   <out-dir>/
-     ticket.json              # Full ticket detail response
-     artifacts/
-       <step-id>/
-         <repo-key>/
-           <filename>         # Raw artifact file content
-     manifest.json            # { ticketId, bundledAt, cliVersion }
-   ```
-5. Write `ticket.json`: JSON.stringify the full ticket detail response.
-6. For each entry in `stepArtifactSummary`:
-   - Determine the run ID (use current/latest run).
-   - Call `GET /api/tickets/<ticketId>/runs/<runId>/step-artifacts/<stepId>?repoKey=<repoKey>`.
-   - For each file in the response, write to `artifacts/<stepId>/<repoKey>/<filename>`.
-7. Write `manifest.json` with `{ ticketId, bundledAt: new Date().toISOString(), cliVersion: "1.2.0" }`.
-8. Use `node:fs` (`mkdirSync`, `writeFileSync`) and `node:path` (`join`) - all built-in.
-9. Display summary: total files written, output path.
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+# List artifacts for a ticket with completed runs
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets artifacts <ticket-id>
+
+# Read a specific step artifact
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets artifact <ticket-id> --step <step-id> --repo <repo-key>
 ```
 
-**Success Criteria:**
-- Bundle creates the deterministic directory structure.
-- `ticket.json` contains the full ticket detail.
-- Artifacts are organized by step/repo.
-- `manifest.json` provides provenance metadata.
+**Success Criteria**: Artifacts command lists items and step artifact summaries. Artifact command prints raw markdown/JSON content to stdout.
 
-### Step 8: Register Commands in Entry Point + Fix Version
+### Step 8: Test bundle command
 
-**Goal:** Wire up the new command groups and fix the version mismatch.
+**Goal**: Verify the bundle creates a deterministic local directory.
 
-**What to Build:**
+**What to Build**: No code changes. Test the bundle command.
 
-Modify `src/index.ts`:
-
-1. Add imports:
-   ```typescript
-   import { runOrg } from "./org/index.js";
-   import { runTickets } from "./tickets/index.js";
-   ```
-
-2. Add switch cases after `"comments"` case:
-   ```typescript
-   case "org": {
-     const config = requireConfig();
-     await runOrg(config, args.slice(1));
-     break;
-   }
-   case "tickets": {
-     const config = requireConfig();
-     await runTickets(config, args.slice(1));
-     break;
-   }
-   ```
-
-3. Update version from `"0.1.0"` to `"1.2.0"` (line 47) to match `package.json`.
-
-4. Update the usage string to include all new commands:
-   ```
-   hlx org current|list|switch        Manage org context
-   hlx tickets list|latest|get        Discover and inspect tickets
-   hlx tickets create|rerun|continue  Ticket actions
-   hlx tickets artifacts|artifact     Inspect step artifacts
-   hlx tickets bundle <id> --out <dir> Bundle for Codex
-   ```
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
-node dist/index.js --version
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets bundle <ticket-id> --out /tmp/test-bundle
+ls -R /tmp/test-bundle/
+cat /tmp/test-bundle/manifest.json
 ```
 
-**Success Criteria:**
-- `hlx --version` outputs `1.2.0`.
-- `hlx org` and `hlx tickets` route to the new command groups.
-- Unknown commands still show updated usage text.
+**Success Criteria**: Bundle directory contains `ticket.json`, `manifest.json`, and `artifacts/<step>/<repo>/<file>` structure. `manifest.json` has `ticketId`, `bundledAt`, and `cliVersion` fields.
 
-### Step 9: Refactor Existing Flag Parsing to Use Shared Module
+### Step 9: Test error handling
 
-**Goal:** Remove duplicated `getFlag`/`getPositionalArgs` functions from existing command files.
+**Goal**: Verify invalid inputs produce clear, non-silent error messages.
 
-**What to Build:**
+**What to Build**: No code changes. Test error cases.
 
-1. **`src/comments/index.ts`**: Remove local `getFlag` function (lines 5-9). Import `{ getFlag }` from `"../lib/flags.js"`.
-
-2. **`src/comments/list.ts`**: Remove local `getFlag` function (lines 15-19). Import `{ getFlag }` from `"../lib/flags.js"`.
-
-3. **`src/inspect/index.ts`**: Remove local `getFlag` and `getPositionalArgs` functions (lines 7-20). Import `{ getFlag, getPositionalArgs }` from `"../lib/flags.js"`.
-
-**Verification (AI Agent Runs):**
+**Verification (AI Agent Runs)**:
 ```bash
-npx tsc --noEmit
+# Missing ticket ID
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets get 2>&1
+
+# Unknown subcommand
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets foobar 2>&1
+
+# Missing required flags for create
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js tickets create 2>&1
+
+# Invalid org switch
+HELIX_API_KEY=$TOKEN HELIX_URL=http://localhost:4000 node dist/index.js org switch nonexistent-org 2>&1
 ```
 
-**Success Criteria:**
-- All existing commands continue to compile and work with shared flag utilities.
-- No duplicate `getFlag`/`getPositionalArgs` functions remain in the codebase.
+**Success Criteria**: All invalid input scenarios produce clear error messages to stderr and exit with code 1. No silent failures or unhandled exceptions.
 
 ## Verification Plan
 
@@ -344,109 +206,111 @@ npx tsc --noEmit
 
 | Dependency | Status | Source/Evidence | Affects checks |
 |---|---|---|---|
-| `npm install` completed in helix-cli | available | Standard setup step | CHK-01, CHK-02 |
-| helix-global-server `.env` file written | available | Dev setup config provides all env vars | CHK-03 through CHK-12 |
+| `npm install` completed in helix-cli | available | Standard setup step | CHK-01, CHK-02, CHK-03 through CHK-12 |
 | `npm install` completed in helix-global-server | available | Standard setup step | CHK-03 through CHK-12 |
-| helix-global-server dev server running on port 4000 (`npm run dev`) | available | Dev setup config: port 4000 | CHK-03 through CHK-12 |
-| Valid session JWT obtained via `POST /api/auth/login` with dev credentials (support@projectxinnovation.com / =(ohR58-w) | available | Dev setup config provides login credentials | CHK-03 through CHK-12 |
-| helix-cli built (`npm run build`) | available | package.json has build script | CHK-03 through CHK-12 |
-| Org with existing tickets in the dev database | unknown | Depends on database state; tickets may need to be created first via CLI or API | CHK-06, CHK-07, CHK-08, CHK-09, CHK-10, CHK-11 |
+| helix-global-server `.env` file written with all env vars | available | Dev setup config provides all required values | CHK-03 through CHK-12 |
+| helix-global-server dev server running on port 4000 | available | Dev setup config: port 4000, dev command: `npm run dev` | CHK-03 through CHK-12 |
+| helix-cli built via `npm run build` | available | package.json has build script: `tsc` | CHK-03 through CHK-12 |
+| Valid session JWT obtained from `POST /api/auth/login` with dev credentials (support@projectxinnovation.com / =(ohR58-w)) | available | Dev setup config provides login credentials | CHK-03 through CHK-12 |
+| Org with existing tickets in the connected database | available | Production Neon DB has 381 tickets per diagnosis runtime evidence | CHK-06, CHK-07, CHK-08, CHK-09, CHK-10, CHK-11 |
 
 ### Required Checks
 
 [CHK-01] TypeScript typecheck passes.
-- Action: Run `npm run typecheck` in the helix-cli directory.
-- Expected Outcome: Command exits with code 0 and no type errors.
+- Action: Run `npm run typecheck` (which runs `tsc --noEmit`) in the helix-cli directory after `npm install`.
+- Expected Outcome: Command exits with code 0 and no type errors reported.
 - Required Evidence: Command output showing successful completion with exit code 0.
 
-[CHK-02] Build completes successfully.
-- Action: Run `npm run build` in the helix-cli directory.
-- Expected Outcome: Command exits with code 0 and `dist/` directory is populated with compiled JavaScript.
-- Required Evidence: Command output showing successful build, plus file listing of `dist/` directory confirming new files (org/, tickets/) are present.
+[CHK-02] Build completes and dist/ directory contains all command groups.
+- Action: Run `npm run build` (which runs `tsc`) in the helix-cli directory. List the contents of the `dist/` directory.
+- Expected Outcome: Command exits with code 0. `dist/` contains `index.js`, `org/` directory (with `index.js`, `current.js`, `list.js`, `switch.js`), and `tickets/` directory (with `index.js`, `list.js`, `latest.js`, `get.js`, `create.js`, `rerun.js`, `continue.js`, `artifacts.js`, `artifact.js`, `bundle.js`).
+- Required Evidence: Build command output showing exit code 0, plus directory listing of `dist/org/` and `dist/tickets/` confirming all expected JS files are present.
 
 [CHK-03] `hlx org current` displays current org and user.
-- Action: Set `HELIX_URL=http://localhost:4000` and `HELIX_API_KEY=<session-jwt>` (obtained from POST /api/auth/login against the dev server at port 4000). Run `node dist/index.js org current`.
+- Action: Start the helix-global-server dev server on port 4000. Obtain a session JWT by calling `POST /api/auth/login` with dev credentials (support@projectxinnovation.com / =(ohR58-w)) against `http://localhost:4000`. Set `HELIX_API_KEY=<jwt>` and `HELIX_URL=http://localhost:4000`. Run `node dist/index.js org current`.
 - Expected Outcome: Output displays the current organization name, org ID, user name, and user email.
-- Required Evidence: Command output showing org and user information from the configured dev server at port 4000.
+- Required Evidence: Command output showing all four fields (org name, org ID, user name, email) from the dev server at port 4000.
 
 [CHK-04] `hlx org list` displays available organizations.
 - Action: Using the same env vars from CHK-03, run `node dist/index.js org list`.
-- Expected Outcome: Output lists one or more organizations with IDs and names. The current org is marked.
-- Required Evidence: Command output showing at least one organization entry.
+- Expected Outcome: Output lists one or more organizations with IDs and names. The current org is marked with `(current)`.
+- Required Evidence: Command output showing at least one organization entry with ID and name.
 
 [CHK-05] `hlx org switch` changes the active org context.
-- Action: Using the same env vars from CHK-03, run `node dist/index.js org switch <org-name-or-id>` with a valid org from the list in CHK-04. Then run `node dist/index.js org current` to verify the switch took effect.
-- Expected Outcome: Switch command shows confirmation. Subsequent `org current` shows the new org. The config file at `~/.hlx/config.json` is updated with the new token and org metadata.
-- Required Evidence: Output from both the switch and current commands, plus contents of `~/.hlx/config.json` showing updated `orgId`/`orgName`.
+- Action: Using the same env vars from CHK-03, if multiple orgs are available from CHK-04, run `node dist/index.js org switch <org-name-or-id>` with a valid org. Then run `node dist/index.js org current` to verify the switch. If only one org is available, attempt to switch to the current org (should succeed idempotently) or test with an invalid org name to verify the error path.
+- Expected Outcome: Switch command shows confirmation "Switched to org: <name>". Subsequent `org current` shows the switched org context.
+- Required Evidence: Output from both the switch and current commands. If only one org exists, output from the switch command showing confirmation of the same org, or error output for invalid org showing available orgs list.
 
 [CHK-06] `hlx tickets list` returns org-scoped tickets.
 - Action: Run `node dist/index.js tickets list` with the dev server env vars.
-- Expected Outcome: Output displays a list of tickets from the current org, showing short ID, title, status, reporter, and updated timestamp.
-- Required Evidence: Command output showing at least one ticket entry (or an empty list message if no tickets exist, which would indicate the dev database needs seeding first).
+- Expected Outcome: Output displays a formatted list of tickets from the current org, with each line showing short ID, status, reporter, timestamp, and title.
+- Required Evidence: Command output showing ticket entries (short IDs, statuses, titles). If the org has no tickets, the output shows "No tickets found."
 
-[CHK-07] `hlx tickets list` with `--status-not-in` filter works.
-- Action: Run `node dist/index.js tickets list --status-not-in DEPLOYED,FAILED`.
-- Expected Outcome: Output displays only tickets whose status is NOT DEPLOYED or FAILED.
+[CHK-07] `hlx tickets list` with `--status-not-in` filter narrows results.
+- Action: Run `node dist/index.js tickets list --status-not-in DEPLOYED,FAILED` with the dev server env vars.
+- Expected Outcome: Output displays only tickets whose status is NOT DEPLOYED or FAILED. The result set is a subset of or equal to the unfiltered list from CHK-06.
 - Required Evidence: Command output showing filtered ticket list where no entries have DEPLOYED or FAILED status.
 
-[CHK-08] `hlx tickets get` shows full ticket detail.
-- Action: Run `node dist/index.js tickets get <ticket-id>` with a valid ticket ID from CHK-06.
-- Expected Outcome: Output includes: title, short ID, status, branch name, repositories (name and URL), run history (at least one run with ID and status), and merge queue status.
-- Required Evidence: Command output containing all expected fields: title, branchName, repositories list, runs list.
+[CHK-08] `hlx tickets get` shows full ticket detail with branch, repos, and runs.
+- Action: Run `node dist/index.js tickets get <ticket-id>` using a valid ticket ID from CHK-06 output.
+- Expected Outcome: Output includes: Title, Short ID, Status, Branch name, Reporter, Repositories section (display name and repo URL), Runs section (run ID, status, timestamps).
+- Required Evidence: Command output containing all expected fields: Title, Branch, at least one repository entry, at least one run entry.
 
 [CHK-09] `hlx tickets artifacts` lists step artifact summaries.
-- Action: Run `node dist/index.js tickets artifacts <ticket-id>` with a ticket that has completed runs.
-- Expected Outcome: Output lists available artifacts and step artifact summaries (step ID + repo key pairs).
-- Required Evidence: Command output showing step artifact summary entries.
+- Action: Run `node dist/index.js tickets artifacts <ticket-id>` using a ticket ID that has completed runs (pick one with a non-QUEUED/RUNNING status from CHK-06).
+- Expected Outcome: Output lists artifact items and/or step artifact summary entries showing step ID and repo key pairs. If the ticket has no artifacts, the output shows "No artifacts found." or "No step artifacts found."
+- Required Evidence: Command output showing artifact entries. If a ticket with completed artifacts is available, output includes at least one step artifact summary entry.
 
-[CHK-10] `hlx tickets artifact` prints raw artifact content.
-- Action: Run `node dist/index.js tickets artifact <ticket-id> --step <step-id> --repo <repo-key>` using values from CHK-09.
-- Expected Outcome: Raw markdown or JSON content is printed directly to stdout.
-- Required Evidence: Command output containing the raw artifact file content (not an error message or empty output).
+[CHK-10] `hlx tickets artifact` prints raw step artifact content.
+- Action: Using step ID and repo key from CHK-09 output, run `node dist/index.js tickets artifact <ticket-id> --step <step-id> --repo <repo-key>`.
+- Expected Outcome: Raw markdown or JSON content is printed directly to stdout without wrapping or formatting. If the artifact has multiple files, each file is preceded by a filename header.
+- Required Evidence: Command output containing raw artifact text (markdown or JSON content), not an error message or empty output.
 
 [CHK-11] `hlx tickets bundle` creates deterministic local bundle.
-- Action: Run `node dist/index.js tickets bundle <ticket-id> --out /tmp/test-bundle` with a ticket that has completed runs.
-- Expected Outcome: The `/tmp/test-bundle/` directory is created with: `ticket.json`, `manifest.json`, and `artifacts/<step>/<repo>/<file>` structure.
-- Required Evidence: Directory listing of `/tmp/test-bundle/` showing `ticket.json`, `manifest.json`, and at least one artifact file. Contents of `manifest.json` showing ticketId and bundledAt fields.
+- Action: Run `node dist/index.js tickets bundle <ticket-id> --out /tmp/test-bundle` using a ticket with completed runs.
+- Expected Outcome: The `/tmp/test-bundle/` directory is created containing: `ticket.json` (full ticket detail JSON), `manifest.json` (with `ticketId`, `bundledAt`, `cliVersion` fields), and `artifacts/<stepId>/<repoKey>/<filename>` files for available step artifacts.
+- Required Evidence: Directory listing of `/tmp/test-bundle/` showing `ticket.json` and `manifest.json`. Contents of `manifest.json` showing `ticketId`, `bundledAt` (ISO timestamp), and `cliVersion` ("1.2.0") fields. If artifacts were available, at least one file under `artifacts/`.
 
-[CHK-12] `hlx tickets continue` sends continuationContext via rerun endpoint.
-- Action: Run `node dist/index.js tickets continue <ticket-id> "test continuation context"` against the dev server at port 4000.
-- Expected Outcome: The command calls POST /api/tickets/:id/rerun with `{ continuationContext: "test continuation context" }` and displays a confirmation with a new run ID.
-- Required Evidence: Command output showing "Continue started" (or equivalent) with a run ID. If the server rejects the rerun for workflow reasons, the error message from the backend is displayed (not a silent failure or client-side crash).
+[CHK-12] Error handling produces clear messages for invalid input.
+- Action: Run `node dist/index.js tickets get` (missing ticket ID), `node dist/index.js tickets foobar` (unknown subcommand), and `node dist/index.js org switch nonexistent-org-name` (invalid org) with the dev server env vars.
+- Expected Outcome: Each command exits with non-zero exit code and prints a clear error message to stderr. Missing ticket ID error lists the three resolution methods (--ticket, HELIX_TICKET_ID, positional). Unknown subcommand shows usage text. Invalid org shows available organizations.
+- Required Evidence: Error output from all three commands showing descriptive error messages (not stack traces or silent failures).
 
 ## Success Metrics
 
-- All 9 implementation steps compile cleanly (typecheck passes).
-- The built CLI binary routes `org` and `tickets` commands correctly.
-- Org switching persists the new JWT and org metadata.
-- Ticket listing supports all five filter flags (--user, --status, --status-not-in, --archived, --sprint).
-- Ticket detail shows branch, repos, runs, and merge status.
-- Artifact inspection prints raw content.
-- Bundle creates deterministic local context for Codex.
-- Continue uses the existing rerun endpoint with continuationContext.
-- All invalid inputs produce clear, non-silent error messages.
-- Zero production dependencies maintained.
+- TypeScript compiles with zero errors (`tsc --noEmit` passes)
+- Build produces complete `dist/` directory with all command groups
+- All 5 command groups route correctly (org, tickets, login, inspect, comments)
+- Org switching persists new JWT and org metadata
+- Ticket listing supports filters (--user, --status, --status-not-in, --archived, --sprint)
+- Ticket detail shows branch, repos, runs, merge status
+- Artifact inspection prints raw content
+- Bundle creates deterministic local context for Codex
+- Continue uses existing rerun endpoint with continuationContext
+- Invalid inputs produce clear, non-silent error messages
+- Zero production dependencies maintained
+- CLI version is 1.2.0
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |---|---|---|
-| ticket.md | Primary specification | Defined full command surface, filters, constraints, acceptance criteria |
-| diagnosis/diagnosis-statement.md (helix-cli) | Root cause analysis | Confirmed feature-addition gap, auth compatibility, clean patterns |
-| diagnosis/apl.json (helix-cli) | Diagnosis evidence | Confirmed OAuth JWT flow, config sufficiency, all backend endpoints present |
-| product/product.md | Product direction | Defined command surface, UX principles, bundle concept, open questions resolved |
-| tech-research/tech-research.md (helix-cli) | Architecture decisions | Chose: extend existing patterns, shared flags.ts, config extension, bundle layout, user resolution strategy, version fix |
-| tech-research/apl.json (helix-cli) | Tech research evidence | Confirmed zero-dep constraint, switch routing, flag consolidation |
-| scout/scout-summary.md (helix-cli) | CLI architecture analysis | Mapped current command surface and identified existing patterns to follow |
-| scout/reference-map.json (helix-cli) | File inventory | Identified 11 relevant files, version mismatch, zero-dep constraint |
-| diagnosis/diagnosis-statement.md (helix-global-server) | Backend gap analysis | Confirmed reporterUserId is the only missing param; backend API otherwise complete |
-| scout/scout-summary.md (helix-global-server) | Backend API mapping | All endpoint shapes and auth requirements documented |
-| repo-guidance.json | Repo intent | Confirmed helix-cli as primary target with ~12-15 new files |
-| src/index.ts (helix-cli) | Direct code inspection | Verified switch-based routing pattern, version mismatch at line 47 |
-| src/lib/config.ts (helix-cli) | Direct code inspection | Verified {apiKey, url} schema, saveConfig/loadConfig behavior |
-| src/lib/http.ts (helix-cli) | Direct code inspection | Verified hxFetch auth header routing, basePath convention, retry logic |
-| src/comments/index.ts (helix-cli) | Direct code inspection | Verified subcommand routing pattern to replicate |
-| src/comments/list.ts (helix-cli) | Direct code inspection | Verified GET handler pattern with hxFetch and basePath "/api" |
-| src/comments/post.ts (helix-cli) | Direct code inspection | Verified POST handler pattern with body |
-| src/inspect/index.ts (helix-cli) | Direct code inspection | Verified getPositionalArgs utility and subcommand pattern |
-| src/login.ts (helix-cli) | Direct code inspection | Verified OAuth callback stores key as apiKey (session JWT) |
+| ticket.md (helix-cli) | Primary ticket specification | Full command surface, filters, constraints, acceptance criteria |
+| scout/reference-map.json (helix-cli) | File inventory and facts | 13 new files implemented, typecheck passes, zero deps, all commands present |
+| scout/scout-summary.md (helix-cli) | Architecture and pattern analysis | Switch-based routing, manual flag parsing, hxFetch shared client, config model |
+| diagnosis/diagnosis-statement.md (helix-cli) | Gap analysis | Feature expansion confirmed complete; all acceptance criteria met |
+| diagnosis/apl.json (helix-cli) | Diagnostic evidence | Thin client confirmed, continue uses rerun, no blocking gaps |
+| product/product.md (helix-cli) | Product vision and scope | Two audiences (human + Codex); org-scoped; zero deps; deferred features |
+| tech-research/tech-research.md (helix-cli) | Architecture decisions | Switch routing, shared flags, config extension, bundle layout, user resolution |
+| tech-research/apl.json (helix-cli) | Tech evidence | All architecture decisions evidence-backed |
+| diagnosis/diagnosis-statement.md (helix-global-server) | Backend API coverage | All endpoints pre-existed; reporterUserId change is minimal |
+| scout/scout-summary.md (helix-global-server) | Backend API surface | 14+ CLI routes mapped; auth architecture documented |
+| repo-guidance.json | Cross-repo intent | helix-cli = primary target, helix-global-server = minor target |
+| src/index.ts (helix-cli, direct inspection) | CLI entry point | 5 command groups routed; version 1.2.0; usage text covers all |
+| src/lib/config.ts (direct inspection) | Config model | HxConfig includes orgId/orgName; env var priority; saveConfig |
+| src/lib/http.ts (direct inspection) | HTTP client | hxFetch with retry, auth dispatch, basePath; all new commands use /api |
+| src/lib/flags.ts (direct inspection) | Flag parsing | getFlag, hasFlag, requireFlag, getPositionalArgs shared module |
+| src/org/*.ts (direct inspection) | Org commands | current/list/switch all implemented following established patterns |
+| src/tickets/*.ts (direct inspection) | Ticket commands | All 9 subcommands implemented with correct endpoint mapping |
+| package.json (direct inspection) | Build/version | Version 1.2.0, zero prod deps, tsc build, typecheck scripts |
+| tsconfig.json (direct inspection) | TS config | ES2022 target, Node16 module, strict mode, declaration |
