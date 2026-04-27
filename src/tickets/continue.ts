@@ -7,8 +7,12 @@ type RerunResponse = {
 };
 
 export async function cmdTicketsContinue(config: HxConfig, ticketId: string, args: string[]): Promise<void> {
-  // Collect continuation context from positional args
+  // Collect continuation context from positional args, excluding the ticket ID
+  // which may still be present in args when passed as a positional argument
   const positional = getPositionalArgs(args, ["--ticket"]);
+  if (positional.length > 0 && positional[0] === ticketId) {
+    positional.shift();
+  }
   const continuationContext = positional.join(" ").trim();
 
   if (!continuationContext) {
