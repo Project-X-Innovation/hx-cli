@@ -1,0 +1,133 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "helix-cli: Expanding from Inspection Tool to Org-Aware Workbench",
+  "description": "This tour walks through the expansion of helix-cli from a narrow three-command inspection tool (login, inspect, comments) into a full org-aware Helix workbench. The agent added two new command groups (org, tickets) with 9 subcommands, extracted shared flag-parsing utilities, extended the config schema for org awareness, and bumped the version to 1.2.0. No production dependencies were added and all existing commands remain backward-compatible. The tour follows data-flow order: shared utilities first, then config, then command groups, then the entry point wiring.",
+  "steps": [
+    {
+      "file": "src/lib/flags.ts",
+      "line": 1,
+      "description": "WHY: Flag parsing was duplicated across comments/ and inspect/. Extracting it into a single module (getFlag, hasFlag, getPositionalArgs, requireFlag) eliminates drift and gives every new command a consistent, tested interface. HOW: All new org/ and tickets/ handler files import from this module instead of hand-rolling argv scanning. The existing comments/ and inspect/ handlers were also refactored to use it (Step 9 of the plan), so there is now exactly one implementation.",
+      "title": "Step 1 — Shared Flag Utilities"
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 1,
+      "description": "WHY: POST /api/auth/switch-org returns a new JWT that encodes the target orgId. The CLI must persist this token plus optional orgId/orgName so that 'hlx org current' can display the active org without a network round-trip. HOW: HxConfig gains optional orgId and orgName fields. loadConfig and saveConfig are updated to read and write these fields to ~/.hlx/config.json alongside the existing apiKey and baseUrl. All existing consumers of HxConfig continue to work because the new fields are optional.",
+      "title": "Step 2 — Config Schema Extended for Org Awareness"
+    },
+    {
+      "file": "src/org/index.ts",
+      "line": 1,
+      "description": "WHY: Following the identical switch-based routing pattern established by src/comments/index.ts, the org router dispatches to current, list, or switch handlers based on argv[0]. HOW: The router reads the first positional argument, calls the appropriate handler, and falls through to a usage message. It is a pure dispatcher with no business logic of its own, keeping each handler independently testable.",
+      "title": "Step 3a — Org Command Router"
+    },
+    {
+      "file": "src/org/current.ts",
+      "line": 1,
+      "description": "WHY: Developers need to know which org their stored token is scoped to. HOW: Calls GET /api/auth/me via hxFetch (basePath '/api'). The response contains the current user and org. If orgId/orgName are cached in config the command can display them immediately; otherwise they are populated from the API response and written back to config for future calls.",
+      "title": "Step 3b — hlx org current"
+    },
+    {
+      "file": "src/org/list.ts",
+      "line": 1,
+      "description": "WHY: Users with access to multiple orgs need to discover available orgs before switching. HOW: Also calls GET /api/auth/me (the same endpoint returns the user's org memberships). The response is formatted as a simple table. No additional endpoint was needed.",
+      "title": "Step 3c — hlx org list"
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 1,
+      "description": "WHY: The primary org-switching workflow. HOW: Sends POST /api/auth/switch-org with the target orgId. The response includes a new accessToken (JWT encoding the new orgId). The handler calls saveConfig to overwrite apiKey with this token and persist orgId/orgName. Subsequent commands automatically use the new token because every command loads config fresh via loadConfig. This is the only handler that mutates ~/.hlx/config.json outside of login.",
+      "title": "Step 3d — hlx org switch (state mutation hotspot)"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 1,
+      "description": "WHY: Nine ticket subcommands (list, latest, get, create, rerun, continue, artifacts, artifact, bundle) need a single entry point following the same switch-based pattern as org/ and comments/. HOW: Dispatches on argv[0] to each handler. Unknown subcommands fall through to a usage block listing all nine subcommands. Config is loaded once at the router level and passed down so handlers do not need to repeat the load.",
+      "title": "Step 4a — Tickets Command Router"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 1,
+      "description": "WHY: Ticket discovery with --user, --status, --status-not-in, --archived, and --sprint filters is the primary entry point for the Helix workflow. HOW: Uses getFlag/hasFlag from src/lib/flags.ts to parse argv. The --user filter resolves a display name to a userId via GET /api/organization/members, then passes userId as a query parameter to GET /api/tickets. All other filters are appended as query params directly. The resolved ticket list is printed as a formatted table.",
+      "title": "Step 4b — hlx tickets list (filter pipeline)"
+    },
+    {
+      "file": "src/tickets/latest.ts",
+      "line": 1,
+      "description": "WHY: A convenience alias that developers use in scripts (e.g., to pipe the most recent ticket ID into rerun). HOW: Internally reuses the same logic as list.ts but takes only the first element of the response array and prints it in the same detail format as 'hlx tickets get'. No additional API call is needed.",
+      "title": "Step 4c — hlx tickets latest"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 1,
+      "description": "WHY: Deep inspection of a single ticket including its runs, status, and metadata. HOW: Calls GET /api/tickets/:id via hxFetch. The ticketId is taken from positional args using getPositionalArgs from flags.ts. The response is pretty-printed as JSON or a structured summary depending on a --json flag.",
+      "title": "Step 4d — hlx tickets get"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 1,
+      "description": "WHY: Allows developers to kick off new Helix tickets from the CLI without opening the web UI. HOW: Reads --title, --description, and optional --sprint from argv. Sends POST /api/tickets with a JSON body. The response includes the new ticket ID which is printed to stdout so it can be captured in shell scripts.",
+      "title": "Step 5a — hlx tickets create"
+    },
+    {
+      "file": "src/tickets/rerun.ts",
+      "line": 1,
+      "description": "WHY: Re-triggers an existing ticket's agent run without modification. HOW: Sends POST /api/tickets/:id/rerun with an empty body (or optional overrides). ticketId comes from positional args. The response is the new run object. Uses the same hxFetch pattern with basePath '/api'.",
+      "title": "Step 5b — hlx tickets rerun"
+    },
+    {
+      "file": "src/tickets/continue.ts",
+      "line": 1,
+      "description": "WHY: Resumes an agent run from a specific continuation context, useful when a run stalls or needs additional input. HOW: Sends POST /api/tickets/:id/rerun with a continuationContext payload read from --context flag or stdin. This reuses the same backend endpoint as rerun but populates the continuationContext field.",
+      "title": "Step 5c — hlx tickets continue"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 1,
+      "description": "WHY: Lists all artifacts produced by a ticket's runs so developers can identify which artifact to read. HOW: Calls GET /api/tickets/:id/artifacts. The response array is formatted as a table with artifact name, step, and run ID. ticketId is required (enforced via requireFlag from flags.ts).",
+      "title": "Step 6a — hlx tickets artifacts"
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 1,
+      "description": "WHY: Reads the content of a specific step artifact, the primary way to retrieve agent-generated files. HOW: Calls GET /api/tickets/:id/runs/:runId/step-artifacts/:stepId with --repo-key as a query parameter. All four identifiers are required positional/flag args enforced by requireFlag. The raw artifact content is streamed to stdout.",
+      "title": "Step 6b — hlx tickets artifact (step artifact read)"
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 1,
+      "description": "WHY: Developers need to assemble a local Codex context bundle from ticket artifacts without manual API calls. HOW: Fetches the artifact list for a ticket, then downloads each artifact content in sequence using the same GET step-artifacts endpoint. Assembles the results into a single JSON bundle written to stdout or --output file. Uses only Node.js built-in fs/path — zero production dependencies maintained.",
+      "title": "Step 7 — hlx tickets bundle (local Codex context)"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 1,
+      "description": "WHY: The new org and tickets command groups must be wired into the top-level dispatcher, and the version string was stale (0.1.0 vs package.json 1.2.0). HOW: Two new cases ('org' and 'tickets') are added to the top-level switch statement, delegating to src/org/index.ts and src/tickets/index.ts respectively. The --version output is updated to read '1.2.0'. All existing cases (login, inspect, comments) are untouched, preserving backward compatibility.",
+      "title": "Step 8 — Entry Point: Register Commands + Version Fix"
+    },
+    {
+      "file": "src/comments/index.ts",
+      "line": 1,
+      "description": "WHY: comments/index.ts hand-rolled argv scanning that is now superseded by src/lib/flags.ts. Refactoring it eliminates the duplicate implementation and ensures bug fixes to flag parsing propagate everywhere. HOW: Direct argv index accesses are replaced with calls to getPositionalArgs and getFlag. Behavior is identical; only the implementation source changes.",
+      "title": "Step 9a — Refactor: comments router uses shared flags"
+    },
+    {
+      "file": "src/comments/list.ts",
+      "line": 1,
+      "description": "WHY: Same rationale as comments/index.ts — duplicated flag parsing replaced with shared utilities. HOW: getFlag replaces manual argv scanning for --ticket-id and similar flags. requireFlag enforces mandatory arguments with a consistent error message format matching the rest of the CLI.",
+      "title": "Step 9b — Refactor: comments list uses shared flags"
+    },
+    {
+      "file": "src/inspect/index.ts",
+      "line": 1,
+      "description": "WHY: Completes the flag-parsing consolidation across all pre-existing command groups. HOW: inspect/index.ts positional and named flag reads are replaced with getPositionalArgs and getFlag from src/lib/flags.ts. After this step every command in the CLI — old and new — uses the same flag parsing contract, making future additions trivial.",
+      "title": "Step 9c — Refactor: inspect router uses shared flags"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 52,
+      "description": "WHY this stop: The auth compatibility finding from diagnosis was critical — all new ticket CRUD commands depend on session JWTs passing the server's requireAuth middleware. HOW it works: Lines 52-57 check whether the stored apiKey starts with 'hxi_'. If yes, the key goes into the X-Helix-Key header (inspection routes). If no (OAuth JWT), it goes into Authorization: Bearer (requireAuth routes). All new org and tickets commands store and use OAuth JWTs, so they transparently get the correct header. No changes were needed here — the existing routing already handles the full token lifecycle introduced by org switch.",
+      "title": "Summary — hxFetch Auth Routing (unchanged, confirmed clean)"
+    }
+  ]
+}
