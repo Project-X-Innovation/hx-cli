@@ -4,6 +4,8 @@ import { requireConfig } from "./lib/config.js";
 import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
+import { getPackageVersion } from "./update/version.js";
+import { runUpdate, checkAutoUpdate } from "./update/index.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -20,11 +22,22 @@ Usage:
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
+  hlx update                    Check for and apply updates from GitHub main
+  hlx update --enable-auto      Enable automatic update checks
+  hlx update --disable-auto     Disable automatic update checks
   hlx --version                 Show version`);
   process.exit(1);
 }
 
+// Commands that skip the auto-update check
+const SKIP_AUTO_UPDATE = new Set(["--version", "-v", "update", "--help", "-h"]);
+
 try {
+  // Run auto-update check before command dispatch (unless skipped)
+  if (!SKIP_AUTO_UPDATE.has(command)) {
+    await checkAutoUpdate();
+  }
+
   switch (command) {
     case "login":
       await runLogin(args.slice(1));
@@ -42,9 +55,13 @@ try {
       break;
     }
 
+    case "update":
+      await runUpdate(args.slice(1));
+      break;
+
     case "--version":
     case "-v":
-      console.log("0.1.0");
+      console.log(getPackageVersion());
       break;
 
     default:

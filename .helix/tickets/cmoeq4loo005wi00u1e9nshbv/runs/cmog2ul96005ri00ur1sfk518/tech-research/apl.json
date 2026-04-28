@@ -1,0 +1,91 @@
+{
+  "questions": [
+    "Which GitHub mechanism should be used for lightweight commit SHA checks — REST API or git ls-remote?",
+    "What is the correct self-update command to reinstall from GitHub without the npm registry?",
+    "Is a prepare script required in package.json for git-based npm install to compile TypeScript?",
+    "How should the CLI detect and persist install-mode metadata for canonical install verification?",
+    "How should the CLI read package.json version at runtime in an ES module context?",
+    "How should the config system be fixed to support new fields without losing existing data?",
+    "How should the CLI prevent infinite self-update loops?",
+    "What should happen to the running process after self-update replaces installed files?"
+  ],
+  "answers": [
+    {
+      "answer": "Use git ls-remote over the GitHub REST API. git ls-remote has no rate limit (GitHub REST API is limited to 60 unauthenticated requests/hour), is very lightweight (only fetches ref metadata, not objects), and git is a safe assumption for developers who install from GitHub. Command: `git ls-remote https://github.com/Project-X-Innovation/helix-cli.git refs/heads/main` — output is `<40-char-sha>\\trefs/heads/main`, trivially parsed. Use child_process.execSync for execution, consistent with existing exec usage in login.ts.",
+      "evidence": [
+        "Ticket: autoUpdate-enabled CLI checks GitHub main on every invocation — 60 req/hr REST limit is constraining",
+        "src/login.ts:3 — child_process.exec already imported and used in codebase (precedent)",
+        "package.json:13-15 — engines node>=18 (execSync fully supported)",
+        "Ticket: 'perform a lightweight GitHub main HEAD check' — git ls-remote fetches only refs, no content"
+      ]
+    },
+    {
+      "answer": "Use `npm install -g github:Project-X-Innovation/helix-cli#main` via child_process.execSync. This is standard npm shorthand for installing from a GitHub repository at a specific branch. npm clones the repo, installs devDependencies, runs the prepare script, packs using the files field, and installs globally. This reinstalls from GitHub source, not the npm registry, as the ticket requires.",
+      "evidence": [
+        "Ticket Required Behavior #8: 'The update implementation must use the canonical GitHub source for reinstall/update, not npm'",
+        "npm docs (Context7): 'npm install github:mygithubuser/myproject' installs from GitHub repo",
+        "npm docs (Context7): GitHub shorthand supports commit-ish suffix for branch specification",
+        "package.json:6-8 — bin entry 'hlx' points to dist/index.js (standard global install structure)"
+      ]
+    },
+    {
+      "answer": "Yes, a prepare script is required. The dist/ directory is gitignored and not committed. When npm installs from a GitHub URL, it fetches the repo contents (which lack dist/). Without a prepare script, the installed package has no compiled JavaScript, and the bin entry (dist/index.js) would point to a non-existent file. Adding `\"prepare\": \"npm run build\"` to package.json scripts causes npm to run tsc before packing. npm installs devDependencies (including typescript) before running prepare for git dependencies, so tsc is available. This is the documented npm pattern for packages that compile from source.",
+      "evidence": [
+        ".gitignore includes dist/ — confirmed dist is not in the GitHub repo",
+        "package.json files field: [\"dist\"] — only dist/ is included in packed output",
+        "npm docs (Context7): 'prepare' runs during install lifecycle and before packing",
+        "npm docs (Context7): example shows exactly `\"prepare\": \"npm run build\"` with `\"build\": \"tsc\"` pattern",
+        "npm docs (Context7): 'For build steps... use the prepare script. Required packages should be listed under devDependencies.'"
+      ]
+    },
+    {
+      "answer": "Use a metadata-based approach with an installSource object persisted in ~/.hlx/config.json. The object contains: mode ('github' | 'unknown'), repo (e.g., 'Project-X-Innovation/helix-cli'), branch (e.g., 'main'), and commit (the installed SHA). On first successful `hlx update`, the metadata is written. Auto-update only proceeds when installSource.mode is 'github', installSource.repo matches the canonical repo, and installSource.branch is 'main'. If no installSource metadata exists, auto-update is skipped (fail closed); explicit `hlx update` can still run and will write the metadata on success.",
+      "evidence": [
+        "Ticket Required Behavior #5: 'persist local update-source metadata sufficient to determine: install mode, canonical repo URL, tracked branch, installed commit SHA'",
+        "Ticket Required Behavior #6: 'only auto-update when install is recognized as canonical GitHub-based install'",
+        "Ticket Invariant: 'If the CLI was not installed from the canonical GitHub repo/branch, the update flow must fail clearly'",
+        "Ticket: 'Persist autoUpdate and update-source metadata only in ~/.hlx/config.json'"
+      ]
+    },
+    {
+      "answer": "Use readFileSync with fileURLToPath(import.meta.url) to resolve the package.json path relative to the compiled entry point. From dist/index.js, package.json is one directory up (../package.json). Pattern: `JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')).version`. This approach is ES-module-compatible, has zero compatibility concerns with Node >=18, requires no experimental features, and uses only built-in Node modules (node:fs, node:url, node:path).",
+      "evidence": [
+        "package.json:4 — type: 'module' (require() not available)",
+        "tsconfig.json:3-5 — module: 'Node16', outDir: 'dist', rootDir: 'src'",
+        "package.json:13-15 — engines node>=18 (fileURLToPath fully supported)",
+        "Runtime verification: fileURLToPath + dirname works in current Node v24.14.1",
+        "Diagnosis APL answer 6: recommended readFileSync + fileURLToPath approach"
+      ]
+    },
+    {
+      "answer": "Change saveConfig to a read-merge-write pattern: read existing config file, parse as Record<string,unknown>, spread-merge with new values, write back. Change the function signature to accept Partial<HxConfig> so callers can update only the fields they need. Extend HxConfig type with optional fields: autoUpdate?: boolean, installSource?: InstallSource. Existing callers (login.ts lines 38, 107) pass {apiKey, url} which satisfies Partial<HxConfig> and now preserves other fields instead of destroying them.",
+      "evidence": [
+        "src/lib/config.ts:35-38 — current saveConfig overwrites entire file with only {apiKey, url}",
+        "src/lib/config.ts:5-8 — HxConfig has exactly {apiKey: string, url: string}",
+        "src/login.ts:38,107 — saveConfig({apiKey, url}) called during login — would destroy new fields",
+        "Ticket: 'The setting must round-trip without losing other config fields'",
+        "Ticket: 'Preserve existing config fields such as apiKey and url'"
+      ]
+    },
+    {
+      "answer": "Use the HLX_SKIP_UPDATE_CHECK=1 environment variable as a defensive guard. Check this env var at the start of auto-update logic; if set, skip the update check entirely. For the primary MVP flow (no re-exec), this is a safety net rather than a critical path mechanism. The main loop prevention is architectural: the single invocation performs at most one synchronous update via execSync and then continues — there is no re-exec or recursive CLI invocation in the MVP design.",
+      "evidence": [
+        "Ticket Invariant: 'The CLI must not enter an infinite self-update loop'",
+        "Ticket: 'One invocation must perform at most one update attempt'",
+        "Diagnosis statement: 'Use an environment variable flag (e.g., HLX_SKIP_UPDATE_CHECK=1)'",
+        "Ticket: 'If the update attempt fails, do not recursively retry within the same invocation'"
+      ]
+    },
+    {
+      "answer": "For MVP, after successful auto-update, continue executing the original command with the currently-loaded (old) code. Do not re-exec. Node.js loads JavaScript into memory at import time, so replacing files on disk does not affect the running process. The user gets updated code on their next CLI invocation. This avoids re-exec complexity, eliminates process-replacement risks, and inherently prevents loop issues. For explicit `hlx update`, report success and exit — no command continuation needed.",
+      "evidence": [
+        "Ticket Required Behavior #7: 'update itself once and then continue only after success' — continue means proceed to command execution",
+        "Node.js behavior: modules are loaded into memory at import; disk file changes don't affect running process",
+        "Ticket: 'One invocation must perform at most one update attempt' — no re-exec means no second attempt risk",
+        "Architecture simplicity: re-exec adds process-replacement complexity, path-resolution edge cases, and loop risks"
+      ]
+    }
+  ],
+  "statement": "The technical direction for HLX-316 is fully resolved. All changes are scoped to helix-cli. The implementation uses git ls-remote for rate-limit-free SHA checks, npm install -g from GitHub shorthand for self-update, a read-merge-write config pattern to fix the lossy saveConfig, and readFileSync with import.meta.url for ES-module-compatible version reading. A prepare script (npm run build) must be added to package.json to enable git-based npm install to compile TypeScript. Install-source metadata persisted in ~/.hlx/config.json gates auto-update eligibility. Loop prevention is handled architecturally (no re-exec) with an env-var safety guard. New code lives in src/update/ modules. No runtime dependencies are added.",
+  "followups": []
+}

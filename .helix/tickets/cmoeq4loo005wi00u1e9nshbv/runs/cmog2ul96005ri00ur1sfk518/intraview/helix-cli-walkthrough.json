@@ -1,0 +1,78 @@
+{
+  "title": "HLX-316: GitHub self-update and auto-update for helix-cli",
+  "description": "Walkthrough of the self-update mechanism added to helix-cli: config system fix, version reader, GitHub SHA check, self-update execution, update orchestration, and CLI wiring.",
+  "steps": [
+    {
+      "file": "src/lib/config.ts",
+      "line": 5,
+      "title": "Extended config types",
+      "description": "Added InstallSource type (mode, repo, branch, commit) and extended HxConfig with optional autoUpdate and installSource fields. These support persisting update eligibility metadata in ~/.hlx/config.json."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 44,
+      "title": "New loadFullConfig helper",
+      "description": "Reads the full raw config from disk including optional update fields. Used by the update module to read autoUpdate and installSource without the env-var override logic of loadConfig."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 55,
+      "title": "Read-merge-write saveConfig",
+      "description": "Changed saveConfig to accept Partial<HxConfig> and use a read-merge-write pattern. Reads existing config, merges with updates via spread, writes back. This fixes the lossy-save bug where login would destroy autoUpdate/installSource fields."
+    },
+    {
+      "file": "src/update/version.ts",
+      "line": 10,
+      "title": "Package version reader",
+      "description": "Reads version from package.json at runtime using fileURLToPath(import.meta.url) for ES module path resolution. At runtime, the compiled file lives at dist/update/version.js, so package.json is ../../package.json relative to it."
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 13,
+      "title": "GitHub SHA check via git ls-remote",
+      "description": "fetchRemoteSha() runs git ls-remote against the canonical repo URL with a 10-second timeout. Parses the 40-char hex SHA from stdout. Returns null on any failure (git not found, network error, parse error) - never throws."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 14,
+      "title": "Self-update via npm install -g from GitHub",
+      "description": "performUpdate() runs npm install -g github:Project-X-Innovation/helix-cli#main with a 120-second timeout. Sets HLX_SKIP_UPDATE_CHECK=1 in the subprocess env to prevent recursive update checks. Supports quiet mode for auto-update vs verbose for explicit hlx update."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 33,
+      "title": "Update command handler (hlx update)",
+      "description": "runUpdate() handles --enable-auto/--disable-auto flags for toggling autoUpdate. Without flags, it checks the remote SHA, compares with local installSource.commit, and runs performUpdate if behind. Persists installSource metadata on success."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 97,
+      "title": "Auto-update pre-command check",
+      "description": "checkAutoUpdate() runs before command dispatch. Guards: HLX_SKIP_UPDATE_CHECK env var (loop prevention), autoUpdate must be true, installSource must match canonical source. Network failures silently skip - never blocks command execution."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 33,
+      "title": "SKIP_AUTO_UPDATE set",
+      "description": "Commands that bypass the auto-update check: --version, -v, update, --help, -h. These execute immediately without update overhead."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 37,
+      "title": "Auto-update hook wired before dispatch",
+      "description": "checkAutoUpdate() is called before the switch dispatcher for all commands not in the skip set. This ensures every normal CLI invocation checks for updates when autoUpdate is enabled."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 64,
+      "title": "Fixed version output",
+      "description": "Replaced hardcoded console.log('0.1.0') with getPackageVersion() which reads the actual version from package.json at runtime. Now correctly outputs '1.2.0'."
+    },
+    {
+      "file": "package.json",
+      "line": 12,
+      "title": "Added prepare script",
+      "description": "Added 'prepare': 'npm run build' so that git-based npm install (npm install -g github:...) compiles TypeScript before packing. Without this, dist/ would not exist since it's gitignored."
+    }
+  ]
+}
