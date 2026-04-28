@@ -4,8 +4,13 @@ import { requireConfig } from "./lib/config.js";
 import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
+<<<<<<< HEAD
 import { runOrg } from "./org/index.js";
 import { runTickets } from "./tickets/index.js";
+=======
+import { getPackageVersion } from "./update/version.js";
+import { runUpdate, checkAutoUpdate } from "./update/index.js";
+>>>>>>> origin/staging
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -27,11 +32,26 @@ Usage:
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
+<<<<<<< HEAD
   hlx --version                   Show version`);
+=======
+  hlx update                    Check for and apply updates from GitHub main
+  hlx update --enable-auto      Enable automatic update checks
+  hlx update --disable-auto     Disable automatic update checks
+  hlx --version                 Show version`);
+>>>>>>> origin/staging
   process.exit(1);
 }
 
+// Commands that skip the auto-update check
+const SKIP_AUTO_UPDATE = new Set(["--version", "-v", "update", "--help", "-h"]);
+
 try {
+  // Run auto-update check before command dispatch (unless skipped)
+  if (!SKIP_AUTO_UPDATE.has(command)) {
+    await checkAutoUpdate();
+  }
+
   switch (command) {
     case "login":
       await runLogin(args.slice(1));
@@ -49,6 +69,7 @@ try {
       break;
     }
 
+<<<<<<< HEAD
     case "org": {
       const config = requireConfig();
       await runOrg(config, args.slice(1));
@@ -64,6 +85,15 @@ try {
     case "--version":
     case "-v":
       console.log("1.2.0");
+=======
+    case "update":
+      await runUpdate(args.slice(1));
+      break;
+
+    case "--version":
+    case "-v":
+      console.log(getPackageVersion());
+>>>>>>> origin/staging
       break;
 
     default:

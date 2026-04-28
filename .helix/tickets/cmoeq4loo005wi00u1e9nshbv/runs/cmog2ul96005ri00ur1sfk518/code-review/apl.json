@@ -1,0 +1,68 @@
+{
+  "questions": [
+    "Does the implementation correctly address all ticket acceptance criteria?",
+    "Does the saveConfig signature change introduce any backward-compatibility regressions for existing callers (login.ts)?",
+    "Is the auto-update check properly guarded to prevent infinite loops, unnecessary network calls, and blocking of skipped commands?",
+    "Does the version output correctly read from package.json instead of a hardcoded string?",
+    "Does the config round-trip preserve existing fields (apiKey, url) when toggling autoUpdate?",
+    "Are failure modes handled correctly (network failure, missing git, unsupported install mode)?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 9 acceptance criteria are addressed: (1) hlx update exists and checks GitHub main HEAD SHA, (2) autoUpdate persists in ~/.hlx/config.json, (3) pre-command auto-update check runs one GitHub main HEAD check, (4) update decision is SHA-based not semver, (5) hlx --version outputs 1.2.0 from package.json, (6) auto-update only for canonical GitHub main install, (7) unsupported install modes print clear warning, (8) loop prevention via SKIP_AUTO_UPDATE set + HLX_SKIP_UPDATE_CHECK env var + no re-exec, (9) network failure produces clear error without corrupting install or config.",
+      "evidence": [
+        "src/index.ts:41-60 — update command case and auto-update hook",
+        "src/update/index.ts:35-45 — --enable-auto/--disable-auto toggles",
+        "src/update/index.ts:97-151 — checkAutoUpdate with all guards",
+        "src/index.ts:64 — getPackageVersion() replaces hardcoded 0.1.0",
+        "Runtime verification: version outputs 1.2.0, config round-trip preserves fields"
+      ]
+    },
+    {
+      "answer": "No regression. saveConfig changed from HxConfig to Partial<HxConfig>. The two callers in login.ts (lines 38 and 107) pass {apiKey, url} which satisfies Partial<HxConfig>. TypeScript strict-mode typecheck passes cleanly, confirming type compatibility.",
+      "evidence": [
+        "src/login.ts:38 — saveConfig({ apiKey, url: url.replace(/\\/+$/, '') })",
+        "src/login.ts:107 — saveConfig({ apiKey: result.key, url: finalUrl.replace(/\\/+$/, '') })",
+        "npx tsc --noEmit exits 0 with no errors"
+      ]
+    },
+    {
+      "answer": "Yes. Three layers of guard: (1) SKIP_AUTO_UPDATE set excludes --version, -v, update, --help, -h from auto-update; (2) HLX_SKIP_UPDATE_CHECK env var prevents check in subprocess; (3) no re-exec after update eliminates the primary loop vector. Auto-update silently skips on network failure (doesn't block command). Auto-update warns and skips when installSource is missing or non-canonical.",
+      "evidence": [
+        "src/index.ts:33 — SKIP_AUTO_UPDATE = new Set(['--version', '-v', 'update', '--help', '-h'])",
+        "src/update/index.ts:99-101 — HLX_SKIP_UPDATE_CHECK env var guard",
+        "src/update/index.ts:106 — autoUpdate !== true guard",
+        "src/update/index.ts:111-116 — canonical source guard",
+        "src/update/index.ts:124-126 — network failure silently skips"
+      ]
+    },
+    {
+      "answer": "Yes. getPackageVersion() uses fileURLToPath(import.meta.url) to resolve ../../package.json relative to dist/update/version.js. Runtime verification confirms output is 1.2.0, matching package.json version.",
+      "evidence": [
+        "src/update/version.ts:12-14 — path resolution logic",
+        "node dist/index.js --version outputs 1.2.0",
+        "node dist/index.js -v outputs 1.2.0"
+      ]
+    },
+    {
+      "answer": "Yes. saveConfig uses read-merge-write: reads existing config, spreads existing with updates, writes back. Verified at runtime: starting config {apiKey, url}, after --enable-auto has {apiKey, url, autoUpdate:true}, after --disable-auto has {apiKey, url, autoUpdate:false}. Neither apiKey nor url was lost.",
+      "evidence": [
+        "src/lib/config.ts:55-66 — read-merge-write implementation",
+        "Runtime test: config after enable-auto preserves apiKey and url",
+        "Runtime test: config after disable-auto preserves apiKey, url, and autoUpdate"
+      ]
+    },
+    {
+      "answer": "Yes. Network failure: fetchRemoteSha returns null; auto-update silently skips; explicit hlx update exits non-zero with clear message. Missing git: fetchRemoteSha catches execSync error, returns null. Unsupported install mode: checkAutoUpdate prints warning about unrecognized install source and skips. All failure paths avoid corrupting config or install.",
+      "evidence": [
+        "src/update/check.ts:23-26 — catch block returns null",
+        "src/update/index.ts:51-56 — explicit update fails clearly on null remoteSha",
+        "src/update/index.ts:124-126 — auto-update silently skips on null remoteSha",
+        "src/update/index.ts:111-116 — non-canonical source warning",
+        "src/update/perform.ts:21-32 — error handling returns structured result"
+      ]
+    }
+  ],
+  "statement": "Code review of HLX-316 is complete. All 7 changed files reviewed against ticket requirements, product spec, implementation plan, and tech-research decisions. No issues found. The implementation correctly addresses all 9 acceptance criteria with clean architecture, proper error handling, and backward compatibility. TypeScript typecheck and build pass. Config round-trip verified at runtime. No code changes made by code review. The verification plan (CHK-01 through CHK-09) is fully unaffected.",
+  "followups": []
+}
