@@ -1,0 +1,47 @@
+{
+  "questions": [
+    "Q1: Does the helix-cli implementation cover all acceptance criteria (org commands, ticket discovery/filters, inspection, artifacts, bundle, ticket actions)?",
+    "Q2: Does the CLI remain a thin client over the existing Helix backend, or has any client-side data invention been introduced?",
+    "Q3: Is the 'continue' command correctly implemented as a rerun with continuationContext rather than a separate backend concept?",
+    "Q4: Are there functional gaps or edge-case risks that could block acceptance?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All acceptance criteria are covered. Org commands (current/list/switch) in src/org/. Ticket discovery (list/latest/get) with filters (--user, --status, --status-not-in, --archived, --sprint) in src/tickets/list.ts. Ticket detail includes branch, repos, runs, merge status in src/tickets/get.ts. Artifact discovery (src/tickets/artifacts.ts) and step artifact reads (src/tickets/artifact.ts). Bundle command (src/tickets/bundle.ts) creates deterministic local context. Ticket actions: create, rerun, continue. Comment reply via existing src/comments/post.ts. 13 new source files, typecheck passes with zero errors.",
+      "evidence": [
+        "13 new source files across src/org/ (4 files) and src/tickets/ (10 files)",
+        "src/index.ts routes all 5 command groups: login, inspect, comments, org, tickets",
+        "tsc --noEmit passes with zero errors",
+        "Version bumped from 0.1.0 to 1.2.0 in package.json"
+      ]
+    },
+    {
+      "answer": "Yes, the CLI is a thin client. All commands make HTTP calls to existing backend endpoints via hxFetch(). The only client-side logic is: (1) --user resolution via /organization/members to translate name/email to reporterUserId, (2) --status positive filter applied client-side since backend only supports statusNotIn, (3) bundle file assembly from fetched data. No ticket data is invented client-side.",
+      "evidence": [
+        "All new commands use basePath: '/api' and call existing server endpoints",
+        "14+ CLI routes map to pre-existing backend routes per server scout",
+        "Zero production dependencies - Node built-ins only",
+        "--status client-side filter is a design necessity since backend only supports statusNotIn"
+      ]
+    },
+    {
+      "answer": "Yes. src/tickets/continue.ts calls POST /api/tickets/:ticketId/rerun with { continuationContext } from positional args. This matches the non-negotiable constraint 'Do not create a separate backend continue concept.' The backend rerun endpoint already accepts continuationContext (max 10000 chars, stored in SandboxRun.continuationContext).",
+      "evidence": [
+        "src/tickets/continue.ts: posts to /tickets/${ticketId}/rerun with body: { continuationContext }",
+        "Server POST /api/tickets/:ticketId/rerun accepts { continuationContext?: string }",
+        "Positional args joined with spaces to form the continuationContext string"
+      ]
+    },
+    {
+      "answer": "No blocking functional gaps identified. Minor non-blocking concerns: (1) No tests exist - verification requires manual/runtime testing. (2) Token expiration has no refresh flow - expired JWTs fail all commands. (3) Bundle artifact fetch errors are caught and warned, not fatal - reasonable for partial artifact availability. (4) --status client-side filter is intentional since backend lacks a positive status match.",
+      "evidence": [
+        "No *.test.ts or *.spec.ts files found in helix-cli repo",
+        "No token refresh logic visible in src/lib/http.ts or src/lib/config.ts",
+        "src/tickets/bundle.ts catch block at artifact fetch warns but continues",
+        "Backend GET /api/tickets only supports statusNotIn, not positive status filter"
+      ]
+    }
+  ],
+  "statement": "The helix-cli expansion is fully implemented in the current branch. All acceptance criteria are met: org commands, ticket discovery with filters, ticket inspection (branch/repos/runs/merge), artifact reads, Codex bundling, and ticket actions (create/rerun/continue/comment). The CLI remains a thin client over existing backend endpoints with zero production dependencies. The only server-side change needed (reporterUserId filter) has been implemented in helix-global-server. No blocking gaps exist; minor concerns (no tests, no token refresh) are non-blocking for this ticket's scope.",
+  "followups": []
+}
