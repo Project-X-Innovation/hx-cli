@@ -1,0 +1,36 @@
+{
+  "title": "CLI: Local Org Selection for API Keys",
+  "description": "Walkthrough of CLI changes to send X-Helix-Org-ID header, do local-only org switch for hxi_ keys, and mark current org from local config.",
+  "steps": [
+    {
+      "file": "src/lib/http.ts",
+      "line": 59,
+      "title": "X-Helix-Org-ID header emission",
+      "description": "Added after auth headers. Only set when BOTH config.orgId is truthy AND config.apiKey starts with 'hxi_'. JWT requests never include this header. When orgId is not yet set (bootstrap), the header is omitted."
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 28,
+      "title": "Ambiguous name handling with .filter()",
+      "description": "Changed .find() to .filter() for org name resolution. If multiple orgs match the same name (case-insensitive), prints all matches with IDs and exits with error instead of silently picking the first."
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 50,
+      "title": "Local-only switch for hxi_ keys",
+      "description": "For API keys: calls saveConfig({ orgId, orgName }) which uses read-merge-write to preserve the existing apiKey. Never calls /api/auth/switch-org. Never replaces the API key with a JWT."
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 54,
+      "title": "JWT token path preserved",
+      "description": "The else branch retains the exact existing behavior: calls /api/auth/switch-org, replaces apiKey with the new JWT accessToken, saves orgId/orgName."
+    },
+    {
+      "file": "src/org/list.ts",
+      "line": 20,
+      "title": "Config-based current org marker",
+      "description": "For hxi_ keys: compares org.id to config.orgId (local selection). For JWT tokens: compares to data.organization.id (server state). If no orgId is set in config, no org gets the '(current)' marker."
+    }
+  ]
+}

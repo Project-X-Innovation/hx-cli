@@ -17,7 +17,10 @@ export async function cmdOrgList(config: HxConfig): Promise<void> {
 
   console.log("Organizations:\n");
   for (const org of data.availableOrganizations) {
-    const marker = org.id === data.organization.id ? " (current)" : "";
+    const isCurrent = config.apiKey.startsWith("hxi_")
+      ? org.id === config.orgId
+      : org.id === data.organization.id;
+    const marker = isCurrent ? " (current)" : "";
     console.log(`  ${org.id}  ${org.name}${marker}`);
   }
 }
