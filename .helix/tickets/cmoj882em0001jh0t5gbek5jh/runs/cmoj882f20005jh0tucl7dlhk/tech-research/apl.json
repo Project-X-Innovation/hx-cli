@@ -1,0 +1,52 @@
+{
+  "questions": [
+    "Should X-Helix-Org-ID be sent for all requests or only hxi_ key requests?",
+    "How should hlx org switch behave differently for hxi_ keys vs JWT tokens?",
+    "How should hlx org list mark the current org for hxi_ key auth?",
+    "What happens when hlx org switch is called before orgId is set in config (bootstrap)?",
+    "How should ambiguous org names be handled in hlx org switch?"
+  ],
+  "answers": [
+    {
+      "answer": "Only send X-Helix-Org-ID when config.apiKey.startsWith('hxi_') AND config.orgId is set. JWT tokens embed their org in the token payload and use the server-side POST /api/auth/switch-org flow. Sending the header for JWTs would be ignored and could confuse debugging.",
+      "evidence": [
+        "http.ts:52-57 — auth header branch already distinguishes hxi_ from JWT tokens",
+        "Ticket: 'CLI requests must send the selected org to the server' and 'Use one explicit request header for selected org'",
+        "Ticket: 'Existing session JWT behavior may continue calling /api/auth/switch-org'"
+      ]
+    },
+    {
+      "answer": "For hxi_ keys: resolve org name via GET /api/auth/me, save orgId/orgName to local config only, preserve apiKey unchanged. For JWT tokens: keep existing behavior (call POST /api/auth/switch-org, save new accessToken). The branch point is config.apiKey.startsWith('hxi_').",
+      "evidence": [
+        "switch.ts:43-56 — current code calls POST /api/auth/switch-org and replaces apiKey with JWT",
+        "Ticket: 'hlx org switch <org-name-or-id> with an hxi_ key must update local ~/.hlx/config.json only'",
+        "Ticket: 'hlx org switch must not call /api/auth/switch-org for hxi_ keys'"
+      ]
+    },
+    {
+      "answer": "For hxi_ keys, mark current org by comparing org.id === config.orgId (local config state). For JWT tokens, keep existing behavior using org.id === data.organization.id (server state). If no orgId is in config, no org is marked as current.",
+      "evidence": [
+        "list.ts:20 — current code marks by data.organization.id",
+        "config.ts:15-16 — HxConfig has optional orgId field",
+        "Ticket: 'hlx org list must show all available orgs and mark the locally selected org'"
+      ]
+    },
+    {
+      "answer": "No special CLI handling needed. The server's /api/auth/me endpoint works for API key auth even without X-Helix-Org-ID (bootstrap exemption). The CLI gets back availableOrganizations and can resolve the org name. After saving orgId to config, subsequent requests include the header.",
+      "evidence": [
+        "Server routes/api.ts:168 — /auth/me is before the global requireAuth gate at L239",
+        "Server tech-research: resolveApiKeyAuth builds minimal AuthContext for /auth/me when header missing",
+        "switch.ts:27 — cmdOrgSwitch calls GET /api/auth/me for name resolution"
+      ]
+    },
+    {
+      "answer": "If the org name matches multiple entries in availableOrganizations (case-insensitive), print all matching orgs with their IDs and exit with a clear error. Change from .find() to .filter() and check length > 1.",
+      "evidence": [
+        "Ticket: 'For ambiguous org names, fail with a clear error instead of selecting the first match'",
+        "switch.ts:28-29 — current code uses .find() which returns first match"
+      ]
+    }
+  ],
+  "statement": "The CLI changes are straightforward conditional branches on key type in three files: http.ts adds X-Helix-Org-ID header for hxi_ keys, switch.ts does local-only config update for hxi_ keys, and list.ts marks current org by config.orgId for hxi_ keys. JWT behavior remains unchanged in all cases. No new files, no new dependencies, no architectural changes needed.",
+  "followups": []
+}
