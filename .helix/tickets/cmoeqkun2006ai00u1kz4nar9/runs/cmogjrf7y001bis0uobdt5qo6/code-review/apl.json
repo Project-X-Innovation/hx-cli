@@ -1,0 +1,37 @@
+{
+  "questions": [
+    "Q1: Are there correctness issues in the 3 files changed by implementation (get.ts, artifact.ts, bundle.ts)?",
+    "Q2: Are there any bugs in the remaining pre-existing CLI source files?",
+    "Q3: Does the server-side reporterUserId implementation have any issues?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The TicketResponse wrapper unwrap fix in all 3 files is correct. Each file adds a local TicketResponse type and unwraps data.ticket/resp.ticket before accessing fields. The printTicketDetail export from get.ts cascades correctly to latest.ts since latest.ts calls it with a ticket ID (not pre-fetched data).",
+      "evidence": [
+        "src/tickets/get.ts line 23: type TicketResponse = { ticket: TicketDetail }; line 26-27: const data = (...) as TicketResponse; const ticket = data.ticket",
+        "src/tickets/artifact.ts line 10: type TicketResponse = { ticket: TicketDetail }; line 33-34: const resp = (...) as TicketResponse; const ticket = resp.ticket",
+        "src/tickets/bundle.ts line 13: type TicketResponse = { ticket: TicketDetail }; line 33-34: const resp = (...) as TicketResponse; const ticket = resp.ticket",
+        "src/tickets/latest.ts line 45: await printTicketDetail(config, latest.id) — uses get.ts's fixed function"
+      ]
+    },
+    {
+      "answer": "Yes, one bug found in continue.ts: when the ticket ID is passed as a positional argument (the primary documented usage), the continuation context sent to the API includes the ticket ID prepended to the actual context text. Fixed by skipping the first positional arg when it matches the resolved ticketId.",
+      "evidence": [
+        "src/tickets/index.ts line 72-75: resolveTicketId(rest) extracts ticket ID but passes full rest array to cmdTicketsContinue",
+        "src/tickets/continue.ts line 12 (before fix): getPositionalArgs(args, ['--ticket']) returns ticket ID + context",
+        "src/lib/flags.ts getPositionalArgs: only excludes --flag values, not positional ticket IDs",
+        "Trace: 'hlx tickets continue cmxxxx hello' → rest=['cmxxxx','hello'] → positional=['cmxxxx','hello'] → context='cmxxxx hello' (wrong)"
+      ]
+    },
+    {
+      "answer": "No issues. The reporterUserId filter in ticket-controller.ts (lines 206-209) and ticket-service.ts (line 1479, 1530) correctly follows the established pattern of statusNotIn and sprintId filters. The conditional spread produces an empty object when the parameter is absent, maintaining backward compatibility.",
+      "evidence": [
+        "ticket-controller.ts line 207-208: typeof check + trim validation — identical pattern to statusNotIn and sprintId",
+        "ticket-service.ts line 1530: ...(options?.reporterUserId ? { reporterUserId: options.reporterUserId } : {}) — standard conditional spread",
+        "Implementation runtime test: GET /api/tickets?reporterUserId=nonexistent returns 0 items (correct); omitting param returns all items (backward compatible)"
+      ]
+    }
+  ],
+  "statement": "Found and fixed 1 bug: continue.ts included the positional ticket ID in the continuation context sent to the rerun API. All other code (3 implementation-changed files + 13 pre-existing new files + server-side reporterUserId) reviewed and confirmed correct. TypeScript typecheck and build pass after fix.",
+  "followups": []
+}

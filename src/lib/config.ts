@@ -12,6 +12,8 @@ export type InstallSource = {
 export type HxConfig = {
   apiKey: string;
   url: string;
+  orgId?: string;
+  orgName?: string;
   autoUpdate?: boolean;
   installSource?: InstallSource;
 };
@@ -32,7 +34,12 @@ export function loadConfig(): HxConfig | null {
     const raw = readFileSync(CONFIG_FILE, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (typeof parsed.apiKey === "string" && typeof parsed.url === "string") {
-      return { apiKey: parsed.apiKey, url: parsed.url.replace(/\/+$/, "") };
+      return {
+        apiKey: parsed.apiKey,
+        url: parsed.url.replace(/\/+$/, ""),
+        orgId: typeof parsed.orgId === "string" ? parsed.orgId : undefined,
+        orgName: typeof parsed.orgName === "string" ? parsed.orgName : undefined,
+      };
     }
   } catch {
     // No config file or invalid

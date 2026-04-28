@@ -1,0 +1,36 @@
+{
+  "title": "Merge Conflict Resolution - helix-cli",
+  "description": "Resolved conflicts between ticket branch (org/tickets features) and staging branch (update/auto-update features)",
+  "steps": [
+    {
+      "file": "src/index.ts",
+      "line": 7,
+      "title": "Merged imports from both branches",
+      "description": "Combined ticket imports (runOrg, runTickets) with staging imports (getPackageVersion, runUpdate, checkAutoUpdate) so all CLI commands are available."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 32,
+      "title": "Merged usage help text",
+      "description": "Added staging's update command help lines alongside existing org/tickets help text."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 66,
+      "title": "Merged switch cases for all commands",
+      "description": "Kept ticket's org and tickets cases, added staging's update case, and used getPackageVersion() for dynamic version output."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 12,
+      "title": "Merged HxConfig type fields",
+      "description": "Combined ticket's orgId/orgName fields with staging's autoUpdate/installSource fields in the shared config type."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 62,
+      "title": "Used staging's read-merge-write saveConfig",
+      "description": "Chose staging's generic read-merge-write pattern over ticket's field-specific write. This approach automatically handles all config fields without explicit enumeration."
+    }
+  ]
+}

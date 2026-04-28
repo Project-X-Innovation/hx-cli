@@ -1,0 +1,42 @@
+{
+  "title": "Fix ticket detail API response wrapper handling",
+  "description": "Three CLI commands (get, artifact, bundle) expected the ticket detail API to return flat data, but the backend wraps it in { ticket: {...} }. This fix unwraps the response in all three files.",
+  "steps": [
+    {
+      "file": "src/tickets/get.ts",
+      "line": 23,
+      "title": "Add TicketResponse wrapper type",
+      "description": "Added `type TicketResponse = { ticket: TicketDetail }` to match the actual API response shape where the ticket object is nested under a `ticket` key."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 26,
+      "title": "Unwrap ticket from response",
+      "description": "Changed from casting directly to TicketDetail to casting to TicketResponse and extracting `data.ticket`. This fixes the 'Cannot read properties of undefined' error when accessing reporter.name."
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 10,
+      "title": "Add TicketResponse type for artifact command",
+      "description": "Same wrapper type added here. The artifact command fetches ticket detail to resolve the latest run ID when --run is not provided."
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 33,
+      "title": "Unwrap ticket in artifact run resolution",
+      "description": "Changed to extract `resp.ticket` before accessing `currentRun` and `runs[0]` for automatic run ID resolution."
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 13,
+      "title": "Add TicketResponse type for bundle command",
+      "description": "Bundle also fetches ticket detail to get the run ID and write ticket.json. Same wrapper fix applied."
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 33,
+      "title": "Unwrap ticket in bundle fetch",
+      "description": "Changed to extract `resp.ticket` so the bundle writes the actual ticket data to ticket.json and correctly resolves the run ID."
+    }
+  ]
+}

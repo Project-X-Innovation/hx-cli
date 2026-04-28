@@ -1,0 +1,16 @@
+{
+  "questions": [
+    "What merge conflicts exist and which files need resolution?"
+  ],
+  "answers": [
+    {
+      "answer": "helix-cli had conflicts in src/index.ts (3 regions: imports, usage text, switch cases) and src/lib/config.ts (2 regions: HxConfig type, saveConfig function). helix-global-server had tsconfig.tsbuildinfo listed but it contained no conflict markers.",
+      "evidence": [
+        "helix-cli/.helix/merge-conflicts.json lists src/index.ts and src/lib/config.ts",
+        "helix-global-server/.helix/merge-conflicts.json lists tsconfig.tsbuildinfo but grep found no markers"
+      ]
+    }
+  ],
+  "statement": "Resolved all merge conflicts in helix-cli by merging imports, CLI commands, switch cases, and config type fields from both the ticket branch (org/tickets features) and staging branch (update/auto-update features). Used staging's read-merge-write saveConfig pattern as it generically handles all config fields. TypeScript compiles cleanly.",
+  "followups": []
+}

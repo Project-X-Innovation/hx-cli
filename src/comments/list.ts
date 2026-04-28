@@ -1,5 +1,6 @@
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
+import { getFlag } from "../lib/flags.js";
 
 type CommentResponse = {
   comments: Array<{
@@ -11,12 +12,6 @@ type CommentResponse = {
     createdAt: string;
   }>;
 };
-
-function getFlag(args: string[], flag: string): string | undefined {
-  const idx = args.indexOf(flag);
-  if (idx === -1 || idx + 1 >= args.length) return undefined;
-  return args[idx + 1];
-}
 
 export async function cmdList(config: HxConfig, ticketId: string, args: string[]): Promise<void> {
   const helixOnly = args.includes("--helix-only");

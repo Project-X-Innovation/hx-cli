@@ -1,0 +1,131 @@
+{
+  "problem": "Expand helix-cli from a narrow inspection tool (inspect + comments) into an org-aware Helix workbench supporting org switching, ticket discovery/filtering, ticket detail inspection (branch/repos/runs/artifacts), local Codex bundling, ticket creation, comment reply, rerun, and continue.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and top-level command router. Routes to login, inspect, comments, org, and tickets command groups. Version display (1.2.0). Usage text covers all commands."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Auth config storage (~/.hlx/config.json). HxConfig type includes apiKey, url, orgId?, orgName?. loadConfig reads env vars (HELIX_API_KEY, HELIX_URL) with priority, falls back to config file. saveConfig persists org fields after switch."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch) with retry (3 attempts, exponential backoff), 30s timeout, auth header logic (hxi_ -> X-API-Key, other -> Bearer). basePath defaults to '/api/inspect'; new commands use '/api'. Supports queryParams and JSON body."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Shared flag-parsing utilities: getFlag, hasFlag, getPositionalArgs, requireFlag. Manual indexOf-based parsing, no CLI framework."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository resolution for inspect commands. Pattern reference."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "OAuth browser flow + manual API key entry. Saves config via saveConfig()."
+    },
+    {
+      "path": "src/org/index.ts",
+      "why": "Org command router. Switch-based dispatch to current/list/switch subcommands."
+    },
+    {
+      "path": "src/org/current.ts",
+      "why": "GET /api/auth/me -> displays current org name, ID, user name, email."
+    },
+    {
+      "path": "src/org/list.ts",
+      "why": "GET /api/auth/me -> displays availableOrganizations with current marker."
+    },
+    {
+      "path": "src/org/switch.ts",
+      "why": "Resolves org by name (via /auth/me) or CUID. POST /api/auth/switch-org -> saves new accessToken, orgId, orgName to config."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Tickets command router. Switch-based dispatch to 9 subcommands: list, latest, get, create, rerun, continue, artifacts, artifact, bundle. Includes resolveTicketId helper (--ticket flag, HELIX_TICKET_ID env, or positional arg)."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "GET /api/tickets with query params: archived, statusNotIn, sprintId, reporterUserId. --user resolved via /api/organization/members (email then name match). --status applied client-side."
+    },
+    {
+      "path": "src/tickets/latest.ts",
+      "why": "Fetches ticket list (GET /api/tickets), takes first item (sorted by updatedAt desc), then calls printTicketDetail."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "GET /api/tickets/:ticketId -> displays title, shortId, status, branch, reporter, archive status, merge status, repositories, runs, and truncated description. Exports printTicketDetail for reuse by latest."
+    },
+    {
+      "path": "src/tickets/create.ts",
+      "why": "POST /api/tickets with --title, --description, --repos (comma-separated repositoryIds). Outputs ticket ID, shortId, status, and run ID."
+    },
+    {
+      "path": "src/tickets/rerun.ts",
+      "why": "POST /api/tickets/:ticketId/rerun with empty body. Outputs new run ID."
+    },
+    {
+      "path": "src/tickets/continue.ts",
+      "why": "POST /api/tickets/:ticketId/rerun with {continuationContext} from positional args. Requires non-empty context."
+    },
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "GET /api/tickets/:ticketId/artifacts -> displays items (label/repo/branch/path) and stepArtifactSummary entries."
+    },
+    {
+      "path": "src/tickets/artifact.ts",
+      "why": "GET /api/tickets/:ticketId/runs/:runId/step-artifacts/:stepId?repoKey=<key>. Requires --step and --repo. Auto-resolves runId from ticket currentRun. Prints raw file content."
+    },
+    {
+      "path": "src/tickets/bundle.ts",
+      "why": "Fetches ticket detail + artifacts, writes to --out directory: ticket.json, manifest.json, and artifacts/<stepId>/<repoKey>/<filename>. Reports file count."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Existing comment command router with list/post. Uses resolveTicketId pattern."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Existing comment list handler. Pattern reference for data fetching."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Existing comment post handler. Pattern reference for write operations."
+    },
+    {
+      "path": "package.json",
+      "why": "Project manifest. @projectxinnovation/helix-cli v1.2.0, zero production deps, ESM, bin entry 'hlx'. Scripts: build (tsc), typecheck (tsc --noEmit)."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. Target ES2022, module Node16, strict, declaration. Imports use .js extensions for ESM."
+    }
+  ],
+  "facts": [
+    "Implementation exists: 13 new source files added across src/org/ (4 files) and src/tickets/ (10 files including index.ts)",
+    "CLI entry point (src/index.ts) updated: routes login, inspect, comments, org, tickets. Version display is '1.2.0' (was '0.1.0'). Usage text covers all commands.",
+    "Config type (src/lib/config.ts:6-10) now includes orgId?: string and orgName?: string. saveConfig persists these fields. loadConfig reads them from config file.",
+    "Org switch (src/org/switch.ts) resolves org by name (via /auth/me availableOrganizations) or CUID, calls POST /auth/switch-org, saves new accessToken as apiKey in config along with orgId/orgName.",
+    "Ticket list (src/tickets/list.ts) supports --archived, --status-not-in, --sprint, --user (resolved via /organization/members), --status (client-side filter).",
+    "--user filter resolves input to reporterUserId via GET /api/organization/members: tries exact email match, then case-insensitive name match.",
+    "Ticket get (src/tickets/get.ts) prints branch, repos, runs, merge status, archive status. printTicketDetail is exported and reused by latest command.",
+    "Continue (src/tickets/continue.ts) uses POST /tickets/:id/rerun with {continuationContext} - matches ticket constraint of no separate backend continue concept.",
+    "Bundle (src/tickets/bundle.ts) creates deterministic directory: ticket.json (full detail), manifest.json (ticketId, bundledAt, cliVersion), artifacts/<stepId>/<repoKey>/<filename>.",
+    "All new commands use basePath: '/api' (not '/api/inspect'). Consistent with existing comments pattern.",
+    "Typecheck (tsc --noEmit) passes cleanly with zero errors on helix-cli.",
+    "Zero production dependencies maintained - all new code uses Node built-ins only.",
+    "No tests exist. No testing framework configured. No test scripts in package.json.",
+    "No README exists in the repository.",
+    "Manual flag parsing throughout (indexOf-based). No CLI framework (commander, yargs, etc.).",
+    "HELIX_TICKET_ID env var used for ticket ID resolution in both comments and tickets commands.",
+    "ESM module with .js extension imports required for Node16 module resolution."
+  ],
+  "unknowns": [
+    "Whether inspection tokens (hxi_ keys) from 'hlx login' have sufficient permissions for ticket CRUD routes that require session JWTs (requireAuth middleware). The org switch flow returns a session JWT, but initial login via OAuth callback may return a different token type.",
+    "Whether --status client-side filter is an intentional design choice or a gap (backend only supports statusNotIn, not positive status match).",
+    "Whether the bundle command's artifact fetch error swallowing (catch block at bundle.ts:65) could hide meaningful failures from users.",
+    "How the CLI handles token expiration - no refresh flow is visible; expired JWTs would fail all commands.",
+    "Whether pagination is needed for ticket listing - current implementation fetches all matching tickets in a single request."
+  ]
+}
