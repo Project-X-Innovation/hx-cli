@@ -1,0 +1,48 @@
+{
+  "problem": "The CLI sends `hxi_` API keys as `X-API-Key` headers to server endpoints. The server does not resolve these keys on workbench routes, returning 401. This is a server-side auth middleware issue — no CLI code changes are needed.",
+  "files": [
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client that constructs auth headers. L52-57: sends X-API-Key for hxi_ tokens, Authorization Bearer for others. Confirms the CLI's auth contract with the server. No changes needed."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config loading with HELIX_API_KEY env var support (L26) and ~/.hlx/config.json fallback. Confirms how API keys are stored and loaded. No changes needed."
+    },
+    {
+      "path": "src/org/current.ts",
+      "why": "Calls GET /api/auth/me (L18). This is the broken command — server returns 401 with API key auth. Fix is server-side."
+    },
+    {
+      "path": "src/org/switch.ts",
+      "why": "Calls GET /api/auth/me then POST /api/auth/switch-org (L43-46). Replaces apiKey with returned accessToken (L51). Affected by server-side fix."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Calls GET /api/organization/members for --user flag (L20) then GET /api/tickets with reporterUserId (L68-71). Both are broken endpoints. Fix is server-side."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "CLI auth header logic is correct and needs no changes",
+      "evidence": "http.ts L52-57 correctly sends hxi_ tokens as X-API-Key and JWTs as Authorization Bearer — this matches the server's loadInspectionAuthFromRequest priority (middleware.ts L128-161)"
+    },
+    {
+      "claim": "CLI workbench commands use basePath '/api' while inspect commands use default '/api/inspect'",
+      "evidence": "tickets/list.ts L69, org/current.ts L18 use basePath '/api'; inspect/repos.ts uses default basePath ('/api/inspect' per http.ts L43)"
+    },
+    {
+      "claim": "The --user flag on tickets list calls /api/organization/members which is also broken with API keys",
+      "evidence": "tickets/list.ts L20: `hxFetch(config, '/organization/members', { basePath: '/api' })`"
+    },
+    {
+      "claim": "No CLI code changes are required for this ticket",
+      "evidence": "Ticket scope is server-side auth middleware. CLI already sends correct headers. All broken behavior is server returning 401 on valid API keys for workbench routes."
+    }
+  ],
+  "unknowns": [],
+  "quality_gates": {
+    "typecheck": "npx tsc --noEmit",
+    "build": "tsc"
+  }
+}
