@@ -1,0 +1,66 @@
+{
+  "title": "Expand helix-cli into org-aware workbench",
+  "description": "Tour of the new org and tickets command groups added to helix-cli",
+  "steps": [
+    {
+      "file": "src/lib/flags.ts",
+      "line": 5,
+      "title": "Shared flag parsing utilities",
+      "description": "Extracted getFlag, hasFlag, getPositionalArgs, and requireFlag from duplicated code in comments/ and inspect/ into a shared module used by all command groups."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 5,
+      "title": "Config extended for org awareness",
+      "description": "HxConfig type now includes optional orgId and orgName fields. These are persisted to ~/.hlx/config.json when an org switch happens, enabling 'hlx org current' without a network call."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 52,
+      "title": "Entry point: org and tickets registered",
+      "description": "New switch cases route 'org' and 'tickets' commands to their respective routers. Version updated from 0.1.0 to 1.2.0."
+    },
+    {
+      "file": "src/org/index.ts",
+      "line": 15,
+      "title": "Org router",
+      "description": "Switch-based routing dispatches to current, list, and switch subcommands, following the same pattern as comments/index.ts."
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 15,
+      "title": "Org switch: resolves names, persists new JWT",
+      "description": "Resolves org names to IDs via GET /api/auth/me, calls POST /api/auth/switch-org, and persists the new JWT and org metadata to config."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 43,
+      "title": "Tickets router with 9 subcommands",
+      "description": "Routes list, latest, get, create, rerun, continue, artifacts, artifact, and bundle. Ticket ID resolution supports --ticket flag, HELIX_TICKET_ID env var, or positional arg."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 43,
+      "title": "Ticket list with all 5 filter flags",
+      "description": "Supports --user (resolves via org members API), --status (client-side), --status-not-in, --archived, and --sprint. User resolution matches by email first, then name."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 24,
+      "title": "Ticket detail display",
+      "description": "printTicketDetail fetches full ticket and displays title, status, branch, repos, runs, merge status, and description. Exported for reuse by the latest command."
+    },
+    {
+      "file": "src/tickets/continue.ts",
+      "line": 10,
+      "title": "Continue uses existing rerun endpoint",
+      "description": "Critical design: continue calls POST /api/tickets/:id/rerun with continuationContext in the body. No separate backend 'continue' concept was created."
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 31,
+      "title": "Bundle creates deterministic Codex context",
+      "description": "Fetches ticket detail and artifacts, creates ticket.json, manifest.json, and artifacts/<step>/<repo>/<file> structure. Uses only node:fs and node:path built-ins."
+    }
+  ]
+}

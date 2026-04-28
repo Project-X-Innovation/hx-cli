@@ -1,0 +1,80 @@
+{
+  "questions": [
+    "Q1: What is the right CLI architecture pattern for adding 13 new command handlers while maintaining zero production dependencies?",
+    "Q2: How should org switching persist state so all subsequent commands use the switched org?",
+    "Q3: What is the correct technical approach for the --user filter given the backend only stores reporterUserId, not email/name?",
+    "Q4: How should the --status positive filter work when the backend only supports statusNotIn?",
+    "Q5: Is the continue command correctly implemented as a rerun with continuationContext rather than a new concept?",
+    "Q6: What bundle format supports deterministic Codex context loading?",
+    "Q7: Are there blocking dependency or compatibility risks?"
+  ],
+  "answers": [
+    {
+      "answer": "Extend the existing manual switch-based command routing pattern. src/index.ts dispatches to command group routers (src/org/index.ts, src/tickets/index.ts), which dispatch to individual handler files. This maintains the zero-deps constraint, follows established patterns from comments/ and inspect/, and keeps the codebase consistent. Each handler is a single file with a single exported async function. Flag parsing is consolidated in src/lib/flags.ts.",
+      "evidence": [
+        "src/index.ts: switch on command -> runOrg, runTickets, runComments, runInspect, runLogin (verified via direct code inspection)",
+        "src/tickets/index.ts: switch on subcommand -> 9 individual handlers (verified via direct code inspection)",
+        "src/org/index.ts: switch on subcommand -> current, list, switch (verified via direct code inspection)",
+        "package.json: zero production dependencies - only @types/node and typescript as devDependencies (verified)",
+        "Product spec: 'Zero production dependencies: Node.js built-in APIs only. No CLI framework.'"
+      ]
+    },
+    {
+      "answer": "Org switch calls POST /api/auth/switch-org, receives a new accessToken JWT scoped to the target org, and replaces the stored apiKey in ~/.hlx/config.json. It also persists orgId and orgName for display in hlx org current. Org is resolved by name (case-insensitive match against availableOrganizations from /auth/me) or directly by CUID pattern (/^c[a-z0-9]{20,}$/i). Write-on-success: config only updated after successful response.",
+      "evidence": [
+        "src/org/switch.ts: saveConfig({...config, apiKey: data.accessToken, orgId: data.organization.id, orgName: data.organization.name}) (verified via direct inspection)",
+        "src/org/switch.ts: isCuid check /^c[a-z0-9]{20,}$/i for direct ID resolution (verified)",
+        "src/lib/config.ts: HxConfig type includes orgId?: string, orgName?: string (verified)",
+        "Server: POST /api/auth/switch-org returns {accessToken, organization: {id, name}, ...}"
+      ]
+    },
+    {
+      "answer": "Two-step resolution: (1) CLI calls GET /api/organization/members to get the member list, resolves the --user input to a reporterUserId by trying exact email match (case-insensitive) then case-insensitive name match, (2) passes reporterUserId as a query parameter to GET /api/tickets. The server-side filter is a ~5-line change (conditional Prisma WHERE clause). On no match, the CLI lists available members and exits with error.",
+      "evidence": [
+        "src/tickets/list.ts: resolveUserId() calls /organization/members, matches by email.toLowerCase() then name.toLowerCase() (verified via direct inspection)",
+        "src/tickets/list.ts: queryParams.reporterUserId = await resolveUserId(config, userInput) (verified)",
+        "Server ticket-controller.ts lines 206-209: parses reporterUserId from req.query (verified via direct inspection)",
+        "Server ticket-service.ts line 1530: ...(options?.reporterUserId ? { reporterUserId: options.reporterUserId } : {}) (verified)",
+        "Runtime DB: reporterUserId column exists, 381/381 tickets populated (from diagnosis)"
+      ]
+    },
+    {
+      "answer": "Client-side filtering. The backend GET /api/tickets only supports statusNotIn (negative filter). The CLI fetches the full ticket list and filters by status.toLowerCase() match. This is an acceptable MVP trade-off at current scale (~381 tickets). Adding server-side positive status filter would require additional server changes for minimal gain.",
+      "evidence": [
+        "src/tickets/list.ts: items = items.filter(t => t.status.toLowerCase() === statusFilter.toLowerCase()) (verified via direct inspection)",
+        "Server ticket-service.ts: only statusNotIn in WHERE clause, no positive status param (verified via direct inspection)",
+        "Product spec: '--status positive filter is client-side because the backend only supports statusNotIn. This is an acceptable trade-off for MVP.'"
+      ]
+    },
+    {
+      "answer": "Yes. src/tickets/continue.ts calls POST /api/tickets/:ticketId/rerun with {continuationContext} from positional args joined with spaces. The server rerun endpoint already accepts continuationContext as an optional string (max 10000 chars) stored in SandboxRun.continuationContext. No separate backend continue concept was created, satisfying the non-negotiable constraint.",
+      "evidence": [
+        "src/tickets/continue.ts: hxFetch(config, `/tickets/${ticketId}/rerun`, {method: 'POST', body: {continuationContext}}) (verified via direct inspection)",
+        "src/tickets/continue.ts: continuationContext = getPositionalArgs(args, ['--ticket']).join(' ').trim() (verified)",
+        "Ticket constraint: 'Do not create a separate backend continue concept'",
+        "Server: POST /api/tickets/:ticketId/rerun accepts {continuationContext?: string}"
+      ]
+    },
+    {
+      "answer": "Deterministic directory: ticket.json (full ticket detail), manifest.json (ticketId, bundledAt ISO timestamp, cliVersion '1.2.0'), artifacts/<stepId>/<repoKey>/<filename>. This layout provides machine-readable ticket context, provenance metadata, and organized artifacts mirroring the backend's stepArtifactSummary structure. Artifact fetch failures are warned (not fatal) producing partial bundles.",
+      "evidence": [
+        "src/tickets/bundle.ts: writeFileSync(join(outDir, 'ticket.json'), ...) (verified via direct inspection)",
+        "src/tickets/bundle.ts: manifest = {ticketId, bundledAt: new Date().toISOString(), cliVersion: '1.2.0'} (verified)",
+        "src/tickets/bundle.ts: join(outDir, 'artifacts', entry.stepId, entry.repoKey) for artifact dirs (verified)",
+        "src/tickets/bundle.ts: catch block warns 'Could not fetch artifact' and continues (verified)"
+      ]
+    },
+    {
+      "answer": "No blocking dependency or compatibility risks. The CLI requires Node.js >= 18 (for built-in fetch). Zero production dependencies avoids npm supply chain risks. TypeScript 6.x with strict mode provides compile-time safety (typecheck passes with 0 errors). The server change is backward-compatible (optional parameter with empty-object spread when absent). Cross-repo deployment is also safe: the extra reporterUserId query param is silently ignored by Express if the backend hasn't been updated yet.",
+      "evidence": [
+        "package.json: engines.node >= 18, no dependencies field (verified)",
+        "tsconfig.json: strict: true, target ES2022, module Node16 (verified)",
+        "tsc --noEmit passes with 0 errors (from diagnosis evidence)",
+        "Server: conditional spread produces {} when reporterUserId undefined (verified via direct inspection)",
+        "Express silently ignores unknown query parameters (standard behavior)"
+      ]
+    }
+  ],
+  "statement": "The helix-cli expansion uses the existing manual switch-based routing pattern with zero production dependencies. 13 new source files across src/org/ (4) and src/tickets/ (10) implement all 12 CLI commands as thin HTTP wrappers over pre-existing Helix backend endpoints. The only server change is ~5 lines adding reporterUserId as an optional query parameter on GET /api/tickets. Key technical decisions: org switch replaces stored JWT with org-scoped token; --user resolves via /organization/members + server-side reporterUserId filter; --status filters client-side; continue reuses rerun endpoint; bundle writes deterministic directory with graceful artifact failure handling; flag parsing consolidated in shared module. No blocking risks; deferred items include pagination, --json output, server-side status filter, and test suite.",
+  "followups": []
+}

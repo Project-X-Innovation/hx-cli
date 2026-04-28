@@ -1,0 +1,37 @@
+{
+  "questions": [
+    "Q1: Is the helix-cli implementation already complete, and what work remains for the implementation step?",
+    "Q2: How should the implementation step verify all CLI commands at runtime?",
+    "Q3: What verification checks cover the full acceptance criteria?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes, the implementation is already complete in the current branch. All 13 new source files exist: src/org/ (4 files: index.ts, current.ts, list.ts, switch.ts) and src/tickets/ (10 files: index.ts, list.ts, latest.ts, get.ts, create.ts, rerun.ts, continue.ts, artifacts.ts, artifact.ts, bundle.ts). The config model is extended with orgId/orgName. The entry point routes all 5 command groups. Version is 1.2.0. The implementation step must: (1) verify quality gates (typecheck + build), (2) start the backend server, (3) authenticate and test all CLI commands at runtime, (4) fix any issues found.",
+      "evidence": [
+        "File listing: src/org/ has index.ts, current.ts, list.ts, switch.ts (verified via Glob)",
+        "File listing: src/tickets/ has index.ts, list.ts, latest.ts, get.ts, create.ts, rerun.ts, continue.ts, artifacts.ts, artifact.ts, bundle.ts (verified via Glob)",
+        "src/index.ts: routes login, inspect, comments, org, tickets; version 1.2.0 (verified via direct inspection)",
+        "src/lib/config.ts: HxConfig includes orgId?: string, orgName?: string (verified via direct inspection)",
+        "Scout summary: typecheck passes with zero errors"
+      ]
+    },
+    {
+      "answer": "The implementation step should: (1) write .env for helix-global-server, (2) npm install both repos, (3) run typecheck and build for helix-cli, (4) start helix-global-server on port 4000 via npm run dev, (5) authenticate by calling POST /api/auth/login with dev credentials to get a session JWT, (6) run each CLI command (org current, org list, org switch, tickets list, tickets list with filters, tickets latest, tickets get, tickets artifacts, tickets artifact, tickets bundle, tickets continue) using HELIX_API_KEY=<jwt> HELIX_URL=http://localhost:4000 node dist/index.js <command>, (7) verify error handling for invalid inputs.",
+      "evidence": [
+        "Dev setup config: port 4000, npm run dev, login email/password available",
+        "All CLI commands use hxFetch with basePath '/api' against config.url (verified via direct inspection)",
+        "Auth dispatch: non-hxi_ tokens send Authorization: Bearer header (verified in src/lib/http.ts)"
+      ]
+    },
+    {
+      "answer": "12 required checks: CHK-01 (typecheck), CHK-02 (build + dist contents), CHK-03 (org current), CHK-04 (org list), CHK-05 (org switch), CHK-06 (tickets list), CHK-07 (tickets list with filter), CHK-08 (tickets get detail), CHK-09 (artifacts list), CHK-10 (artifact read), CHK-11 (bundle creation), CHK-12 (error handling). All runtime checks use the dev server at port 4000 with session JWT from POST /api/auth/login using provided dev credentials.",
+      "evidence": [
+        "Ticket acceptance criteria maps to CHK-03 through CHK-11",
+        "Ticket verification section requires error handling testing (CHK-12)",
+        "Dev setup config provides all necessary credentials and server config"
+      ]
+    }
+  ],
+  "statement": "The helix-cli implementation is already complete in the current branch with all 13 new files implementing 12 CLI commands (3 org + 9 tickets). No new code needs to be written. The implementation step verifies quality gates (CHK-01, CHK-02) and runs all commands at runtime against the dev server at port 4000 (CHK-03 through CHK-12). The plan covers org management, ticket discovery with filters, artifact inspection, Codex bundling, ticket actions, and error handling.",
+  "followups": []
+}

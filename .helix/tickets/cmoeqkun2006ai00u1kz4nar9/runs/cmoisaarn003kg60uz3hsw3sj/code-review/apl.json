@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Were all merge conflicts in helix-cli correctly resolved with both branches' intents preserved?",
+    "Does the merged config.ts saveConfig pattern safely handle cross-feature writes (org + update)?",
+    "Does helix-global-server tsconfig.tsbuildinfo require any changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 3 conflict regions in src/index.ts (imports, usage text, switch cases) and 2 in src/lib/config.ts (HxConfig type, saveConfig function) are correctly resolved. Both org/tickets (ticket) and update/auto-update (staging) features are preserved. TypeScript compiles cleanly.",
+      "evidence": [
+        "grep for conflict markers in src/index.ts and src/lib/config.ts returned no matches",
+        "npx tsc --noEmit passed with exit code 0",
+        "All imports verified against existing module directories (org/, tickets/, update/, comments/)"
+      ]
+    },
+    {
+      "answer": "Yes. saveConfig uses a read-merge-write pattern: it reads the full existing config from disk, spreads the update on top, and writes back. Since loadConfig returns only apiKey/url/orgId/orgName (no autoUpdate/installSource properties), org switch's spread doesn't overwrite update fields. Similarly, update's saveConfig calls only include installSource/autoUpdate, preserving org fields from disk.",
+      "evidence": [
+        "src/lib/config.ts:62-73 shows read-merge-write pattern",
+        "src/org/switch.ts:49-56 creates updatedConfig from loadConfig spread which lacks autoUpdate/installSource",
+        "src/update/index.ts:80-87 and 139-146 only pass installSource to saveConfig"
+      ]
+    },
+    {
+      "answer": "No. The file was listed in merge-conflicts.json but contained no conflict markers. It is valid JSON.",
+      "evidence": [
+        "grep for conflict markers returned no matches",
+        "JSON.parse validation succeeded"
+      ]
+    }
+  ],
+  "statement": "Reviewed merge conflict resolution in helix-cli across 2 source files and helix-global-server tsconfig.tsbuildinfo. All conflicts were correctly resolved: imports, usage text, switch cases, and config type fields from both branches are preserved. The read-merge-write saveConfig pattern correctly handles cross-feature config writes. TypeScript compiles cleanly. No issues found; no changes needed.",
+  "followups": []
+}
