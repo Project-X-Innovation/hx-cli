@@ -12,13 +12,10 @@ export type InstallSource = {
 export type HxConfig = {
   apiKey: string;
   url: string;
-<<<<<<< HEAD
   orgId?: string;
   orgName?: string;
-=======
   autoUpdate?: boolean;
   installSource?: InstallSource;
->>>>>>> origin/staging
 };
 
 const CONFIG_DIR = join(homedir(), ".hlx");
@@ -64,12 +61,6 @@ export function loadFullConfig(): Partial<HxConfig> {
 /** Read-merge-write: merges the provided fields into the existing config file without destroying unrelated fields. */
 export function saveConfig(updates: Partial<HxConfig>): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
-<<<<<<< HEAD
-  const data: Record<string, string> = { apiKey: config.apiKey, url: config.url };
-  if (config.orgId) data.orgId = config.orgId;
-  if (config.orgName) data.orgName = config.orgName;
-  writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
-=======
   let existing: Record<string, unknown> = {};
   try {
     const raw = readFileSync(CONFIG_FILE, "utf8");
@@ -79,7 +70,6 @@ export function saveConfig(updates: Partial<HxConfig>): void {
   }
   const merged = { ...existing, ...updates };
   writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2) + "\n", "utf8");
->>>>>>> origin/staging
 }
 
 export function requireConfig(): HxConfig {
