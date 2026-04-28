@@ -1,0 +1,24 @@
+{
+  "refreshFromStaging": true,
+  "mergeSource": "staging",
+  "conflictFiles": [
+    {
+      "path": "src/index.ts",
+      "ticketCommits": [
+        "31c64eb chore(helix): implementation artifacts (cmog2uk9t005pi00ufof780d9)"
+      ],
+      "stagingCommits": [
+        "905f33c chore(helix): implementation artifacts (cmog2ul96005ri00ur1sfk518)"
+      ]
+    },
+    {
+      "path": "src/lib/config.ts",
+      "ticketCommits": [
+        "31c64eb chore(helix): implementation artifacts (cmog2uk9t005pi00ufof780d9)"
+      ],
+      "stagingCommits": [
+        "905f33c chore(helix): implementation artifacts (cmog2ul96005ri00ur1sfk518)"
+      ]
+    }
+  ]
+}
