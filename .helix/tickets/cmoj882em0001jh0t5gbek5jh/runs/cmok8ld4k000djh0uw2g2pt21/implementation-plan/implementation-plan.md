@@ -1,193 +1,377 @@
-# Implementation Plan: helix-cli
+# Implementation Plan: helix-cli — Org-Scoped Multi-Token Config
 
 ## Overview
 
-Update the CLI so `hxi_` API key requests send an `X-Helix-Org-ID` header with the locally-selected org, `hlx org switch` for API keys updates only local config (preserving the key), and `hlx org list` marks the current org from local config. Session JWT behavior remains unchanged.
+Redesign the CLI config to support multiple org-scoped tokens with a `currentOrg` pointer. Add `hlx token add` command that validates a token with the server and stores the org/token pair. Make `hlx org list` local-only (no server call) and `hlx org switch` resolve from local config entries. Env-var token overrides (`HELIX_INSPECT_TOKEN`, `HELIX_API_KEY`) continue to work unchanged.
+
+No new server endpoints needed. Token validation uses existing `/api/auth/me`.
+
+Cross-repo note: `hlx token add` calls `/api/auth/me` with the token. The server repo (`helix-global-server`) is being updated in parallel so that API-key auth resolves the key's own org without needing `X-Helix-Org-ID`. Until the server change is deployed, `hlx token add` may still work because `/api/auth/me` is registered before the `requireOrgForApiKey` gate — but the auth may fail via `lookupUserForAuth`'s `User.organizationId` check. Server changes should ideally be deployed first.
 
 ## Implementation Principles
 
-- **Branch on key type**: Every changed function checks `config.apiKey.startsWith("hxi_")` to determine behavior. JWT token paths are untouched.
-- **Local-only state for API keys**: Switching orgs with an `hxi_` key writes `orgId`/`orgName` to `~/.hlx/config.json` and never calls `POST /api/auth/switch-org`.
-- **Preserve the API key**: The `hxi_` key is never replaced or destroyed during org switch.
-- **Ambiguous names fail**: Org name resolution that matches multiple orgs fails with a clear error listing all matches.
-- **Header only for hxi_ keys**: `X-Helix-Org-ID` is sent only when `config.orgId` is set AND the key starts with `hxi_`. JWTs embed their org in the token.
+- **Compatibility layer**: `loadConfig()` continues to return `HxConfig` (`{ apiKey, url, orgId?, orgName? }`). The multi-token config is resolved internally. Zero changes needed in `hxFetch` or any command that consumes `HxConfig`.
+- **Local-only org management**: `hlx org list` and `hlx org switch` read only from `~/.hlx/config.json`. No server calls.
+- **Fail closed**: Missing current org, invalid token, conflicting alias — all fail with clear errors.
+- **Env-var priority**: The `loadConfig` env-var path (L26-29) returns `{ apiKey, url }` immediately, completely bypassing the multi-token config.
+- **Token security**: Never print full tokens in output. Mask as `hxi_<first8>...`.
 
 ## Implementation Steps Summary
 
 | Step | Goal | Deliverable |
 |------|------|-------------|
-| 1 | Send X-Helix-Org-ID header on hxi_ requests | `src/lib/http.ts` updated |
-| 2 | Local-only org switch for hxi_ keys | `src/org/switch.ts` refactored |
-| 3 | Config-based current marker in org list | `src/org/list.ts` updated |
-| 4 | Run quality gates | typecheck, build pass |
+| 1 | Redesign config module for multi-token support | Modified `src/lib/config.ts` |
+| 2 | Create `hlx token add` command | New `src/token/add.ts`, new `src/token/index.ts` |
+| 3 | Rewrite `hlx org list` to local-only | Modified `src/org/list.ts` |
+| 4 | Rewrite `hlx org switch` to local-only | Modified `src/org/switch.ts` |
+| 5 | Update main entry point, usage, and requireConfig | Modified `src/index.ts`, `src/org/index.ts` |
+| 6 | Run quality gates | Typecheck, build pass |
 
 ## Detailed Implementation Steps
 
-### Step 1: Add X-Helix-Org-ID header to HTTP requests
+### Step 1: Redesign config module for multi-token support
 
-**Goal**: The server receives the CLI's selected org on every `hxi_`-authenticated request.
-
-**What to Build**:
-- File: `src/lib/http.ts`
-- After the auth header block (L52-57), add:
-  ```
-  if (config.orgId && config.apiKey.startsWith("hxi_")) {
-    headers["X-Helix-Org-ID"] = config.orgId;
-  }
-  ```
-- This is placed between the auth headers (L52-57) and the Content-Type header (L60-62)
-- Only set when BOTH conditions are true: orgId exists in config AND key is an hxi_ key
-- When orgId is not set (bootstrap case), the header is omitted. The server allows `/api/auth/me` without the header for API key auth (bootstrap exemption), but rejects org-scoped routes
-
-**Verification (AI Agent Runs)**:
-- `npm run typecheck` passes
-- `npm run build` passes
-
-**Success Criteria**:
-- `hxi_` key requests with `config.orgId` set include `X-Helix-Org-ID` header
-- `hxi_` key requests without `config.orgId` do not include the header
-- JWT token requests never include the header regardless of `config.orgId`
-- No change to existing retry, timeout, or error handling logic
-
-### Step 2: Local-only org switch for hxi_ keys
-
-**Goal**: `hlx org switch` for `hxi_` keys updates only local config, preserves the API key, and never calls the server's switch-org endpoint.
+**Goal**: Update `src/lib/config.ts` with the new multi-token config shape while maintaining `HxConfig` return type for backward compatibility.
 
 **What to Build**:
-- File: `src/org/switch.ts`
-- Add a branch after the org name/ID resolution block (after L41) and before the server call (L43):
 
-  **For `hxi_` keys** (`config.apiKey.startsWith("hxi_")`):
-  1. Resolve org input (name or ID) — keep existing CUID detection and name resolution via `/api/auth/me`
-  2. **Ambiguous name handling**: Change the name lookup from `.find()` (L28-29) to `.filter()`. If multiple matches: print all matches with IDs and exit with error: `"Error: Multiple organizations match '<input>'. Use the org ID instead:"`. If zero matches: keep existing error message.
-  3. Save to config: `saveConfig({ orgId: organizationId, orgName: orgName })` — preserves existing `apiKey` and all other config fields via read-merge-write
-  4. Print: `Switched to org: ${orgName} (${organizationId})`
-  5. Do NOT call `POST /api/auth/switch-org`
-  6. Do NOT replace `config.apiKey`
+**A. Add new types:**
 
-  **For JWT tokens** (else branch):
-  - Keep the entire existing behavior unchanged (L43-57): call `/api/auth/switch-org`, save `accessToken` as new `apiKey`, save `orgId`/`orgName`
+```typescript
+type OrgEntry = {
+  orgId: string;
+  orgName: string;
+  token: string;
+  url: string;
+  alias?: string;
+};
 
-- The MeResponse type at top of file is already correct for the `/api/auth/me` call used in name resolution
+type MultiTokenConfig = {
+  orgs: OrgEntry[];
+  currentOrg?: string;
+  autoUpdate?: boolean;
+  installSource?: InstallSource;
+};
+```
+
+**B. Update `loadConfig()` (L24-49):**
+
+1. Env-var path (L26-29): Unchanged. Returns `{ apiKey, url }` immediately.
+2. Read `~/.hlx/config.json` and parse as `Record<string, unknown>`.
+3. If parsed has `orgs` array:
+   a. Find entry where `entry.orgId === parsed.currentOrg`.
+   b. If found: return `{ apiKey: entry.token, url: entry.url, orgId: entry.orgId, orgName: entry.orgName }`.
+   c. If `currentOrg` not set but `orgs` has exactly one entry: use that entry (convenience for single-org users).
+   d. Otherwise return null (no current org selected).
+4. If parsed has legacy `apiKey` field (old format): return null. Old config migration is explicitly out of scope.
+5. Return null.
+
+**C. Add config helper functions (new exports):**
+
+- `loadRawConfig(): MultiTokenConfig | null` — reads and parses `~/.hlx/config.json` as multi-token format. Returns null if file missing/invalid/legacy.
+- `getOrgEntries(): OrgEntry[]` — returns `orgs` array from config (empty if none).
+- `getOrgEntry(orgIdOrAlias: string): OrgEntry | undefined` — finds entry by exact `orgId` match, then by exact `alias` match.
+- `addOrgEntry(entry: OrgEntry, makeCurrent: boolean): void` — reads config, replaces existing entry with same `orgId` or appends, preserves `autoUpdate`/`installSource`, optionally sets `currentOrg`. If `makeCurrent` or no `currentOrg` exists, sets `currentOrg` to entry's `orgId`. Validates alias uniqueness (if alias is set and another entry has the same alias, throw error).
+- `setCurrentOrg(orgId: string): void` — reads config, validates entry exists, sets `currentOrg`, writes.
+- `maskToken(token: string): string` — returns `hxi_<first8chars>...` or full token if shorter than prefix+8.
+
+**D. Update `saveConfig()` (L62-73):**
+
+No structural change. The existing read-merge-write pattern works for multi-token config since `addOrgEntry` and `setCurrentOrg` handle the `orgs` array directly. `saveConfig` is still used by `hlx login` and `hlx update` for their fields.
+
+**E. Update `requireConfig()` (L75-82):**
+
+Change error message to: `"Not authenticated. Run \`hlx token add --token <key> --url <server>\` or set HELIX_API_KEY + HELIX_URL env vars."`
 
 **Verification (AI Agent Runs)**:
-- `npm run typecheck` passes
-- `npm run build` passes
+```bash
+cd /vercel/sandbox/workspaces/cmok8ld4k000djh0uw2g2pt21/helix-cli
+npx tsc --noEmit
+```
 
 **Success Criteria**:
-- `hlx org switch <org-name>` with `hxi_` key: updates config.orgId/orgName, preserves config.apiKey (still `hxi_...`)
-- `hlx org switch <org-id>` with `hxi_` key: same behavior using CUID directly
-- `hlx org switch <ambiguous-name>` with `hxi_` key: prints all matches, exits with error
-- `hlx org switch <org>` with JWT token: existing server-call behavior unchanged
-- After switch, `~/.hlx/config.json` has correct orgId, orgName, and original apiKey
+- `loadConfig()` returns `HxConfig | null` (type unchanged).
+- Multi-token config resolution works: finds current org entry, returns as `HxConfig`.
+- Env-var path completely unchanged.
+- Helper functions exported: `getOrgEntries`, `getOrgEntry`, `addOrgEntry`, `setCurrentOrg`, `maskToken`.
+- TypeScript compiles.
 
-### Step 3: Config-based current marker in org list
+---
 
-**Goal**: `hlx org list` marks the currently selected org using local config for `hxi_` keys.
+### Step 2: Create `hlx token add` command
+
+**Goal**: Implement `hlx token add --token <hxi_key> [--url <server_url>] [--name <alias>] [--current]` that validates a token with the server and stores the org/token pair locally.
 
 **What to Build**:
-- File: `src/org/list.ts`
-- In `cmdOrgList` (L19-22), change the current-org marker logic:
-  ```
-  for (const org of data.availableOrganizations) {
-    const isCurrent = config.apiKey.startsWith("hxi_")
-      ? org.id === config.orgId
-      : org.id === data.organization.id;
-    const marker = isCurrent ? " (current)" : "";
-    console.log(`  ${org.id}  ${org.name}${marker}`);
-  }
-  ```
-- For `hxi_` keys: compare `org.id === config.orgId` (local selection)
-- For JWT tokens: keep existing `org.id === data.organization.id` (server state)
-- If no orgId is set in config (bootstrap), no org gets the "(current)" marker — this is correct and helps the user see they need to run `hlx org switch`
+
+**A. Create `src/token/add.ts`:**
+
+Function `cmdTokenAdd(args: string[]): Promise<void>`:
+
+1. Parse flags using `flags.ts`:
+   - `--token` (required): the `hxi_` key.
+   - `--url` (optional): server URL. Default: use URL from first existing org entry if any. If no entries and no `--url`, print error and exit.
+   - `--name` (optional): alias for the org.
+   - `--current` (boolean flag): whether to make this the current org.
+2. Validate token format: must start with `hxi_`. If not, print error and exit.
+3. Build a temporary config `{ apiKey: token, url }` to call `hxFetch`.
+4. Call `GET /api/auth/me` with `basePath: "/api"` using the temp config. This validates the token and returns the key's org.
+5. On HTTP error: print error (with masked token), exit 1, write nothing.
+6. Extract `organization.id` and `organization.name` from response.
+7. Create `OrgEntry`: `{ orgId: org.id, orgName: org.name, token, url, alias }`.
+8. Call `addOrgEntry(entry, makeCurrent)` where `makeCurrent` is true if `--current` flag or no `currentOrg` exists.
+9. Print confirmation: `"Added token for <orgName> (<orgId>)"` with masked token.
+
+**B. Create `src/token/index.ts`:**
+
+Function `runToken(args: string[]): Promise<void>`:
+
+1. Subcommand dispatch. For now, only `add` subcommand.
+2. Default: print usage and exit.
+
+Usage text:
+```
+Usage:
+  hlx token add --token <hxi_key> [--url <server>] [--name <alias>] [--current]
+```
 
 **Verification (AI Agent Runs)**:
-- `npm run typecheck` passes
-- `npm run build` passes
+```bash
+cd /vercel/sandbox/workspaces/cmok8ld4k000djh0uw2g2pt21/helix-cli
+npx tsc --noEmit
+```
 
 **Success Criteria**:
-- `hlx org list` with `hxi_` key: marks the org matching `config.orgId`
-- `hlx org list` with `hxi_` key and no orgId set: no org marked as current
-- `hlx org list` with JWT token: marks the org from server response (existing behavior)
+- `hlx token add --token <valid_key> --url <server>` validates token and stores entry.
+- Invalid token (server returns error) does not write config.
+- Missing `--token` flag prints error.
+- Token format validation (must start with `hxi_`).
+- TypeScript compiles.
 
-### Step 4: Run quality gates
+---
 
-**Goal**: All CLI quality checks pass.
+### Step 3: Rewrite `hlx org list` to local-only
 
-**What to Build**: No code changes. Run validation commands.
+**Goal**: Make `hlx org list` read only from local config. No server call.
+
+**What to Build**:
+
+Rewrite `src/org/list.ts` — `cmdOrgList`:
+
+1. Remove `config: HxConfig` parameter. Instead, import `getOrgEntries` and `loadRawConfig` from config.
+2. Call `getOrgEntries()` to get the local orgs array.
+3. Call `loadRawConfig()` to get `currentOrg` pointer.
+4. If no entries: print `"No organizations configured. Run \`hlx token add\` to add one."` and return.
+5. Print `"Organizations:\n"`.
+6. For each entry: print `"  <orgId>  <orgName> (<alias>)  (current)"` where `(alias)` is shown only if set, and `(current)` is shown only if `entry.orgId === currentOrg`.
+
+Update the function signature. Note: `cmdOrgList` currently takes `config: HxConfig`. The caller in `src/org/index.ts` passes `config`. This function no longer needs the config parameter since it reads directly from disk.
 
 **Verification (AI Agent Runs)**:
-- `npm run typecheck` — zero errors
-- `npm run build` — succeeds
+```bash
+cd /vercel/sandbox/workspaces/cmok8ld4k000djh0uw2g2pt21/helix-cli
+npx tsc --noEmit
+```
 
 **Success Criteria**:
-- Both commands exit with code 0
-- No TypeScript errors, no build errors
+- No `hxFetch` or server call in `cmdOrgList`.
+- Shows only locally configured orgs.
+- Marks current org.
+- Shows alias when present.
+- TypeScript compiles.
+
+---
+
+### Step 4: Rewrite `hlx org switch` to local-only
+
+**Goal**: Make `hlx org switch` resolve org names from local config entries. No server call for `hxi_` token auth.
+
+**What to Build**:
+
+Rewrite `src/org/switch.ts` — `cmdOrgSwitch`:
+
+1. Keep the `config: HxConfig` parameter (needed for JWT path).
+2. Parse input (org ID, alias, or name).
+3. **For `hxi_` token auth** (multi-token config path):
+   a. Call `getOrgEntries()` to get local entries.
+   b. Match input against entries:
+      - First try exact `orgId` match.
+      - Then try exact `alias` match.
+      - Then try case-insensitive `orgName` match.
+   c. If no match: print error listing configured orgs (orgId + orgName), exit 1.
+   d. If multiple name matches: print all matches with IDs, exit 1 (ambiguity).
+   e. Call `setCurrentOrg(matched.orgId)`.
+   f. Print `"Switched to org: <orgName> (<orgId>)"`.
+4. **For JWT token auth**: keep existing server-side switch behavior (L55-71) unchanged.
+
+The detection of which path to use: if `config.apiKey.startsWith("hxi_")`, use multi-token local path. Otherwise JWT path.
+
+**Verification (AI Agent Runs)**:
+```bash
+cd /vercel/sandbox/workspaces/cmok8ld4k000djh0uw2g2pt21/helix-cli
+npx tsc --noEmit
+```
+
+**Success Criteria**:
+- For `hxi_` tokens: no `hxFetch` or server call in `cmdOrgSwitch`.
+- Resolves by orgId, alias, or orgName (case-insensitive).
+- Ambiguous names fail clearly.
+- Switching to unconfigured org fails with list of configured orgs.
+- JWT path unchanged.
+- TypeScript compiles.
+
+---
+
+### Step 5: Update main entry point, usage, and org dispatcher
+
+**Goal**: Wire the new `token` command into the CLI, update usage text, and update org command routing.
+
+**What to Build**:
+
+**A. Update `src/index.ts`:**
+
+1. Import `runToken` from `./token/index.js`.
+2. Add `case "token":` to the switch block (after `login`, before `inspect`):
+   ```
+   case "token":
+     await runToken(args.slice(1));
+     break;
+   ```
+   Note: `hlx token add` does NOT call `requireConfig()` — it creates config. It handles its own auth.
+3. Update usage text in `usage()` function: add `hlx token add --token <key> [--url <server>] [--name <alias>] [--current]` line.
+
+**B. Update `src/org/index.ts`:**
+
+1. Update `cmdOrgList` call: if `cmdOrgList` no longer takes `config` parameter (per Step 3), remove the argument.
+2. Keep `cmdOrgCurrent(config)` and `cmdOrgSwitch(config, rest)` calls as-is (they still need config).
+
+**C. Update `src/org/current.ts` (minimal change):**
+
+No structural change. `cmdOrgCurrent` still calls `/api/auth/me` via `hxFetch(config, ...)`. Under multi-token config, `config` already has the correct token for the current org entry. The command shows server-validated current state.
+
+**Verification (AI Agent Runs)**:
+```bash
+cd /vercel/sandbox/workspaces/cmok8ld4k000djh0uw2g2pt21/helix-cli
+npx tsc --noEmit
+```
+
+**Success Criteria**:
+- `hlx token` dispatches to `runToken`.
+- `hlx token add` works without `requireConfig()` gate.
+- Usage text includes new `token add` command.
+- `hlx org list` call updated to match new signature.
+- TypeScript compiles.
+
+---
+
+### Step 6: Run quality gates
+
+**Goal**: All available quality gates pass.
+
+**What to Build**: No code changes.
+
+**Verification (AI Agent Runs)**:
+```bash
+cd /vercel/sandbox/workspaces/cmok8ld4k000djh0uw2g2pt21/helix-cli
+npm run typecheck
+npm run build
+```
+
+**Success Criteria**:
+- `npm run typecheck` exits 0.
+- `npm run build` exits 0.
+
+---
 
 ## Verification Plan
 
 ### Pre-conditions
 
-| Dependency | Status | Source/Evidence | Affects checks |
-|-----------|--------|-----------------|----------------|
-| `npm install` completed in helix-cli | available | Standard setup step | CHK-01, CHK-02, CHK-03, CHK-04, CHK-05 |
-| helix-global-server changes deployed/running (port 4000) | available | Server dev setup config; server changes must be implemented first | CHK-03, CHK-04, CHK-05 |
-| `.env` file written to helix-global-server | available | Dev setup config provided | CHK-03, CHK-04, CHK-05 |
-| `hxi_` API key available for CLI testing | unknown | Requires either existing key or creating one via server | CHK-03, CHK-04, CHK-05 |
-| User with multiple org memberships accessible via the API key | unknown | Required for cross-org switch verification | CHK-04 |
-| Login credentials: support@projectxinnovation.com / =(ohR58-w | available | Dev setup config | CHK-05 |
+| # | Dependency | Status | Source/Evidence | Affects checks |
+|---|-----------|--------|-----------------|----------------|
+| 1 | Node.js and npm installed | available | Workspace environment | CHK-01 through CHK-09 |
+| 2 | npm dependencies installed (`npm install`) | available | helix-cli has node_modules | CHK-01 through CHK-09 |
+| 3 | helix-global-server running on port 4000 with .env configured | available | Dev setup config provided | CHK-04, CHK-05, CHK-06 |
+| 4 | Valid `hxi_` API key for testing `hlx token add` | available | Can generate via server app or use existing key from DB | CHK-04, CHK-05, CHK-06 |
+| 5 | CLI can be run via `npx tsx src/index.ts` or `node dist/index.js` | available | Standard TypeScript/Node execution | CHK-03 through CHK-09 |
 
 ### Required Checks
 
-[CHK-01] CLI TypeScript typecheck passes.
-- Action: Run `npm run typecheck` in helix-cli root.
-- Expected Outcome: Command exits with code 0 and zero TypeScript errors.
-- Required Evidence: Full command output showing no errors.
+[CHK-01] TypeScript compilation passes.
+- Action: Run `npm run typecheck` in helix-cli directory.
+- Expected Outcome: Exit code 0 with no type errors.
+- Required Evidence: Full command output showing successful completion with exit code 0.
 
-[CHK-02] CLI build succeeds.
-- Action: Run `npm run build` in helix-cli root.
-- Expected Outcome: Command exits with code 0. TypeScript compilation completes without error.
-- Required Evidence: Full command output showing successful build.
+[CHK-02] Build passes.
+- Action: Run `npm run build` in helix-cli directory.
+- Expected Outcome: Exit code 0. `dist/` directory produced.
+- Required Evidence: Full command output and `ls dist/` showing compiled files.
 
-[CHK-03] X-Helix-Org-ID header is emitted for hxi_ key requests.
-- Action: Start helix-global-server dev server (`npm run dev`, port 4000). Configure helix-cli with an `hxi_` API key and a valid `orgId`. Run `hlx org current` (which calls `GET /api/auth/me`). Observe the server response reflects the selected org.
-- Expected Outcome: The server returns HTTP 200 with `organization.id` matching the configured `orgId`, confirming the header was sent and processed.
-- Required Evidence: Command output from `hlx org current` showing the org name and ID matching the configured orgId. If available, server-side request log or curl equivalent showing the header.
+[CHK-03] `hlx org list` works without server call (local-only).
+- Action: Create a test `~/.hlx/config.json` with two org entries in the `orgs` array and a `currentOrg` pointer. Run `hlx org list` (via `npx tsx src/index.ts org list`).
+- Expected Outcome: Output shows both configured orgs with the current one marked. No HTTP request is made (no network error even if server is down).
+- Required Evidence: Command output showing org list with `(current)` marker. Verify by also running with server stopped — command still succeeds.
 
-[CHK-04] hlx org switch with hxi_ key preserves API key and updates local config.
-- Action: With an `hxi_` key configured, run `hlx org switch <valid-org-name-or-id>` for an org the user has access to. Then inspect `~/.hlx/config.json`.
-- Expected Outcome: Config file contains the original `hxi_` API key (not replaced by a JWT), plus updated `orgId` and `orgName` matching the target org. No server call to `/api/auth/switch-org` was made (observable by the API key not being replaced).
-- Required Evidence: Contents of `~/.hlx/config.json` after the switch command, showing `apiKey` still starts with `hxi_` and `orgId`/`orgName` are updated.
+[CHK-04] `hlx token add` validates and stores a token.
+- Action: Start helix-global-server on port 4000. Run `hlx token add --token <valid_hxi_key> --url http://localhost:4000 --current`. Then inspect `~/.hlx/config.json`.
+- Expected Outcome: Command prints confirmation with org name and masked token. Config file contains `orgs` array with one entry matching the key's org. `currentOrg` is set.
+- Required Evidence: Command stdout output and cat of `~/.hlx/config.json` showing the stored entry.
 
-[CHK-05] Session JWT org switch behavior is unchanged.
-- Action: Login via browser flow or `POST /api/auth/login` to obtain a JWT. Configure CLI with the JWT. Run `hlx org switch <org>`.
-- Expected Outcome: The switch calls `POST /api/auth/switch-org`, the JWT is replaced with a new one, and `orgId`/`orgName` are updated in config. Existing JWT switch behavior is preserved.
-- Required Evidence: Contents of `~/.hlx/config.json` showing `apiKey` is a JWT (not `hxi_`), and `orgId`/`orgName` are updated.
+[CHK-05] `hlx token add` rejects invalid token.
+- Action: Run `hlx token add --token hxi_invalid_token_xxx --url http://localhost:4000`.
+- Expected Outcome: Command fails with an error message. Config file is not modified (no new entry added).
+- Required Evidence: Command stderr output showing error. Cat of `~/.hlx/config.json` confirming no change.
+
+[CHK-06] `hlx org switch` changes current org locally.
+- Action: Add two tokens (for two different orgs) via `hlx token add`. Run `hlx org switch <second-org-id>`. Then run `hlx org list` to verify the switch.
+- Expected Outcome: Switch command prints confirmation. Subsequent `hlx org list` shows the second org as current. Config file's `currentOrg` field matches the second org's ID.
+- Required Evidence: Command outputs from switch and list, plus cat of `~/.hlx/config.json`.
+
+[CHK-07] `hlx org switch` fails for unconfigured org.
+- Action: Run `hlx org switch nonexistent-org-id`.
+- Expected Outcome: Command fails with a clear error message listing configured orgs. Config file's `currentOrg` is unchanged.
+- Required Evidence: Command stderr output showing error message with configured orgs listed.
+
+[CHK-08] Env-var token override still works.
+- Action: Set `HELIX_INSPECT_TOKEN=<valid_hxi_key>` and `HELIX_INSPECT_BASE_URL=http://localhost:4000`. Run an inspect or comments command (e.g., `hlx inspect repos`).
+- Expected Outcome: Command uses the env-var token and URL, ignoring local config. If server is running with the server-side fix applied, the command succeeds.
+- Required Evidence: Command output (success or auth error from server) demonstrating the env-var path was used (no "Not authenticated" error from missing local config).
+
+[CHK-09] Token values are masked in output.
+- Action: Run `hlx token add --token <valid_hxi_key> --url http://localhost:4000`. Examine the command output.
+- Expected Outcome: The full token value does not appear in stdout or stderr. Only a masked form like `hxi_<first8chars>...` is shown.
+- Required Evidence: Full command output inspected for absence of the full token string.
+
+---
 
 ## Success Metrics
 
-1. CLI typecheck and build pass with zero errors
-2. `X-Helix-Org-ID` header sent on all `hxi_`-authenticated requests when orgId is set
-3. `hlx org switch` for `hxi_` keys is local-only: preserves API key, no server call
-4. `hlx org switch` for JWT tokens unchanged: calls server, replaces token
-5. `hlx org list` marks current org from local config for `hxi_` keys
-6. Ambiguous org names produce clear error with all matches listed
-7. `hlx org current` reflects the selected org (via server response with X-Helix-Org-ID)
+1. Multi-token config (`orgs` array + `currentOrg`) works in `~/.hlx/config.json`.
+2. `loadConfig()` resolves current org entry and returns compatible `HxConfig`.
+3. `hlx token add` validates with server, stores entry, sets current.
+4. `hlx org list` is local-only with zero server calls.
+5. `hlx org switch` resolves from local entries (by ID, alias, or name).
+6. Env-var override path completely unchanged.
+7. `hxFetch` and all existing commands work without modification (compatibility layer).
+8. Token values never printed in full.
+9. Typecheck and build pass.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md | Primary specification | X-Helix-Org-ID header, local-only switch for hxi_ keys, orgId/orgName in config, ambiguous name handling, allowed files |
-| scout/reference-map.json (CLI) | Code mapping with line-level evidence | hxFetch auth headers at L52-57, switch.ts server call at L43-47, list.ts marker at L20, config.ts orgId/orgName fields |
-| scout/scout-summary.md (CLI) | CLI analysis summary | No org header sent, destructive switch replaces key, config already has orgId/orgName, no test infrastructure |
-| diagnosis/diagnosis-statement.md (CLI) | Root cause analysis | Three defects: no org header, destructive key replacement, list marks by server state |
-| diagnosis/apl.json (CLI) | Evidence chain | hxFetch L52-57, switch.ts L49-51, list.ts L20, config orgId fields unused |
-| product/product.md | Product requirements | Core workflow: login → org list → org switch → commands. Header only for hxi_ keys. Local-only switch. |
-| tech-research/tech-research.md | Technical decisions | Header emission after auth headers, branch on key type for switch/list, ambiguous name handling with .filter() |
-| tech-research/apl.json | Technical Q&A | CLI sends header only for hxi_ keys, org switch is local config update, list marks by config.orgId |
-| src/lib/http.ts | Direct source inspection | hxFetch L37-130, auth headers at L52-57, clear insertion point for X-Helix-Org-ID |
-| src/lib/config.ts | Config management | HxConfig has orgId/orgName, saveConfig does read-merge-write, loadConfig reads from file |
-| src/org/switch.ts | Org switch implementation | CUID detection L25, name resolution L27-40, server call L43-47, key replacement L51 |
-| src/org/list.ts | Org list implementation | /auth/me call L11, current marker L20 comparing to data.organization.id |
-| src/org/current.ts | Current org display | Calls /auth/me L18, displays org from response — no code change needed |
+| ticket.md (continuation context) | Primary spec — org-scoped with multi-token CLI | New token add command, multi-token config, local-only org list/switch |
+| scout/scout-summary.md (CLI) | CLI state analysis | Single-token config; hlx org list calls server; hxFetch sends X-Helix-Org-ID; no tests |
+| scout/reference-map.json (CLI) | File-level evidence | Config type L12-19, loadConfig L24-49, saveConfig L62-73, flags.ts utilities |
+| diagnosis/diagnosis-statement.md (CLI) | Root causes | Single-token config, missing token add, server-dependent org commands |
+| product/product.md | Product vision and features | orgs array + currentOrg shape; /api/auth/me for validation; env var priority |
+| tech-research/tech-research.md (CLI) | Technical decisions | Compatibility layer chosen; array config; loadConfig returns HxConfig; alias uniqueness |
+| src/lib/config.ts | Direct code inspection | HxConfig type, loadConfig env-var priority, saveConfig read-merge-write |
+| src/lib/http.ts | Direct code inspection | hxFetch auth headers, X-Helix-Org-ID at L59-61, retry logic |
+| src/org/list.ts | Direct code inspection | Currently calls /api/auth/me — must become local-only |
+| src/org/switch.ts | Direct code inspection | hxi_ path local-only L50-53; name resolution via server L25-48 |
+| src/org/index.ts | Direct code inspection | Org command dispatcher routing |
+| src/index.ts | Direct code inspection | CLI entry point, command dispatch, usage text |
+| src/lib/flags.ts | Direct code inspection | getFlag, hasFlag, requireFlag, getPositionalArgs utilities |
+| src/login.ts | Direct code inspection | OAuth + manual login; both save single apiKey; remains separate flow |
+| repo-guidance.json | Repo intent | CLI confirmed as target by diagnosis |
