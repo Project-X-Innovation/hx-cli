@@ -1,0 +1,44 @@
+{
+  "questions": [
+    "Which CLI files need changes and what is the correct ordering?",
+    "Should X-Helix-Org-ID be sent for JWT token requests?",
+    "How should ambiguous org names be handled in hlx org switch?",
+    "Does hlx org current need code changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Three files need changes in order: (1) http.ts — add X-Helix-Org-ID header, (2) switch.ts — local-only switch for hxi_ keys, (3) list.ts — config-based current marker. The ordering is logical (header emission first, then the commands that depend on it) but all three are independently implementable. current.ts needs no code changes because the server response already reflects the selected org via the header.",
+      "evidence": [
+        "src/lib/http.ts:52-57 — auth headers set here, insertion point for org header",
+        "src/org/switch.ts:43-56 — server call and key replacement to be branched on key type",
+        "src/org/list.ts:20 — marker comparison to be branched on key type",
+        "src/org/current.ts:18 — calls /auth/me which returns selected org via header; no change needed"
+      ]
+    },
+    {
+      "answer": "No. X-Helix-Org-ID must only be sent when config.apiKey starts with 'hxi_'. Session JWTs embed their org in the token and use the server-side POST /api/auth/switch-org flow. Sending the header for JWTs would create conflicting org signals (JWT org vs header org).",
+      "evidence": [
+        "ticket.md: 'CLI requests must send the selected org to the server' — in context of hxi_ key auth",
+        "ticket.md: 'Existing session JWT auth behavior must remain unchanged'",
+        "tech-research/tech-research.md: 'Only for hxi_ keys. Session JWTs embed their org in the token'"
+      ]
+    },
+    {
+      "answer": "Change the name lookup in switch.ts from .find() (returns first match) to .filter(). If multiple orgs match the input name (case-insensitive), print all matches with their IDs and exit with error. If zero matches, keep the existing error message. The ticket explicitly requires 'fail with a clear error instead of selecting the first match'.",
+      "evidence": [
+        "ticket.md: 'For ambiguous org names, fail with a clear error instead of selecting the first match'",
+        "src/org/switch.ts:28-29 — current code uses .find() which silently returns first match",
+        "tech-research/tech-research.md: Technical Decision #8 — ambiguous org names"
+      ]
+    },
+    {
+      "answer": "No. cmdOrgCurrent calls GET /api/auth/me and displays the org from the response. With the new X-Helix-Org-ID header (added in http.ts), the server response already reflects the selected org. The display code at L20-23 works as-is.",
+      "evidence": [
+        "src/org/current.ts:17-24 — calls /auth/me, displays data.organization.name and .id",
+        "tech-research/tech-research.md: 'current.ts — No code change needed'"
+      ]
+    }
+  ],
+  "statement": "The CLI implementation plan has 4 steps: (1) add X-Helix-Org-ID header in http.ts for hxi_ key requests, (2) refactor switch.ts for local-only org switch with hxi_ keys including ambiguous name handling, (3) update list.ts current marker to use config.orgId for hxi_ keys, (4) quality gates. current.ts needs no changes. All changes branch on key type to preserve JWT behavior.",
+  "followups": []
+}

@@ -1,0 +1,37 @@
+{
+  "questions": [
+    "Does the CLI correctly send X-Helix-Org-ID header only for hxi_ key requests with orgId set?",
+    "Does hlx org switch for hxi_ keys correctly preserve the API key and update only local config?",
+    "Is the JWT org switch behavior completely unchanged?",
+    "Does hlx org list correctly mark the current org using local config for hxi_ keys?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The header is set at http.ts L59-61 only when both config.orgId is truthy AND config.apiKey.startsWith('hxi_'). JWT requests never include the header regardless of config.orgId.",
+      "evidence": [
+        "src/lib/http.ts L59-61: conditional header emission"
+      ]
+    },
+    {
+      "answer": "Yes. The hxi_ branch at switch.ts L50-53 calls saveConfig({ orgId, orgName }) which does a read-merge-write preserving the existing apiKey. It never calls /api/auth/switch-org and never replaces config.apiKey.",
+      "evidence": [
+        "src/org/switch.ts L50-53: saveConfig with orgId/orgName only",
+        "src/lib/config.ts L62-73: saveConfig read-merge-write preserves existing fields"
+      ]
+    },
+    {
+      "answer": "Yes. The JWT else branch at switch.ts L54-71 retains the exact existing behavior: calls /api/auth/switch-org, saves the new accessToken as apiKey, and saves orgId/orgName from the server response.",
+      "evidence": [
+        "src/org/switch.ts L54-71: JWT path unchanged"
+      ]
+    },
+    {
+      "answer": "Yes. The marker at list.ts L20-22 uses a ternary: for hxi_ keys it compares org.id === config.orgId (local selection); for JWT tokens it compares org.id === data.organization.id (server state, unchanged).",
+      "evidence": [
+        "src/org/list.ts L20-22: config-based marker for hxi_ keys"
+      ]
+    }
+  ],
+  "statement": "CLI-side code review complete. No issues found requiring fixes. All three changed files (http.ts, switch.ts, list.ts) correctly implement the ticket requirements: X-Helix-Org-ID header emission for hxi_ keys, local-only org switch preserving the API key, and config-based org list marker. JWT token behavior is completely unchanged in all files. Two minor UX observations noted (CUID orgName, no CUID pre-validation) but neither affects correctness.",
+  "followups": []
+}
