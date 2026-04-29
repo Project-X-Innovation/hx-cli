@@ -1,126 +1,135 @@
-# Product: Make CLI API Keys User-Scoped With Explicit Org Selection
+# Product: Make CLI Tokens Org-Scoped and Switchable Locally
 
 ## Problem Statement
 
-A Helix CLI user with access to multiple organizations is forced to create a separate `hxi_` API key per org. The current system hard-binds each API key to the organization where it was created and has no mechanism for the user to select a different org at request time. Worse, running `hlx org switch` destroys the API key by replacing it with a short-lived session JWT, leaving the user locked out of CLI API-key auth entirely.
+The Helix CLI auth model was recently changed toward a user-scoped direction where one `hxi_` token could access any org the user belongs to via an `X-Helix-Org-ID` header. That direction is being reversed. Tokens must be org-scoped again: each `hxi_` token grants access to exactly one organization (determined by `InspectionApiKey.organizationId`).
 
-This means multi-org users cannot operate across their organizations from the CLI without juggling multiple keys and re-authenticating after every org switch.
+Today's partially-implemented user-scoped code creates two problems:
+1. **Server**: The auth middleware (`resolveApiKeyAuth`) has a dual-path design that lets a single token select any org the user belongs to — the opposite of the intended org-scoped boundary.
+2. **CLI**: The config stores a single token with no support for managing multiple org tokens locally. `hlx org list` fetches from the server rather than showing locally configured orgs.
+
+Multi-org CLI users need a way to store separate tokens per org and switch between them locally, while the server enforces that each token only authenticates into its own org.
 
 ## Product Vision
 
-A single `hxi_` API key authenticates the user, not one fixed organization. The user explicitly selects their working org locally in the CLI, and the server validates per-request that the user can access the selected org. The experience mirrors the browser multi-org model: one identity, explicit org switching, server-enforced boundaries.
+Each `hxi_` token is permanently bound to one organization. A CLI user who works across multiple orgs stores one token per org locally. The CLI tracks which org is currently active and uses the corresponding token for requests. Org switching is entirely local — no server-side state mutation, no token destruction. The server remains the authority on token-to-org binding and ignores any attempt to override it.
 
 ## Users
 
 | User | Need |
 |------|------|
-| **Multi-org CLI user** | Use one API key across all their orgs, switch org context without losing the key |
-| **Admin / support user** | Access any organization's data from the CLI for investigation or support |
-| **Single-org CLI user** | No regression; existing auth continues to work once org is set |
-| **Browser / session users** | No change; existing JWT-based org switching is unaffected |
+| **Multi-org CLI user** | Store tokens for multiple orgs and switch between them without re-authenticating |
+| **Helix sandbox agent** | Continue using `HELIX_INSPECT_TOKEN` and `HELIX_INSPECT_BASE_URL` env vars without needing local config |
+| **Single-org CLI user** | Add one token and use the CLI without extra steps |
+| **Browser / session user** | No change; JWT-based auth and org switching remain unaffected |
 
 ## Use Cases
 
-1. **Cross-org development**: A developer runs `hlx org switch <org>` then `hlx inspect repos` and `hlx tickets list`, repeating for each org they contribute to, all with one API key.
-2. **Admin support triage**: An admin runs `hlx org switch <customer-org>` to inspect a customer's repos and tickets without needing an explicit membership in that org.
-3. **Initial setup**: A new CLI user runs `hlx login --manual`, enters their `hxi_` key, then runs `hlx org switch <org>` to set their working context before any org-scoped command.
-4. **Org discovery**: A user runs `hlx org list` to see every organization they can access, with the currently selected org clearly marked.
+1. **Token onboarding**: A user receives an org-scoped `hxi_` token, runs `hlx token add --token <key>`, and the CLI validates it with the server, learns the org, and stores the org/token pair locally.
+2. **Multi-org switching**: A user with tokens for Org A and Org B runs `hlx org switch <org-b>` to change which stored token the CLI uses. Subsequent commands operate against Org B.
+3. **Local org discovery**: A user runs `hlx org list` and sees only the orgs for which they have locally configured tokens, with the current org marked.
+4. **Agent operation**: A Helix sandbox agent runs with `HELIX_INSPECT_TOKEN` and `HELIX_INSPECT_BASE_URL` env vars. The token's org is resolved server-side from the key record. No local config needed.
+5. **Security boundary**: A user tries to send an `X-Helix-Org-ID` header that doesn't match their token's org. The server rejects the request.
 
 ## Core Workflow
 
-1. User authenticates the CLI with an `hxi_` API key (`hlx login --manual`).
-2. User runs `hlx org list` to see available organizations.
-3. User runs `hlx org switch <org-name-or-id>` to set their working org locally.
-4. CLI persists `orgId` and `orgName` in `~/.hlx/config.json`.
-5. On every subsequent request, CLI sends `X-Helix-Org-ID` header with the selected org.
-6. Server validates key, resolves user, checks user can access the selected org, and builds auth context for that org.
-7. User runs org-scoped commands (`hlx inspect repos`, `hlx tickets list`, `hlx org current`) using the selected org.
-8. User can switch orgs at any time by repeating step 3; the API key is never replaced or destroyed.
+1. User receives an org-scoped `hxi_` token for an organization.
+2. User runs `hlx token add --token <hxi_key> [--url <server_url>] [--name <alias>] [--current]`.
+3. CLI validates the token with the server (via `/api/auth/me`), learns the token's actual org.
+4. CLI stores the org/token pair in `~/.hlx/config.json` under an `orgs` array; optionally sets it as current.
+5. User repeats steps 1-4 for additional orgs.
+6. `hlx org list` shows locally configured orgs. `hlx org switch <org>` changes which stored token is active.
+7. Normal CLI commands use the token for the current local org. Server resolves org from the key record.
+8. If env vars (`HELIX_INSPECT_TOKEN`, etc.) are set, they override local config — agents work without any local setup.
 
 ## Essential Features (MVP)
 
 | # | Feature | User Benefit |
 |---|---------|-------------|
-| 1 | CLI sends `X-Helix-Org-ID` header on `hxi_`-authenticated requests | Server knows which org the user intends |
-| 2 | Server reads `X-Helix-Org-ID`, validates org access (membership or admin), builds AuthContext from selected org | Correct org-scoped data is returned; unauthorized access is blocked |
-| 3 | `hlx org switch` updates local config only for `hxi_` keys (no server call, no key replacement) | API key is preserved across org switches |
-| 4 | `hlx org list` shows all accessible orgs, marks the locally selected one | User can discover and confirm their org context |
-| 5 | `hlx org current` reflects the selected org | User can verify active org before running commands |
-| 6 | `/api/auth/me` returns selected org as `organization` and all available orgs | CLI org commands have the data they need |
-| 7 | Admin users can access any org without explicit `UserOrganization` membership | Support/admin workflows are unblocked |
-| 8 | Missing `X-Helix-Org-ID` on API-key auth fails closed | No silent fallback to wrong org |
-| 9 | Non-admin users get 403 for orgs they lack membership in | Clear, secure boundary enforcement |
+| 1 | `hlx token add` command validates a token with the server and stores it under the key's actual org | Safe onboarding — invalid/expired/revoked tokens are rejected before writing config |
+| 2 | Multi-token local config (`orgs` array + `currentOrg` pointer in `~/.hlx/config.json`) | Users can store and manage tokens for multiple orgs in one place |
+| 3 | `hlx org list` reads local config only | Works offline; shows only orgs with configured tokens; no server call |
+| 4 | `hlx org switch <org-id-or-alias>` changes the current local org pointer | Switches which token is used without server-side state changes |
+| 5 | Server API-key auth resolves org from `InspectionApiKey.organizationId` (not from header or user's active org) | Each token is strictly bound to one org; no cross-org access |
+| 6 | If `X-Helix-Org-ID` header is present, it must match the key's org or fail closed | Security boundary — cannot override token's org binding |
+| 7 | Env var token override (`HELIX_INSPECT_TOKEN`, `HELIX_API_KEY`) continues to work | Helix sandbox agents operate without local config |
+| 8 | Token values masked in CLI output and diagnostics | Tokens are not leaked in logs or error messages |
+| 9 | JWT/browser auth behavior unchanged | No regression for browser users |
 
 ## Features Explicitly Out of Scope (MVP)
 
-- UI changes of any kind.
-- New API key scope or permission model.
+- Browser UI changes of any kind.
+- New dedicated CLI-only API routes (`/api/cli/*`).
+- Automatic migration of old single-token `~/.hlx/config.json` format.
+- Server-side org switching for API-key auth.
+- Showing orgs that do not already have a local token configured in `hlx org list`.
+- One token that can access all user orgs (explicitly reversed).
 - Database schema changes (existing models are sufficient).
-- New CLI-exclusive API endpoints (`/api/cli/*`).
 - CLI self-update or packaging changes.
-- Password or browser login flow changes.
-- Caching of selected org on the server.
-- Environment-variable-based org selection (config file only for MVP).
 
 ## Success Criteria
 
 | # | Criterion | Measurement |
 |---|-----------|-------------|
-| 1 | A single `hxi_` key works for two different orgs the user belongs to | Automated server test |
-| 2 | `hlx org list` shows all orgs available to the token user | Manual CLI verification |
-| 3 | `hlx org switch <org>` updates `~/.hlx/config.json` with `orgId`/`orgName` and preserves the API key | Config file inspection + CLI verification |
-| 4 | After switching, `hlx org current`, `hlx inspect repos`, and `hlx tickets list` use the selected org | Manual CLI verification |
-| 5 | Non-admin users cannot select orgs where they lack membership (403) | Automated server test |
-| 6 | Admin users can select any org | Automated server test |
-| 7 | API-key auth fails when `X-Helix-Org-ID` is missing (401/400) | Automated server test |
-| 8 | API-key auth never mutates `User.organizationId` | Automated server test |
-| 9 | Session JWT auth and `POST /api/auth/switch-org` still work unchanged | Existing tests pass |
-| 10 | Inspection repo-scope enforcement still applies within the selected org | Existing tests pass |
+| 1 | A valid org-scoped token can be added locally and becomes usable by normal CLI commands | `hlx token add` + subsequent command succeeds |
+| 2 | Two tokens for two different orgs can be stored simultaneously | Config file inspection shows two entries in `orgs` array |
+| 3 | `hlx org switch` changes which token subsequent commands use | CLI commands after switch use the switched org's token |
+| 4 | `hlx org list` works without a server call | Operates offline; shows locally configured orgs only |
+| 5 | API-key auth succeeds even when the user's active browser org differs from the token's org | Automated server test |
+| 6 | API-key auth cannot access another org by sending a different `X-Helix-Org-ID` | Automated server test — conflicting header returns 403 |
+| 7 | Helix sandbox usage with `HELIX_INSPECT_TOKEN` + `HELIX_INSPECT_BASE_URL` still works for inspect and comments commands | Automated or manual verification |
+| 8 | JWT auth and browser login behavior remain unchanged | Existing server tests pass |
+| 9 | Adding an invalid/revoked/expired token fails and writes no config entry | CLI test or manual verification |
+| 10 | Switching to an unconfigured org fails with a clear message | CLI test or manual verification |
 | 11 | Server and CLI typecheck pass | `npm run typecheck` in both repos |
 
 ## Key Design Principles
 
-- **User-scoped, not org-scoped**: The API key identifies the user. The org is a per-request parameter.
-- **Explicit selection, no fallback**: The CLI must send a selected org; the server must not silently fall back to the key's creation org, the user's active org, or any default.
-- **Fail closed**: Missing, invalid, or unauthorized org selections result in clear error responses, not degraded access.
-- **Local-only org state for CLI**: Switching orgs in the CLI updates only the local config file. No server-side mutation of `User.organizationId`.
-- **Preserve existing behavior**: Session JWT auth, browser flows, and the existing `POST /api/auth/switch-org` endpoint remain unchanged.
+- **Org-scoped tokens**: Each `hxi_` token belongs to exactly one org. `InspectionApiKey.organizationId` is the server's source of truth.
+- **Local-only CLI org management**: Switching orgs changes only which locally stored token is active. No server-side state mutation.
+- **Fail closed**: Missing current org, invalid token, conflicting org header — all result in clear errors, never degraded access or silent fallback.
+- **Env var priority**: When `HELIX_INSPECT_TOKEN`/`HELIX_API_KEY` env vars are set, they override local config unconditionally.
+- **Preserve existing behavior**: JWT session auth, browser flows, `POST /api/auth/switch-org`, inspection routes — all unchanged.
+- **Token security**: Never print full tokens in output or errors. Mask values in diagnostics.
 
 ## Scope & Constraints
 
-- **Two repos changed**: `helix-global-server` (auth middleware, auth controller, org switch service, tests) and `helix-cli` (HTTP client, org commands, config).
-- **No schema changes**: `UserOrganization` junction table, `InspectionApiKey.createdByUserId`, and `User.isAdmin` already exist.
-- **No new endpoints**: All changes use existing routes; the only new concept is the `X-Helix-Org-ID` request header.
-- **Allowed files are explicitly listed** in the ticket; changes outside that set are forbidden.
-- **Forbidden patterns**: No `/api/cli/*` routes, no auth inside controllers, no `requireAuth` removal, no silent org fallback.
+- **Two repos changed**: `helix-global-server` (auth middleware simplification, removal of user-scoped dual-path, test updates) and `helix-cli` (multi-token config, new `token add` command, local-only org commands).
+- **No schema changes**: `InspectionApiKey.organizationId`, `UserOrganization`, `User.isAdmin` already exist and are sufficient.
+- **No new server endpoints**: Token validation uses existing `/api/auth/me`. No `/api/cli/*` routes.
+- **Server simplification**: The prior dual-path `resolveApiKeyAuth` (header-selected org vs. bootstrap path) collapses to a single path that always uses the key's own org. The `apiKeyMissingOrgHeader` flag and `requireOrgForApiKey` middleware become unnecessary.
+- **Backward compatibility**: Old single-token config migration is explicitly out of scope.
 
 ## Future Considerations
 
-- **Env-var org selection**: `HELIX_ORG_ID` env var for CI/automation pipelines (config.ts env-var path currently omits orgId).
-- **Initial login org setup**: Prompt user to select org during `hlx login` so they don't hit a fail-closed error on their first command.
-- **CLI test infrastructure**: The CLI repo has no test runner; future work should add tests for config persistence, header emission, and local-only switch behavior.
+- **Config migration tool**: A future `hlx config migrate` could convert old single-token configs to the new multi-token format.
+- **CLI test infrastructure**: The CLI repo has no test runner. Future work should add tests for config persistence, token resolution, and local-only org commands.
+- **Token rotation UX**: A command to replace a token for an already-configured org without removing and re-adding.
+- **Env-var org override**: A `HELIX_ORG_ID` env var for CI/automation pipelines that need to select a specific local token entry.
 
 ## Open Questions / Risks
 
 | # | Question / Risk | Impact |
 |---|-----------------|--------|
-| 1 | How should admin users discover all orgs? `getAvailableOrganizations` currently queries only `UserOrganization`. Adding an "all orgs" query for admins is a new code path that needs careful scoping (could return a large set). | Server implementation must add admin bypass to org listing; may need pagination if org count is large. |
-| 2 | How should `AuthContext` carry the selected org's full data (name, platform, githubConfigured, etc.)? Currently `lookupUserForAuth` loads org via User FK join. For a different selected org, the org must be loaded separately. | Server implementation detail; record as technical question for tech-research. |
-| 3 | How should inspection routes handle `X-Helix-Org-ID`? They use both `attachAuthContext` and `attachInspectionAuth`, which has a short-circuit for pre-resolved auth. | Org validation must fire consistently across both auth paths; needs implementation-level verification. |
-| 4 | After `hlx login --manual` with an `hxi_` key, the user has no `orgId` set. Every org-scoped request will fail closed until they run `hlx org switch`. | UX friction on first use; acceptable for MVP per ticket invariants (fail closed when org missing). Consider a helpful error message. |
-| 5 | Ambiguous org names: the ticket requires failing with a clear error instead of selecting the first match. | Org name resolution logic in the CLI switch command must handle duplicates. |
+| 1 | **`lookupUserForAuth` org check**: The function at middleware.ts L136 compares `User.organizationId` (user's active browser org) against the passed org. Under org-scoped model, the user's active browser org may differ from the key's org. This check must be bypassed for API-key auth paths. | Server implementation must inline user loading for API-key auth without this check. Diagnosis confirmed the pattern already exists in the selected-org path (L249-262). |
+| 2 | **`/api/auth/me` accessibility for token validation**: `hlx token add` needs to call `/api/auth/me` with a token that has no local org context yet. Under org-scoped model, the key resolves its own org server-side, so this should work — but the route must remain accessible before any org-gating middleware. | Diagnosis confirmed `/api/auth/me` is registered at routes/api.ts L168, before the `requireOrgForApiKey` gate at L240. Works as-is after `apiKeyMissingOrgHeader` logic is removed. |
+| 3 | **Env-var inspection flows and `X-Helix-Org-ID` header**: If Helix agent flows using env-var tokens also send an `X-Helix-Org-ID` header, the new match-or-fail-closed rule could break them. | Need to verify whether inspection/comment flows send this header. Scout evidence shows CLI sends it only when `config.orgId` is set — env-var paths don't load orgId, so header is not sent. Low risk. |
+| 4 | **`hlx login --manual` interaction with multi-token model**: Currently saves a single `apiKey`. Under multi-token model, manual login with an `hxi_` key may need to redirect to the `token add` flow. | UX decision for implementation. Could remain a separate JWT-oriented flow or be adapted. |
+| 5 | **Ambiguous org aliases**: If two locally configured orgs have the same alias, `hlx org switch <alias>` must fail clearly rather than picking one silently. | CLI implementation must enforce unique aliases or fail on ambiguity. |
+| 6 | **Production keys span multiple orgs per user**: Scout found the same user has active keys for 3 different orgs in production — confirming multi-key-per-user is already the real-world pattern. The new model formalizes CLI support for this. | Validates the product direction. No risk, but important context. |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md (helix-cli) | Primary specification with decisions, invariants, acceptance criteria, and allowed files | Comprehensive behavioral contract: fail-closed semantics, admin bypass, local-only org switch for CLI, explicit header protocol |
-| scout/scout-summary.md (helix-global-server) | Server auth flow analysis | `resolveApiKeyAuth` uses `keyData.organizationId`; `lookupUserForAuth` checks FK match not membership; no `X-Helix-Org-ID` handling; `UserOrganization` junction exists |
-| scout/scout-summary.md (helix-cli) | CLI behavior analysis | `hxFetch` sends no org header; `cmdOrgSwitch` replaces `hxi_` key with JWT; `HxConfig` already has `orgId`/`orgName` fields |
-| diagnosis/diagnosis-statement.md (helix-global-server) | Root cause analysis for server | Five defects identified: creation-org-as-auth-org, wrong org validation model, no header handling, destructive switch, no admin bypass |
-| diagnosis/diagnosis-statement.md (helix-cli) | Root cause analysis for CLI | Three defects: no org header emission, destructive key replacement on switch, org list marks by server state not local config |
-| diagnosis/apl.json (helix-global-server) | Diagnosis evidence and unknowns | Confirmed no schema changes needed; all data models exist; admin bypass is a new code path |
-| diagnosis/apl.json (helix-cli) | Diagnosis evidence and unknowns | Confirmed env-var config gap; no CLI tests exist; three files need changes |
-| scout/reference-map.json (helix-global-server) | Detailed file-level code mapping | Line-level evidence for middleware, session types, routes, tests, schema |
-| scout/reference-map.json (helix-cli) | Detailed file-level code mapping | Line-level evidence for config, HTTP client, org commands |
-| repo-guidance.json | Repo intent metadata | Both repos confirmed as change targets by diagnosis step |
+| ticket.md (both repos) | Primary spec — but continuation context (org-scoped) takes priority over original description (user-scoped) | Org-scoped tokens, multi-token CLI config, local-only org list/switch, `hlx token add`, env var override preserved |
+| scout/scout-summary.md (helix-global-server) | Server auth flow analysis | Dual-path `resolveApiKeyAuth` exists from prior user-scoped run; `lookupUserForAuth` has problematic `User.organizationId` check; production has 5 active keys across 3 orgs |
+| scout/scout-summary.md (helix-cli) | CLI state analysis | Single-token config; `hlx org list` calls server; `hxFetch` already sends `X-Helix-Org-ID` when `config.orgId` set; no CLI tests exist |
+| scout/reference-map.json (helix-global-server) | Detailed file-level code evidence | Line-level mapping of middleware dual paths, flag enforcement points, route ordering, test suite structure |
+| scout/reference-map.json (helix-cli) | Detailed file-level code evidence | Line-level mapping of config shape, HTTP client, org commands, login flows |
+| diagnosis/diagnosis-statement.md (helix-global-server) | Server root cause analysis | Three root causes: dual-path org resolution, `lookupUserForAuth` org check, dead `apiKeyMissingOrgHeader` flag |
+| diagnosis/diagnosis-statement.md (helix-cli) | CLI root cause analysis | Three root causes: single-token config, missing `token add` command, server-dependent org commands |
+| diagnosis/apl.json (helix-global-server) | Diagnosis evidence and answered questions | Confirmed `/api/auth/me` accessible for validation; inspection routes unaffected; no schema changes needed |
+| diagnosis/apl.json (helix-cli) | Diagnosis evidence and answered questions | Confirmed env-var override path; multi-token config shape proposal; `hxFetch` token resolution approach |
+| repo-guidance.json (helix-global-server) | Repo intent metadata | Both repos confirmed as change targets by diagnosis |
+| /tmp/helix-inspect/manifest.json | Runtime inspection availability | DATABASE and LOGS available for helix-global-server; production state verified via scout |
