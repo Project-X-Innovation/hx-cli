@@ -1,39 +1,38 @@
 {
   "questions": [
-    "Does the CLI send X-Helix-Org-ID header only for hxi_ key requests when orgId is set?",
-    "Does hlx org switch with an hxi_ key preserve the API key and update only local config?",
-    "Does hlx org list mark the current org from local config for hxi_ keys?",
-    "Is JWT token behavior completely unchanged in all three modified files?"
+    "Does loadConfig resolve multi-token config entries correctly?",
+    "Does hlx token add validate with server and store the entry?",
+    "Is hlx org list local-only with no server calls?",
+    "Does hlx org switch work locally for hxi_ tokens?",
+    "Do env-var overrides still work for Helix agent runs?",
+    "Are token values masked in output?"
   ],
   "answers": [
     {
-      "answer": "Yes. The header is only added when both config.orgId is truthy AND config.apiKey.startsWith('hxi_'). JWT requests never include it.",
-      "evidence": [
-        "src/lib/http.ts L59-61: conditional check for orgId AND hxi_ prefix before setting X-Helix-Org-ID header"
-      ]
+      "answer": "Yes. loadConfig reads orgs array, finds entry matching currentOrg pointer, returns compatible HxConfig. Single-org convenience: if only one entry and no currentOrg, uses that entry.",
+      "evidence": ["src/lib/config.ts L43-82: loadConfig multi-token resolution logic"]
     },
     {
-      "answer": "Yes. When config.apiKey starts with 'hxi_', the switch command calls saveConfig with only orgId and orgName (read-merge-write preserves apiKey), and never calls /api/auth/switch-org.",
-      "evidence": [
-        "src/org/switch.ts L50-53: hxi_ branch calls saveConfig({ orgId, orgName }) without apiKey field",
-        "src/org/switch.ts L54-67: JWT else branch retains existing server call behavior"
-      ]
+      "answer": "Yes. cmdTokenAdd validates token format (hxi_ prefix), calls /api/auth/me with temp config, extracts org from response, stores via addOrgEntry. Invalid tokens fail without writing config.",
+      "evidence": ["src/token/add.ts: full implementation", "Runtime test: token add succeeded and stored entry in config.json; invalid token test failed correctly"]
     },
     {
-      "answer": "Yes. For hxi_ keys, the current marker compares org.id === config.orgId (local state). For JWT tokens, it compares org.id === data.organization.id (server state).",
-      "evidence": [
-        "src/org/list.ts L20-22: ternary branch on config.apiKey.startsWith('hxi_')"
-      ]
+      "answer": "Yes. cmdOrgList reads from getOrgEntries() and loadRawConfig() only. No hxFetch call. No config parameter needed.",
+      "evidence": ["src/org/list.ts: no imports from http.ts, no hxFetch calls"]
     },
     {
-      "answer": "Yes. All three files use config.apiKey.startsWith('hxi_') to branch. The else/non-hxi branches preserve the exact existing JWT behavior.",
-      "evidence": [
-        "src/lib/http.ts: header only set for hxi_ keys",
-        "src/org/switch.ts L54-67: else branch is unchanged server call + apiKey replacement",
-        "src/org/list.ts L22: else branch uses data.organization.id (unchanged)"
-      ]
+      "answer": "Yes. For hxi_ tokens, cmdOrgSwitch resolves by orgId, alias, then case-insensitive orgName from local entries. Calls setCurrentOrg to update config. No server call.",
+      "evidence": ["src/org/switch.ts: hxi_ branch at L18-57", "Runtime test: switch to unconfigured org failed with clear message listing configured orgs"]
+    },
+    {
+      "answer": "Yes. loadConfig env-var path (L44-49) returns immediately with apiKey+url from env vars, completely bypassing multi-token config. Verified with HELIX_INSPECT_TOKEN + HELIX_INSPECT_BASE_URL running hlx inspect repos.",
+      "evidence": ["src/lib/config.ts L44-49", "Runtime test: env-var inspect repos returned repository list successfully"]
+    },
+    {
+      "answer": "Yes. maskToken returns hxi_<first8>... for tokens longer than prefix+8 chars. Used in token add output and error messages.",
+      "evidence": ["src/lib/config.ts maskToken function", "Runtime test: output showed 'hxi_dd20ed70...' not full token"]
     }
   ],
-  "statement": "CLI updated to send X-Helix-Org-ID header on hxi_ API key requests, perform local-only org switch for API keys (preserving the key), and mark the current org from local config in org list. JWT token behavior is completely unchanged in all three files. Typecheck and build pass.",
+  "statement": "CLI redesigned for multi-token org-scoped config. New hlx token add command validates with server and stores org/token pairs. hlx org list is local-only. hlx org switch resolves from local entries for hxi_ tokens. Env-var override path unchanged. Token values masked in output. loadConfig returns compatible HxConfig from multi-token config. Typecheck and build pass.",
   "followups": []
 }

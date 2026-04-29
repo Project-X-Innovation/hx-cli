@@ -6,7 +6,7 @@ import { cmdOrgSwitch } from "./switch.js";
 function orgUsage(): never {
   console.error(`Usage:
   hlx org current   Show current org and user
-  hlx org list      List available organizations
+  hlx org list      List configured organizations
   hlx org switch <org-name-or-id>  Switch to a different org`);
   process.exit(1);
 }
@@ -21,7 +21,7 @@ export async function runOrg(config: HxConfig, args: string[]): Promise<void> {
       break;
 
     case "list":
-      await cmdOrgList(config);
+      await cmdOrgList();
       break;
 
     case "switch":

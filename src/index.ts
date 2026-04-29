@@ -5,6 +5,7 @@ import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
 import { runOrg } from "./org/index.js";
+import { runToken } from "./token/index.js";
 import { runTickets } from "./tickets/index.js";
 import { getPackageVersion } from "./update/version.js";
 import { runUpdate, checkAutoUpdate } from "./update/index.js";
@@ -18,6 +19,7 @@ function usage(): never {
 Usage:
   hlx login <server-url>          Authenticate with a Helix server
   hlx login --manual              Paste API key manually
+  hlx token add --token <key> [--url <server>] [--name <alias>] [--current]
   hlx org current|list|switch     Manage org context
   hlx tickets list|latest|get     Discover and inspect tickets
   hlx tickets create|rerun|continue  Ticket actions
@@ -49,6 +51,10 @@ try {
   switch (command) {
     case "login":
       await runLogin(args.slice(1));
+      break;
+
+    case "token":
+      await runToken(args.slice(1));
       break;
 
     case "inspect": {

@@ -1,26 +1,20 @@
-import type { HxConfig } from "../lib/config.js";
-import { hxFetch } from "../lib/http.js";
+import { getOrgEntries, loadRawConfig } from "../lib/config.js";
 
-type MeResponse = {
-  user: { organizationId: string };
-  organization: { id: string; name: string };
-  availableOrganizations: Array<{ id: string; name: string }>;
-};
+export async function cmdOrgList(): Promise<void> {
+  const entries = getOrgEntries();
+  const rawConfig = loadRawConfig();
+  const currentOrg = rawConfig?.currentOrg;
 
-export async function cmdOrgList(config: HxConfig): Promise<void> {
-  const data = (await hxFetch(config, "/auth/me", { basePath: "/api" })) as MeResponse;
-
-  if (data.availableOrganizations.length === 0) {
-    console.log("No organizations available.");
+  if (entries.length === 0) {
+    console.log("No organizations configured. Run `hlx token add` to add one.");
     return;
   }
 
   console.log("Organizations:\n");
-  for (const org of data.availableOrganizations) {
-    const isCurrent = config.apiKey.startsWith("hxi_")
-      ? org.id === config.orgId
-      : org.id === data.organization.id;
-    const marker = isCurrent ? " (current)" : "";
-    console.log(`  ${org.id}  ${org.name}${marker}`);
+  for (const entry of entries) {
+    const isCurrent = entry.orgId === currentOrg;
+    const aliasStr = entry.alias ? ` (${entry.alias})` : "";
+    const currentStr = isCurrent ? " (current)" : "";
+    console.log(`  ${entry.orgId}  ${entry.orgName}${aliasStr}${currentStr}`);
   }
 }
