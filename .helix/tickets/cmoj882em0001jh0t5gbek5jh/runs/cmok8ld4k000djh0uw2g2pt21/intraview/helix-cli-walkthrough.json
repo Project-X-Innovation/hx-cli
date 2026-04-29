@@ -1,0 +1,61 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "hxi_ API Key Multi-Org Support: CLI Changes Walkthrough",
+  "description": "This tour walks through three focused changes that enable a single hxi_ API key to be used across multiple organizations in the Helix CLI. Previously, hxFetch sent no org-selection header (making the key usable only for its creation org), hlx org switch destructively replaced the API key with a session JWT, and hlx org list marked the current org using server state rather than local config. The fix branches on key type (hxi_ vs JWT) in three files: http.ts adds the X-Helix-Org-ID header, switch.ts performs a local-only config update for hxi_ keys, and list.ts reads the current org from local config for hxi_ keys. JWT token behavior is completely unchanged throughout.",
+  "steps": [
+    {
+      "file": "src/lib/http.ts",
+      "line": 52,
+      "description": "This is the existing auth header block in hxFetch. Before this change, only X-API-Key (for hxi_ keys) or Authorization: Bearer (for JWTs) were set here. The HxConfig type already carried orgId and orgName fields populated by loadConfig, but those values were never forwarded to the server — meaning the server always fell back to the key's creation org, making multi-org usage impossible with a single hxi_ key.",
+      "title": "Overview: hxFetch auth header block"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 59,
+      "description": "The new conditional at L59-61 emits X-Helix-Org-ID only when BOTH config.orgId is truthy AND config.apiKey starts with 'hxi_'. This dual guard is deliberate: (1) if no org has been selected locally, the header is omitted and the server falls back to the key's creation org (safe default); (2) JWT session tokens embed their org inside the token itself, so adding the header for JWTs would create conflicting org signals. Data flow: loadConfig reads orgId from ~/.hlx/config.json → hxFetch reads config.orgId → header is set → server routes the request to the correct org.",
+      "title": "Step 1: Emit X-Helix-Org-ID header for hxi_ requests"
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 43,
+      "description": "Before this change, cmdOrgSwitch unconditionally called POST /api/auth/switch-org for all key types. The server responded with a JWT accessToken, which was then saved as config.apiKey — permanently destroying the original hxi_ key. This meant a user could never switch back to using their API key after running hlx org switch even once.",
+      "title": "Step 2a: Original switch path — context before the branch"
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 50,
+      "description": "The new branch at L50-53 intercepts the switch for hxi_ keys before any server call is made. It calls saveConfig({ orgId, orgName }) which performs a read-merge-write (see config.ts L62-73), preserving the existing apiKey and all other config fields. No call to POST /api/auth/switch-org is made, so the server never issues a JWT and the hxi_ key is never replaced. After this write, hxFetch will include X-Helix-Org-ID on all subsequent requests, routing them to the newly selected org.",
+      "title": "Step 2b: hxi_ branch — local-only org switch"
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 54,
+      "description": "The else branch at L54-71 retains the exact existing behavior for JWT session tokens: calls POST /api/auth/switch-org, receives a new accessToken from the server, and saves it as config.apiKey along with orgId/orgName from the server response. No lines in this path were modified. The regression risk for existing JWT-authenticated users is zero.",
+      "title": "Step 2c: JWT branch — original behavior preserved"
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 35,
+      "description": "The org name lookup was changed from .find() (returns the first match silently) to .filter() so that if multiple orgs share the same name (case-insensitive), all matches are printed with their IDs and the command exits with an error. This prevents silent wrong-org selection when org names are non-unique, which is especially important for hxi_ key users who control org selection entirely through local config.",
+      "title": "Step 2d: Ambiguous name resolution with filter()"
+    },
+    {
+      "file": "src/org/list.ts",
+      "line": 20,
+      "description": "The current-org marker in cmdOrgList was previously always derived from data.organization.id (the server's response). For hxi_ keys with local org selection, the server response org reflects the key's creation org — not the locally selected org — so the marker would point to the wrong entry. The ternary at L20-22 fixes this: for hxi_ keys it compares org.id === config.orgId (local state written by switch.ts); for JWT tokens it retains the original comparison org.id === data.organization.id (server state). Data flow: switch.ts writes orgId to config → list.ts reads config.orgId → correct org is marked with '*'.",
+      "title": "Step 3: Config-based current org marker for hxi_ keys"
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 62,
+      "description": "saveConfig (L62-73) is called by the new hxi_ branch in switch.ts. It reads the existing config file, merges in the supplied partial (here: { orgId, orgName }), and writes the result back. This merge semantics guarantees that config.apiKey and all other existing fields are preserved — the hxi_ key is never touched by an org switch operation. No changes were made to this file; it is reviewed here to confirm the preservation guarantee.",
+      "title": "Supporting context: saveConfig read-merge-write"
+    },
+    {
+      "file": "src/org/current.ts",
+      "line": 18,
+      "description": "cmdOrgCurrent calls GET /api/auth/me and displays the server's response. Because hxFetch now forwards X-Helix-Org-ID on hxi_ requests, the server response already reflects the locally selected org — no code change is needed here. This confirms the end-to-end data flow: switch.ts writes orgId to config → http.ts sends X-Helix-Org-ID → server scopes the response to the selected org → current.ts displays it correctly. All three changed files (http.ts, switch.ts, list.ts) correctly implement the ticket requirements; JWT paths are untouched throughout.",
+      "title": "Summary: hlx org current requires no changes"
+    }
+  ]
+}
