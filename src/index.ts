@@ -69,11 +69,9 @@ try {
       break;
     }
 
-    case "org": {
-      const config = requireConfig();
-      await runOrg(config, args.slice(1));
+    case "org":
+      await runOrg(args.slice(1));
       break;
-    }
 
     case "tickets": {
       const config = requireConfig();
