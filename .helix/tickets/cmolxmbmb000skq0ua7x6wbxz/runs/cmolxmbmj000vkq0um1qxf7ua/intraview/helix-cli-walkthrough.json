@@ -1,0 +1,60 @@
+{
+  "title": "Add --run to artifacts and harden 404 errors",
+  "description": "Walkthrough of three file changes: --run flag support in artifacts command, router forwarding in index, and 404 error handling in artifact command.",
+  "steps": [
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 3,
+      "title": "Import getFlag utility",
+      "description": "Added import for getFlag from ../lib/flags.js to enable CLI flag parsing in the artifacts command."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 18,
+      "title": "Add args parameter to function signature",
+      "description": "Changed function signature from (config, ticketId) to (config, ticketId, args) to accept CLI arguments, mirroring the pattern in artifact.ts and bundle.ts."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 19,
+      "title": "Read --run flag",
+      "description": "Extract the optional --run flag value from CLI args using getFlag. Returns string or undefined."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 22,
+      "title": "Conditional queryParams forwarding",
+      "description": "When runId is defined, include it as a queryParams entry on the hxFetch call using object spread. When undefined, no queryParams are sent, preserving existing default behavior."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 36,
+      "title": "Usage text updated",
+      "description": "Updated the artifacts subcommand usage text to show [--run <runId>] so users can discover the new option."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 79,
+      "title": "Forward rest args to cmdTicketsArtifacts",
+      "description": "Changed router call from cmdTicketsArtifacts(config, ticketId) to cmdTicketsArtifacts(config, ticketId, rest), matching the pattern already used for artifact (line 85) and bundle (line 91)."
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 42,
+      "title": "Declare data variable before try block",
+      "description": "Moved the StepArtifactResponse variable declaration outside the try block so it remains accessible after the try-catch."
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 43,
+      "title": "Try-catch wraps hxFetch call",
+      "description": "Wrapped the hxFetch call in a try-catch to intercept HTTP errors (including 404 for missing artifacts) before they propagate to the global error handler."
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 49,
+      "title": "Clean error message with context",
+      "description": "On catch, prints a user-friendly error message including the step and repo names for context, plus the original error message for debugging. Then exits with code 1."
+    }
+  ]
+}
