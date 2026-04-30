@@ -1,0 +1,18 @@
+{
+  "questions": [
+    "What files have merge conflicts that need resolution?",
+    "What was the intent of the ticket branch changes vs the staging branch changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Only one file has merge conflicts: src/tickets/index.ts, in the ticketsUsage() function.",
+      "evidence": [".helix/merge-conflicts.json lists src/tickets/index.ts as the sole conflicted file"]
+    },
+    {
+      "answer": "The ticket branch (HLX-342) changed <ticket-id> to <ticket-ref>, added [--json] to get, added a ticket-ref explanation footer, and used a dynamic exitCode parameter. The staging branch added [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] to the create command usage string.",
+      "evidence": ["Conflict markers in src/tickets/index.ts lines 19-39 show both sides' changes"]
+    }
+  ],
+  "statement": "Resolved merge conflict in src/tickets/index.ts by merging both the ticket branch's ticket-ref improvements and the staging branch's --mode flag addition. TypeScript compiles cleanly with no errors.",
+  "followups": []
+}
