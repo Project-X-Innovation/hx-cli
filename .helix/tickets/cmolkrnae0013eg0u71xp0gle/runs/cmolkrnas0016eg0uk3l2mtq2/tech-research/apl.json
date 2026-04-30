@@ -1,0 +1,70 @@
+{
+  "questions": [
+    "Q1: Should mode validation be inline in create.ts or extracted to a shared utility in flags.ts?",
+    "Q2: What is the correct case-normalization strategy for mode input?",
+    "Q3: How should the POST body conditionally include the mode field?",
+    "Q4: How should the shortId undefined guard be implemented?",
+    "Q5: Should the response type use a TypeScript enum or string union for mode?",
+    "Q6: Does the top-level usage text in src/index.ts need updating?",
+    "Q7: Should a test framework be bootstrapped for this feature?"
+  ],
+  "answers": [
+    {
+      "answer": "Inline in create.ts. The codebase uses inline validation throughout — repositoryIds.length check in create.ts L16-19, status filter comparison in list.ts L77. No other command needs enum validation. A VALID_MODES const array at module scope in create.ts is sufficient and consistent.",
+      "evidence": [
+        "src/tickets/create.ts L16-19: inline repositoryIds.length validation with console.error + process.exit(1)",
+        "src/tickets/list.ts L77: inline .toLowerCase() comparison for status filter",
+        "src/lib/flags.ts: four simple functions, no enum validation utility exists"
+      ]
+    },
+    {
+      "answer": "Use .toUpperCase() on user input, validate against an uppercase VALID_MODES array. Since mode values are sent to the API as uppercase strings (AUTO, BUILD, FIX, RESEARCH, EXECUTE), normalizing to uppercase avoids an unnecessary lowercase-then-uppercase round-trip.",
+      "evidence": [
+        "ticket.md L63: 'Treat mode values case-insensitively if that matches existing CLI style; normalize to uppercase before sending'",
+        "src/tickets/list.ts L77: existing CLI uses .toLowerCase() for status comparison, but modes are uppercase by API contract"
+      ]
+    },
+    {
+      "answer": "Use either spread syntax ...(mode && { mode }) or an explicit if-then assignment. Both patterns work. The spread keeps body construction as a single expression; the if-then is more explicit and matches the imperative style seen in the codebase. Do not send mode: undefined — only include the field when the flag is provided.",
+      "evidence": [
+        "ticket.md L66: 'When --mode is omitted, do not send a mode field'",
+        "src/tickets/create.ts L21-24: current body construction is a single inline object",
+        "src/tickets/continue.ts L24-27: inline body construction with single field"
+      ]
+    },
+    {
+      "answer": "Change shortId from required to optional in CreateTicketResponse (shortId?: string) and use nullish coalescing (?? '(pending)') in the console.log output. This is the minimal defensive fix.",
+      "evidence": [
+        "src/tickets/create.ts L6: shortId typed as required string — masks runtime absence",
+        "src/tickets/create.ts L25: cast via 'as CreateTicketResponse' bypasses runtime checks",
+        "src/tickets/create.ts L29: unconditional print of data.ticket.shortId",
+        "ticket.md L68: 'do not print Short ID: undefined; print a clear fallback'"
+      ]
+    },
+    {
+      "answer": "Use a plain string type (mode?: string) on the response, not a TypeScript enum or string union. The response comes from the backend and is cast via 'as'. A string type is sufficient for display. For the VALID_MODES const array used in validation, 'as const' provides type narrowing for the input side.",
+      "evidence": [
+        "src/tickets/create.ts L5-8: existing response type uses plain string for status",
+        "src/tickets/get.ts L4-21: TicketDetail uses plain string for status, mergeQueueStatus",
+        "No runtime validation library in the project (no zod, io-ts, etc.)"
+      ]
+    },
+    {
+      "answer": "No. The top-level usage text in src/index.ts is intentionally terse — it lists subcommand groups (create|rerun|continue) without showing flags for any individual subcommand. Adding --mode only for create would be inconsistent. Flag details belong in ticketsUsage() in src/tickets/index.ts.",
+      "evidence": [
+        "src/index.ts L25-26: 'hlx tickets create|rerun|continue  Ticket actions' — no flags shown for any subcommand",
+        "src/tickets/index.ts L33: create usage line shows --title, --description, --repos — this is where --mode belongs"
+      ]
+    },
+    {
+      "answer": "No. The product definition explicitly places 'Bootstrapping a test framework' out of scope. The repo has no test runner, no test dependencies (package.json L22-25), and no test scripts. The quality gate is npm run typecheck. This is the 'equivalent coverage' referenced by the ticket for a pure-TypeScript CLI with strict mode enabled.",
+      "evidence": [
+        "product/product.md: 'Bootstrapping a test framework (no test infrastructure exists; coverage relies on typecheck)' listed under Features Explicitly Out of Scope",
+        "package.json L9-12: scripts only include build, typecheck, prepare",
+        "package.json L22-25: devDependencies only include @types/node and typescript"
+      ]
+    }
+  ],
+  "statement": "The technical direction for adding --mode to hlx tickets create is to make the smallest inline change in src/tickets/create.ts: add a VALID_MODES const array, parse --mode with the existing getFlag utility, validate case-insensitively by normalizing to uppercase, conditionally include mode in the POST body via spread or conditional assignment, update CreateTicketResponse to include optional mode and optional shortId, guard shortId output with nullish coalescing, and display mode when present. The only other file needing changes is src/tickets/index.ts to update the usage text. No new files, no new utilities, no new dependencies, no test framework. Quality gate is npm run typecheck.",
+  "followups": []
+}
