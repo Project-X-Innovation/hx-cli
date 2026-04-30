@@ -1,0 +1,54 @@
+{
+  "title": "HLX-343: Add --mode flag to hlx tickets create",
+  "description": "Walkthrough of changes adding explicit mode selection to the ticket create command, including validation, body construction, output guard, and usage text.",
+  "steps": [
+    {
+      "file": "src/tickets/create.ts",
+      "line": 6,
+      "title": "Updated CreateTicketResponse type",
+      "description": "Made shortId optional (shortId?: string) and added mode?: string to handle backend responses that may omit shortId or include mode."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 10,
+      "title": "VALID_MODES constant",
+      "description": "Defines the 5 allowed mode values as a const tuple: AUTO, BUILD, FIX, RESEARCH, EXECUTE. Used for validation and error messaging."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 23,
+      "title": "Parse --mode flag",
+      "description": "Uses the existing getFlag utility (already imported but previously unused) to parse the optional --mode argument from CLI args."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 25,
+      "title": "Case-insensitive mode validation",
+      "description": "When --mode is provided: normalizes to uppercase via .toUpperCase(), validates against VALID_MODES with .includes(). Invalid values trigger console.error with allowed values list followed by process.exit(1), matching the existing error pattern from the repositoryIds check above."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 36,
+      "title": "Conditional mode in POST body",
+      "description": "Uses spread syntax ...(mode && { mode }) to include the mode field only when provided. When mode is undefined, the spread produces nothing — the body is identical to the original { title, description, repositoryIds }."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 42,
+      "title": "shortId output guard",
+      "description": "Uses nullish coalescing (data.ticket.shortId ?? '(pending)') to prevent printing 'Short ID: undefined' when the backend omits the shortId field."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 44,
+      "title": "Conditional mode display",
+      "description": "Displays the mode in success output only when present in the API response, following the same conditional pattern used for data.run display."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 33,
+      "title": "Updated usage text",
+      "description": "Added [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] to the tickets create usage line, showing it as optional with all 5 allowed values."
+    }
+  ]
+}

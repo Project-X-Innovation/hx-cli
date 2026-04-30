@@ -30,7 +30,7 @@ function ticketsUsage(): never {
   hlx tickets list [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>]
   hlx tickets latest [--status-not-in <s1,s2>] [--archived] [--sprint <id>]
   hlx tickets get <ticket-id>
-  hlx tickets create --title <title> --description <desc> --repos <repo1,repo2>
+  hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
   hlx tickets rerun <ticket-id>
   hlx tickets continue <ticket-id> "continuation context"
   hlx tickets artifacts <ticket-id>
