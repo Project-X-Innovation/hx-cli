@@ -1,0 +1,72 @@
+{
+  "title": "FIX-347: Post-Install Validation for hlx update",
+  "description": "Walkthrough of changes that add post-install validation to hlx update, ensuring broken installs are detected and reported instead of silently succeeding.",
+  "steps": [
+    {
+      "file": "src/update/perform.ts",
+      "line": 1,
+      "title": "execSync replaced with spawnSync",
+      "description": "The import is changed from execSync to spawnSync. This is the foundation for capturing npm stderr on the success path."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 13,
+      "title": "Return type extended with stderr field",
+      "description": "The function's return type now includes `stderr?: string`. This is additive and backward-compatible — existing callers that only destructure `success` and `error` are unaffected."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 17,
+      "title": "spawnSync call with shell:true and encoding:utf8",
+      "description": "The npm install command is passed as a single string with shell:true (required for Windows npm.cmd resolution) and encoding:utf8 (returns strings not Buffers). The full command string avoids DEP0190 deprecation warnings."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 44,
+      "title": "stderr captured and returned on success",
+      "description": "In quiet mode, stderr is captured and returned even on success. This allows callers to surface npm tar warnings when post-install validation fails."
+    },
+    {
+      "file": "src/update/validate.ts",
+      "line": 14,
+      "title": "validateInstall function — the core validation logic",
+      "description": "New function that validates the globally-installed package. Returns { valid, binTargetPath, error? } — never throws. Three sequential checks: npm root resolution, file existence, and version execution."
+    },
+    {
+      "file": "src/update/validate.ts",
+      "line": 20,
+      "title": "Step 1: Resolve global node_modules via npm root -g",
+      "description": "Uses npm root -g (not npm prefix -g) to get the exact global node_modules path. This is cross-platform and works regardless of npm configuration."
+    },
+    {
+      "file": "src/update/validate.ts",
+      "line": 50,
+      "title": "Step 2: Check bin target file existence",
+      "description": "Checks that dist/index.js exists at the expected path under the global node_modules. This catches the exact failure scenario from the ticket — a dist/ tree with .d.ts files but no compiled JavaScript."
+    },
+    {
+      "file": "src/update/validate.ts",
+      "line": 59,
+      "title": "Step 3: Run version check to confirm CLI can start",
+      "description": "Runs `node <binTarget> --version` with HLX_SKIP_UPDATE_CHECK=1 to prevent recursion. This catches cases where the file exists but is corrupt or has missing dependencies."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 12,
+      "title": "Import validateInstall",
+      "description": "The new validate module is imported into the update command handler."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 80,
+      "title": "Manual update: validation gate before metadata save",
+      "description": "After npm succeeds but BEFORE saveConfig(), validateInstall() is called. If validation fails: error message, npm stderr, and recovery instructions are printed, then process.exit(1). This ensures broken installs are never reported as successful and metadata is never poisoned."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 155,
+      "title": "Auto-update: validation gate with warn-and-continue",
+      "description": "In the auto-update path, validation failure warns to stderr but does NOT call process.exit(). It returns early before saveConfig(), preserving the user's ability to retry with 'hlx update'. This ensures auto-update never blocks the user's current command."
+    }
+  ]
+}
