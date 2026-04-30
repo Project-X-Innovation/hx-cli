@@ -1,0 +1,65 @@
+{
+  "problem": "The `hlx tickets create` command does not expose a `--mode` option. It always sends only `{ title, description, repositoryIds }` to `POST /api/tickets`, even though the backend accepts an optional `mode` field. This causes all CLI-created tickets to default to AUTO mode. Additionally, the create response output unconditionally prints `data.ticket.shortId` which would display `undefined` if the field is absent.",
+  "files": [
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Primary target. Contains `cmdTicketsCreate` which constructs the POST body (L21-24) and prints the response (L27-33). The response type `CreateTicketResponse` (L6-8) does not include a `mode` field. The body currently sends `{ title, description, repositoryIds }` with no mode. Output on L29 prints `data.ticket.shortId` without checking for undefined."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Contains `ticketsUsage()` (L28-39) with usage text for `tickets create` (L33) that needs to document the `--mode` flag. Also routes to `cmdTicketsCreate` on L62."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Provides `getFlag()`, `hasFlag()`, `requireFlag()`, and `getPositionalArgs()` utilities used for argument parsing. No enum-validation utility exists here currently. `getFlag` (L5-8) returns `string | undefined` for optional flags."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "Contains `hxFetch()` which sends API requests. The `body` option type is `Record<string, unknown>` (L40). Backend HTTP error messages are surfaced via `buildErrorMessage()` (L28-35), relevant for surfacing backend rejection of EXECUTE mode."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Top-level CLI entry. Contains main usage text (L17-38) that references `tickets create` on L26. May need update to mention `--mode` in top-level usage."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Pattern reference for optional flag handling and case-insensitive comparison. Uses `getFlag()` for optional args (L47, L52, L60) and does `.toLowerCase()` comparison for status filter (L76)."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Pattern reference for ticket detail display. The `TicketDetail` type (L4-21) does not include `mode`. `printTicketDetail` shows how ticket fields are displayed."
+    },
+    {
+      "path": "src/tickets/continue.ts",
+      "why": "Pattern reference for POST body construction with optional fields. Sends `{ continuationContext }` via `hxFetch` (L24-27)."
+    },
+    {
+      "path": "package.json",
+      "why": "Defines available scripts: `build` (tsc), `typecheck` (tsc --noEmit). No test script, no lint script. No test framework in dependencies."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. Strict mode enabled. Target ES2022, module Node16, rootDir src, outDir dist."
+    }
+  ],
+  "facts": [
+    "The `cmdTicketsCreate` function in `src/tickets/create.ts` sends `{ title, description, repositoryIds }` to `POST /api/tickets` via `hxFetch` — no `mode` field is included (L21-24).",
+    "The `CreateTicketResponse` type (L6-8) expects `ticket: { id: string; shortId: string; status: string }` — no `mode` field and `shortId` is typed as non-optional `string`.",
+    "The success output on L29 unconditionally prints `data.ticket.shortId` — will show `undefined` if the field is absent from the response.",
+    "Flag parsing uses `getFlag(args, '--flag')` for optional flags returning `string | undefined` and `requireFlag()` for mandatory flags that exit on missing value.",
+    "No existing enum-validation utility in `flags.ts`. Validation is done inline in command handlers (e.g., `create.ts` L16-19 checks `repositoryIds.length`).",
+    "The existing CLI does case-insensitive comparison for the `--status` filter in `list.ts` L76: `.toLowerCase() === statusFilter.toLowerCase()`.",
+    "The `ticketsUsage()` function in `src/tickets/index.ts` L33 shows current create usage: `hlx tickets create --title <title> --description <desc> --repos <repo1,repo2>`.",
+    "Quality gates: only `npm run typecheck` (tsc --noEmit) is available. No lint, no test runner, no test framework in devDependencies. Typecheck currently passes clean.",
+    "The `hxFetch` body parameter is typed as `Record<string, unknown>`, so adding a `mode` field requires no changes to the HTTP layer.",
+    "Backend errors are surfaced in `buildErrorMessage()` (http.ts L28-35) which includes the HTTP status and response text, so backend rejection of EXECUTE mode would already be visible.",
+    "No CI workflow files, no `.eslintrc`, no CLAUDE.md, no README in the repository.",
+    "No ORM or migration system — this is a pure CLI tool with zero persistence."
+  ],
+  "unknowns": [
+    "Exact shape of the backend `POST /api/tickets` response when `mode` is included in the request body — does the response `ticket` object include a `mode` field?",
+    "Whether `shortId` is ever actually absent from the create response in practice, or if the ticket's `Short ID: undefined` concern is based on a specific observed scenario.",
+    "Whether the backend validates the `mode` field and what error format it returns for invalid values or restricted modes like EXECUTE on non-NetSuite orgs.",
+    "No runtime inspection available (no /tmp/helix-inspect/manifest.json) — cannot verify backend API contract or response shape directly."
+  ]
+}
