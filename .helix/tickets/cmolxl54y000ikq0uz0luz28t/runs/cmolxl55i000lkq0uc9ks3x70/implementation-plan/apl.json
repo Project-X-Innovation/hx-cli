@@ -1,0 +1,42 @@
+{
+  "questions": [
+    "What is the correct sequence of implementation steps for adding post-install validation to hlx update?",
+    "What files need to be created or modified?",
+    "How should the verification plan be structured to confirm correctness without a test framework?",
+    "Are there any dependencies between the implementation steps?"
+  ],
+  "answers": [
+    {
+      "answer": "Four sequential steps: (1) Refactor performUpdate from execSync to spawnSync with stderr capture, (2) Create validateInstall() in a new validate.ts module, (3) Insert validation into the manual update path (runUpdate) before metadata save, (4) Insert validation into the auto-update path (checkAutoUpdate) before metadata save. Step 1 must come first because steps 3 and 4 depend on the new stderr field in the performUpdate return type. Step 2 must come before steps 3 and 4 because they import validateInstall.",
+      "evidence": [
+        "src/update/perform.ts: current execSync loses stderr on success; spawnSync refactor needed first",
+        "src/update/index.ts: both runUpdate (line 72-89) and checkAutoUpdate (line 134-147) need validation insertion",
+        "tech-research/tech-research.md: chosen Option C creates validate.ts and refactors perform.ts"
+      ]
+    },
+    {
+      "answer": "One new file: src/update/validate.ts (validateInstall function). Two modified files: src/update/perform.ts (execSync to spawnSync, add stderr to return type) and src/update/index.ts (import validateInstall, insert validation calls in both runUpdate and checkAutoUpdate, gate saveConfig on validation success).",
+      "evidence": [
+        "tech-research/tech-research.md: Summary Table lists perform.ts (modified), index.ts (modified), validate.ts (new)",
+        "diagnosis/diagnosis-statement.md: changes confined to src/update/"
+      ]
+    },
+    {
+      "answer": "Verification uses five required checks: (1) typecheck passes, (2) build produces validate.js in dist/update/, (3) validate.ts exports the correct function, (4) validateInstall returns valid:false when bin target is missing, (5) validateInstall returns valid:true when package is intact. No test framework is available; verification uses the existing build/typecheck gates plus direct function invocation via node -e.",
+      "evidence": [
+        "package.json: no test script or test dependencies",
+        "product/product.md: 'No test framework introduction' explicitly out of scope",
+        "package.json scripts: typecheck (tsc --noEmit), build (tsc)"
+      ]
+    },
+    {
+      "answer": "Step 1 (perform.ts refactor) must complete before Steps 3-4 because those steps reference result.stderr which is only available after the spawnSync refactor. Step 2 (validate.ts creation) must complete before Steps 3-4 because those steps import validateInstall. Steps 3 and 4 are independent of each other and could theoretically be done in parallel, but they modify the same file (index.ts) so sequential execution is safer.",
+      "evidence": [
+        "src/update/index.ts line 72: result = performUpdate({quiet: false}) — result.stderr only available after Step 1",
+        "Steps 3-4 both add 'import { validateInstall } from ./validate.js' — requires Step 2 complete"
+      ]
+    }
+  ],
+  "statement": "The implementation plan specifies four atomic steps: (1) refactor performUpdate() from execSync to spawnSync to capture npm stderr, (2) create validateInstall() in a new src/update/validate.ts module that checks file existence via npm root -g and runs node {path} --version with the recursion guard, (3) insert validation into runUpdate() gating saveConfig and success message on validation pass with detailed error and recovery hint on failure, (4) insert validation into checkAutoUpdate() gating saveConfig on validation pass with warn-and-continue on failure. All changes are confined to src/update/. Verification relies on typecheck, build output inspection, and direct function invocation — no test framework introduction required.",
+  "followups": []
+}
