@@ -1,0 +1,57 @@
+{
+  "questions": [
+    "Q1: Does the implementation satisfy all 10 acceptance criteria from the ticket?",
+    "Q2: Are there correctness issues in mode validation, body construction, or output formatting?",
+    "Q3: Does the implementation introduce any regressions to existing CLI behavior?",
+    "Q4: Are shared utilities or API contracts affected by the changes?",
+    "Q5: Does the code follow existing codebase patterns and conventions?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 10 acceptance criteria are met: (1-5) All 5 modes (AUTO, BUILD, FIX, RESEARCH, EXECUTE) are accepted case-insensitively, normalized to uppercase, and included in the POST body via conditional spread. (6) Omitting --mode sends no mode field — the spread ...(mode && { mode }) is a no-op when mode is undefined. (7) Invalid values like 'banana' are rejected with a clear allowed-values error before the hxFetch call. (8) Mode is displayed conditionally in success output. (9) shortId uses ?? '(pending)' to prevent 'undefined' display. (10) Usage text documents --mode with all 5 values.",
+      "evidence": [
+        "src/tickets/create.ts L10: VALID_MODES = ['AUTO', 'BUILD', 'FIX', 'RESEARCH', 'EXECUTE']",
+        "src/tickets/create.ts L23-31: getFlag + toUpperCase + VALID_MODES.includes validation",
+        "src/tickets/create.ts L28-29: console.error + process.exit(1) for invalid mode, before hxFetch at L34",
+        "src/tickets/create.ts L36: ...(mode && { mode }) conditional body inclusion",
+        "src/tickets/create.ts L42: data.ticket.shortId ?? '(pending)'",
+        "src/tickets/create.ts L44-46: if (data.ticket.mode) conditional display",
+        "src/tickets/index.ts L33: [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] in usage text"
+      ]
+    },
+    {
+      "answer": "No correctness issues found. Mode validation correctly handles: (a) case-insensitive input via .toUpperCase(), (b) strict allowed-values check via VALID_MODES.includes(), (c) fail-fast error before API call. Body construction correctly omits mode when undefined — the spread pattern ...(undefined && { mode }) evaluates to ...undefined which is a JS no-op. The shortId guard uses nullish coalescing (??) which handles both undefined and null. The conditional mode display if (data.ticket.mode) prevents printing when the field is absent or falsy.",
+      "evidence": [
+        "src/tickets/create.ts L26: normalized = modeRaw.toUpperCase() handles case normalization",
+        "src/tickets/create.ts L27: (VALID_MODES as readonly string[]).includes(normalized) — cast needed for TypeScript tuple .includes() typing",
+        "src/tickets/create.ts L36: ...(mode && { mode }) — mode is always one of 5 uppercase strings or undefined; none of the 5 valid strings are falsy, so the && pattern is safe"
+      ]
+    },
+    {
+      "answer": "No regressions. The cmdTicketsCreate function signature is unchanged. When --mode is omitted, getFlag returns undefined, mode stays undefined, and the spread adds nothing to the body — the POST body is identical to the original { title, description, repositoryIds }. The CreateTicketResponse type is module-local (not exported) and the only broadening is making shortId optional and adding mode optional, which doesn't break any callers.",
+      "evidence": [
+        "src/tickets/create.ts L12: export async function cmdTicketsCreate(config: HxConfig, args: string[]): Promise<void> — signature unchanged",
+        "src/tickets/create.ts L5-8: CreateTicketResponse is a non-exported module-local type",
+        "src/tickets/index.ts L61-62: cmdTicketsCreate(config, rest) call unchanged"
+      ]
+    },
+    {
+      "answer": "No shared utilities or API contracts are affected. src/lib/flags.ts is unchanged — getFlag was already imported in create.ts (L3). src/lib/http.ts is unchanged — the body parameter typed as Record<string, unknown> already accepts the additional mode field. src/index.ts top-level routing is unchanged. No other ticket handlers are modified.",
+      "evidence": [
+        "src/lib/flags.ts: unchanged, getFlag returns string | undefined as needed",
+        "src/lib/http.ts L40: body?: Record<string, unknown> accepts any string-keyed fields",
+        "Only src/tickets/create.ts and src/tickets/index.ts were modified"
+      ]
+    },
+    {
+      "answer": "Yes, the code follows existing patterns consistently. Error handling uses console.error + process.exit(1) matching the repositoryIds validation at L18-20. Flag parsing uses getFlag matching list.ts usage. Conditional output display matches the data.run pattern at L47-49. The VALID_MODES const array at module scope follows the pattern of other module-level declarations in the codebase. The toUpperCase normalization is justified per the tech-research decision since mode values are uppercase API constants.",
+      "evidence": [
+        "src/tickets/create.ts L18-20: existing console.error + process.exit(1) pattern",
+        "src/tickets/list.ts L47-66: existing getFlag usage for optional flags",
+        "src/tickets/get.ts L36-38: existing conditional display pattern for mergeQueueStatus"
+      ]
+    }
+  ],
+  "statement": "Code review of HLX-343 is complete. Reviewed both changed files (src/tickets/create.ts, src/tickets/index.ts) and all supporting libraries (flags.ts, http.ts, get.ts, list.ts, package.json). All 10 acceptance criteria are satisfied. No correctness issues, regressions, or missed requirements found. Mode validation, body construction, shortId guard, conditional output, and usage text are all correctly implemented following existing codebase patterns. Typecheck and build pass clean. No code fixes were needed.",
+  "followups": []
+}

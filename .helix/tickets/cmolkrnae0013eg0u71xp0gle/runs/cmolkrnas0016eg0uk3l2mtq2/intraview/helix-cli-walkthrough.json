@@ -1,0 +1,79 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "HLX-343: Add Explicit Mode Selection To `hlx tickets create`",
+  "description": "This tour walks through the implementation of the optional --mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE> flag on `hlx tickets create`. The backend POST /api/tickets already accepted a mode field, but the CLI never sent it, forcing all tickets into AUTO mode. Two files were changed: src/tickets/create.ts (flag parsing, validation, body construction, response type, and output) and src/tickets/index.ts (usage text). A latent bug where shortId could print as 'undefined' was also fixed by making the field optional in the response type and guarding the output with a nullish coalescing operator.",
+  "steps": [
+    {
+      "file": "src/tickets/create.ts",
+      "line": 1,
+      "description": "This file is the heart of the change. Before this PR, cmdTicketsCreate only parsed --title, --description, and --repos via requireFlag. The getFlag import existed on L3 but was unused. This file receives all 6 modifications: (1) VALID_MODES constant, (2) --mode flag parsing via getFlag, (3) inline mode validation, (4) conditional POST body inclusion, (5) shortId nullish-coalescing guard, and (6) conditional mode display in success output. Data flows top-to-bottom: parse → validate → POST → display.",
+      "title": "Overview: Primary Change Target"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 10,
+      "description": "A module-level const array VALID_MODES = ['AUTO', 'BUILD', 'FIX', 'RESEARCH', 'EXECUTE'] is defined here. Placing it at module scope makes the allowed values visible at a glance, easy to extend, and reusable by both the validation block and any future introspection. This mirrors the inline validation pattern already used in the file (e.g., the repositoryIds.length check). All five values are uppercase so they can be directly compared against the .toUpperCase()-normalized user input.",
+      "title": "VALID_MODES Constant"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 5,
+      "description": "The CreateTicketResponse type is updated to mark both shortId and mode as optional (shortId?: string, mode?: string). Making shortId optional is a defensive typing decision: the TypeScript type previously declared it as required string, but the value was cast via 'as CreateTicketResponse' with no runtime validation. If the backend ever omits shortId, the unconditional print would show 'Short ID: undefined'. Marking it optional forces the compiler to require a guard at the call site. The mode field is added as optional because the backend may not return it on older response shapes.",
+      "title": "Updated CreateTicketResponse Type"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 23,
+      "description": "The already-imported but previously unused getFlag(args, '--mode') is now called here. getFlag returns string | undefined — undefined when the flag is absent, which is intentional: omitting --mode must result in no mode field being sent to the API at all (acceptance criterion 6). The raw value is immediately normalized with .toUpperCase() so that --mode build, --mode Build, and --mode BUILD all behave identically. The normalized value is stored in a const named mode for use in validation, body construction, and output.",
+      "title": "Parsing the --mode Flag with getFlag"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 27,
+      "description": "Immediately after parsing, mode is validated against VALID_MODES using .includes(). If mode is defined but not in the allowed set (e.g., --mode banana), the handler calls console.error() with a descriptive message listing all valid values, then calls process.exit(1). This early exit ensures the hxFetch call is never reached for invalid input — satisfying acceptance criterion 7. The error pattern (console.error + process.exit(1)) matches the existing codebase convention used for other validation failures in this file.",
+      "title": "Inline Mode Validation with Early Exit"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 36,
+      "description": "The POST body uses a conditional spread: ...( mode && { mode } ). When --mode is omitted, getFlag returns undefined, mode is falsy, and the spread is a no-op — the API receives exactly { title, description, repositoryIds } as before, satisfying acceptance criterion 6 (no regression for callers not using the flag). When --mode BUILD is passed, mode is the string 'BUILD' (truthy), so { mode: 'BUILD' } is spread into the body. The hxFetch body parameter is typed as Record<string, unknown>, so no HTTP layer changes were needed.",
+      "title": "Conditional Mode Inclusion in POST Body"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 42,
+      "description": "The unconditional data.ticket.shortId print is replaced with data.ticket.shortId ?? '(pending)'. This is the fix for the latent bug identified in diagnosis: if the backend omits shortId from the create response, the output now shows 'Short ID: (pending)' instead of 'Short ID: undefined'. The ?? operator is preferred over || because an empty string shortId (falsy with ||) would incorrectly fall back to '(pending)', whereas ?? only triggers on null or undefined.",
+      "title": "shortId Nullish-Coalescing Guard"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 44,
+      "description": "After printing the ticket ID and shortId, mode is conditionally displayed with: if (data.ticket.mode) { console.log('Mode: ' + data.ticket.mode); }. The guard ensures nothing is printed when the backend response omits mode (e.g., for tickets created without a mode or on older API versions). This pattern is consistent with how get.ts conditionally displays optional fields — confirmed as the correct codebase pattern during the code review.",
+      "title": "Conditional Mode Display in Success Output"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 33,
+      "description": "The ticketsUsage() function in this file is updated to include [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] in the usage string for the create subcommand. Keeping the usage text in sync with the actual flag set (acceptance criterion 10) ensures that hlx tickets --help surfaces the new option to users. The square brackets denote the flag as optional, consistent with how other optional flags are documented in this file.",
+      "title": "Usage Text Update"
+    },
+    {
+      "file": "src/lib/flags.ts",
+      "line": 1,
+      "description": "This file is unchanged. The existing getFlag(args, flagName) utility already returns string | undefined — exactly the contract needed for optional flag parsing. It was already imported in create.ts but unused before this change. No new parsing infrastructure was required. This confirms the implementation followed the principle of reusing existing utilities rather than introducing new abstractions.",
+      "title": "Confirmed Unchanged: getFlag Utility"
+    },
+    {
+      "file": "src/lib/http.ts",
+      "line": 1,
+      "description": "This file is unchanged. The hxFetch body parameter is typed as Record<string, unknown>, which already accepts an optional mode field. Because the conditional spread in create.ts ensures mode is never explicitly set to undefined in the body object, the HTTP layer receives a clean payload in all cases. No API contract changes were needed — the backend already accepted mode on POST /api/tickets before this CLI change.",
+      "title": "Confirmed Unchanged: HTTP Layer"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 36,
+      "description": "All major code paths remain clean after this change. (1) Existing callers not using --mode: getFlag returns undefined, validation is skipped (mode is falsy in the VALID_MODES.includes check path), the spread is a no-op, shortId prints with ?? guard, mode display is skipped — identical behavior to before. (2) New callers using --mode BUILD: flag is parsed, uppercased, validated, spread into the body, and conditionally displayed. (3) Invalid input (--mode banana): rejected before the network call with a clear error. No regressions were introduced to existing CLI behavior, and all 10 acceptance criteria from HLX-343 are satisfied.",
+      "title": "Summary: Clean Data Flow End-to-End"
+    }
+  ]
+}

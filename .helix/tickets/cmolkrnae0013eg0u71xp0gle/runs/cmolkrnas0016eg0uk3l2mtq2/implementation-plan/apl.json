@@ -1,0 +1,54 @@
+{
+  "questions": [
+    "Q1: What is the correct sequencing of changes to ensure typecheck passes at each step?",
+    "Q2: Which files need changes and which are verified as unchanged?",
+    "Q3: What is the correct validation pattern for the mode flag?",
+    "Q4: How should the POST body conditionally include the mode field?",
+    "Q5: What is the correct shortId guard implementation?"
+  ],
+  "answers": [
+    {
+      "answer": "Steps 1 (type update) and 5 (shortId guard) must be applied together or in quick sequence because making shortId optional in the type will cause a type error on the unconditional print at L29 until the guard is added. All other steps are independently safe. The recommended order is: type update -> VALID_MODES + parse -> validation -> body update -> shortId guard -> mode output -> usage text -> quality gate.",
+      "evidence": [
+        "src/tickets/create.ts L6: shortId typed as required string",
+        "src/tickets/create.ts L29: unconditional print of data.ticket.shortId — would fail typecheck if shortId becomes optional without a guard"
+      ]
+    },
+    {
+      "answer": "Two files need changes: src/tickets/create.ts (primary — flag parsing, validation, body, type, output) and src/tickets/index.ts (usage text only). No changes needed to src/lib/flags.ts (getFlag is sufficient), src/lib/http.ts (body type accepts Record<string, unknown>), src/index.ts (terse top-level usage by design), or any other file.",
+      "evidence": [
+        "src/tickets/create.ts: 34-line handler with all change points (L3 imports, L5-8 type, L11-13 flags, L16-19 validation, L21-24 body, L27-33 output)",
+        "src/tickets/index.ts L33: usage text needs --mode added",
+        "src/lib/flags.ts: getFlag already returns string | undefined — sufficient",
+        "src/lib/http.ts L40: body typed as Record<string, unknown> — no changes needed",
+        "tech-research/tech-research.md: Decision 6 confirms no changes to src/index.ts"
+      ]
+    },
+    {
+      "answer": "Parse with getFlag(args, '--mode'), normalize with .toUpperCase(), validate against VALID_MODES array using .includes(). Invalid values trigger console.error listing allowed values followed by process.exit(1). This follows the existing inline validation pattern from repositoryIds check at L16-19.",
+      "evidence": [
+        "src/tickets/create.ts L16-19: existing validation pattern with console.error + process.exit(1)",
+        "src/tickets/list.ts L77: case-insensitive comparison precedent using .toLowerCase()",
+        "ticket.md L62-63: 'Accept exactly AUTO, BUILD, FIX, RESEARCH, EXECUTE' and 'Treat mode values case-insensitively'"
+      ]
+    },
+    {
+      "answer": "Use spread syntax ...(mode && { mode }) or explicit if-conditional to add mode to the body object only when defined. When mode is undefined, the body must be exactly { title, description, repositoryIds } with no mode key.",
+      "evidence": [
+        "ticket.md L66: 'When --mode is omitted, do not send a mode field'",
+        "src/tickets/create.ts L21-24: current body is { title, description, repositoryIds }",
+        "tech-research/tech-research.md: Decision 2 confirms conditional spread or if-then approach"
+      ]
+    },
+    {
+      "answer": "Change shortId to optional in CreateTicketResponse (shortId?: string) and use nullish coalescing (?? '(pending)') on the output line. This is the minimal defensive fix matching the ticket requirement.",
+      "evidence": [
+        "ticket.md L68: 'do not print Short ID: undefined; print a clear fallback'",
+        "src/tickets/create.ts L29: unconditional print of data.ticket.shortId",
+        "tech-research/tech-research.md: Decision 3 confirms nullish coalescing with descriptive fallback"
+      ]
+    }
+  ],
+  "statement": "The implementation plan for adding --mode to hlx tickets create consists of 8 atomic steps modifying exactly two files: src/tickets/create.ts (type update, VALID_MODES constant, flag parsing with getFlag, case-insensitive validation with .toUpperCase(), conditional body inclusion, shortId guard with nullish coalescing, mode in success output) and src/tickets/index.ts (usage text). Steps follow existing codebase patterns for optional flags, inline validation, error handling, and conditional output. No new files, no new dependencies, no HTTP layer changes. Quality gate is npm run typecheck + npm run build.",
+  "followups": []
+}

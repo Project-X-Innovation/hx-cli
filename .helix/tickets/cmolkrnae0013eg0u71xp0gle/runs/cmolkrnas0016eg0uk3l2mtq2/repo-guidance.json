@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single repository in scope. All changes are localized to src/tickets/create.ts (flag parsing, validation, body construction, response type, output) and src/tickets/index.ts (usage text). No cross-repo impact. The HTTP layer (http.ts) and flag utilities (flags.ts) need no changes."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
