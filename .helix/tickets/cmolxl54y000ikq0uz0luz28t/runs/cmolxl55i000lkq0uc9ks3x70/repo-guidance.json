@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single repository. All changes are confined to src/update/ (perform.ts, index.ts, and a new validation function). The bin contract in package.json and build config in tsconfig.json are read-only context. No cross-repo impact."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
