@@ -1,0 +1,44 @@
+{
+  "questions": [
+    "Does the implementation correctly add --run flag support to the artifacts command following established patterns?",
+    "Does the 404 error handling in artifact.ts prevent raw HTTP errors from reaching the global handler?",
+    "Are there any regression risks from the function signature change in artifacts.ts?",
+    "Do both quality gates (typecheck, build) pass after the changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. artifacts.ts correctly imports getFlag (line 3), adds args: string[] to the function signature (line 18), reads --run via getFlag(args, '--run') (line 19), and conditionally passes runId via queryParams using object spread (lines 20-23). When runId is undefined, no queryParams are sent. This matches the established pattern from artifact.ts.",
+      "evidence": [
+        "src/tickets/artifacts.ts lines 3, 18-23 — getFlag import, args param, runId extraction, conditional queryParams",
+        "src/tickets/index.ts line 36 — usage text includes [--run <runId>]",
+        "src/tickets/index.ts line 79 — rest forwarded to cmdTicketsArtifacts",
+        "src/lib/flags.ts lines 5-8 — getFlag returns string | undefined, does not mutate args"
+      ]
+    },
+    {
+      "answer": "Yes. The hxFetch call is wrapped in a try-catch (lines 43-54). The catch block prints a contextual error message naming step and repo (line 49), optionally prints the original error message (lines 50-52), and calls process.exit(1) unconditionally (line 53). This prevents any error from propagating to the global handler at src/index.ts:95-97.",
+      "evidence": [
+        "src/tickets/artifact.ts lines 42-54 — let data declaration, try-catch, console.error, process.exit(1)",
+        "src/tickets/bundle.ts lines 54-71 — reference try-catch pattern matches",
+        "src/lib/http.ts lines 101-103 — confirms 404 throws Error that try-catch now catches"
+      ]
+    },
+    {
+      "answer": "No regression risk. The function signature change from (config, ticketId) to (config, ticketId, args) affects only one caller: src/tickets/index.ts line 79, which was updated to pass rest. Grep confirms no other imports of cmdTicketsArtifacts exist in the codebase.",
+      "evidence": [
+        "grep for cmdTicketsArtifacts found exactly 3 references: definition (artifacts.ts:18), import (index.ts:9), call (index.ts:79)"
+      ]
+    },
+    {
+      "answer": "Yes. Both npm run typecheck (tsc --noEmit) and npm run build (tsc) pass cleanly with exit code 0 and no error output. Compiled JavaScript output in dist/ matches source intent.",
+      "evidence": [
+        "npm run typecheck — exit 0, no errors",
+        "npm run build — exit 0, no errors",
+        "dist/tickets/artifacts.js — compiled output includes getFlag, conditional queryParams",
+        "dist/tickets/artifact.js — compiled output includes try-catch with process.exit(1)"
+      ]
+    }
+  ],
+  "statement": "Code review complete. All three modified files (artifacts.ts, index.ts, artifact.ts) reviewed against ticket requirements, product spec, and implementation plan. No issues found. Implementation correctly follows established patterns from sibling commands. Both quality gates pass. No changes made by code review.",
+  "followups": []
+}
