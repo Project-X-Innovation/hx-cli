@@ -1,0 +1,66 @@
+{
+  "questions": [
+    "Q1: Does `cmdTicketsCreate` currently parse or forward a `--mode` flag to the backend?",
+    "Q2: What fields does the POST body currently include when creating a ticket?",
+    "Q3: Does the `CreateTicketResponse` type include a `mode` field?",
+    "Q4: Can `shortId` be missing from the create response, causing 'Short ID: undefined' in output?",
+    "Q5: What existing CLI patterns should be followed for optional flag parsing, case-insensitive validation, and error handling?",
+    "Q6: Does the HTTP layer need modification to support a `mode` field in the POST body?",
+    "Q7: Is there existing test infrastructure to add test coverage?"
+  ],
+  "answers": [
+    {
+      "answer": "No. `cmdTicketsCreate` in `src/tickets/create.ts` does not parse `--mode`. It only parses `--title`, `--description`, and `--repos` via `requireFlag` (L11-13). The `getFlag` import exists but is unused in this handler.",
+      "evidence": [
+        "src/tickets/create.ts L3: imports `requireFlag, getFlag` from flags.ts",
+        "src/tickets/create.ts L11-13: only three requireFlag calls for --title, --description, --repos"
+      ]
+    },
+    {
+      "answer": "The POST body includes exactly `{ title, description, repositoryIds }`. No `mode` field is sent.",
+      "evidence": [
+        "src/tickets/create.ts L21-24: body is `{ title, description, repositoryIds }` passed to hxFetch"
+      ]
+    },
+    {
+      "answer": "No. `CreateTicketResponse` is typed as `{ ticket: { id: string; shortId: string; status: string }; run?: { id: string } }`. No `mode` field exists on the ticket object.",
+      "evidence": [
+        "src/tickets/create.ts L5-8: type definition shows only id, shortId, status on ticket"
+      ]
+    },
+    {
+      "answer": "Yes. Line 29 unconditionally prints `data.ticket.shortId`. The TypeScript type declares `shortId: string` (non-optional), but if the backend response omits it, JavaScript will resolve it as `undefined` at runtime. The type assertion on L25 (`as CreateTicketResponse`) masks this.",
+      "evidence": [
+        "src/tickets/create.ts L6: `shortId: string` typed as non-optional",
+        "src/tickets/create.ts L25: cast via `as CreateTicketResponse` — no runtime validation",
+        "src/tickets/create.ts L29: `console.log(\\`  Short ID: ${data.ticket.shortId}\\`)` — unconditional"
+      ]
+    },
+    {
+      "answer": "Patterns are well-established: (a) Optional flags use `getFlag(args, '--flag')` returning `string | undefined` (list.ts L47,52,60). (b) Case-insensitive comparison uses `.toLowerCase()` (list.ts L77). (c) Validation errors use `console.error()` + `process.exit(1)` (create.ts L17-19). (d) POST bodies are constructed inline in handlers (continue.ts L24-27). (e) No enum-validation utility exists — validation is inline.",
+      "evidence": [
+        "src/tickets/list.ts L47-60: getFlag for optional flags",
+        "src/tickets/list.ts L77: `.toLowerCase() === statusFilter.toLowerCase()`",
+        "src/tickets/create.ts L17-19: console.error + process.exit(1) pattern",
+        "src/tickets/continue.ts L24-27: inline POST body construction",
+        "src/lib/flags.ts: no enum validation utility"
+      ]
+    },
+    {
+      "answer": "No. The `hxFetch` body parameter is typed as `Record<string, unknown>` (http.ts L40), so any additional field can be included without modifying the HTTP layer. Backend error messages from rejected requests are already surfaced via `buildErrorMessage()` (http.ts L28-35).",
+      "evidence": [
+        "src/lib/http.ts L40: `body?: Record<string, unknown>`",
+        "src/lib/http.ts L28-35: buildErrorMessage includes HTTP status and response text"
+      ]
+    },
+    {
+      "answer": "No. There is no test framework, no test runner, no test script in package.json. Only `typecheck` (tsc --noEmit) and `build` (tsc) are available. No jest/vitest/mocha in devDependencies.",
+      "evidence": [
+        "package.json L9-12: scripts only include build, typecheck, prepare",
+        "package.json L22-25: devDependencies only include @types/node and typescript"
+      ]
+    }
+  ],
+  "statement": "The `hlx tickets create` command is missing a `--mode` flag because `cmdTicketsCreate` in `src/tickets/create.ts` was implemented to send only `{ title, description, repositoryIds }` to `POST /api/tickets`. The backend already accepts an optional `mode` field, but the CLI never parses or forwards it. Additionally, the `CreateTicketResponse` type omits `mode`, and the success output unconditionally prints `shortId` without a guard, which would display 'undefined' if the field is absent. The fix is localized to `src/tickets/create.ts` (flag parsing, validation, body construction, response type, output) and `src/tickets/index.ts` (usage text). The HTTP layer and other commands need no changes. No test infrastructure exists, so test coverage for the ticket's acceptance criteria would require bootstrapping a test framework or relying solely on typecheck as the quality gate.",
+  "followups": []
+}

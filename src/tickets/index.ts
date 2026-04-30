@@ -16,6 +16,7 @@ function ticketsUsage(exitCode: number = 1): never {
   output(`Usage:
   hlx tickets list [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>] [--json]
   hlx tickets latest [--status-not-in <s1,s2>] [--archived] [--sprint <id>]
+<<<<<<< HEAD
   hlx tickets get <ticket-ref> [--json]
   hlx tickets create --title <title> --description <desc> --repos <repo1,repo2>
   hlx tickets rerun <ticket-ref>
@@ -26,6 +27,16 @@ function ticketsUsage(exitCode: number = 1): never {
 
 Ticket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).`);
   process.exit(exitCode);
+=======
+  hlx tickets get <ticket-id>
+  hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
+  hlx tickets rerun <ticket-id>
+  hlx tickets continue <ticket-id> "continuation context"
+  hlx tickets artifacts <ticket-id>
+  hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey> [--run <runId>]
+  hlx tickets bundle <ticket-id> --out <dir>`);
+  process.exit(1);
+>>>>>>> origin/staging
 }
 
 export async function runTickets(config: HxConfig, args: string[]): Promise<void> {

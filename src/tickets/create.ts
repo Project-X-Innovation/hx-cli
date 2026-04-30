@@ -3,9 +3,11 @@ import { hxFetch } from "../lib/http.js";
 import { requireFlag, getFlag, isHelpRequested } from "../lib/flags.js";
 
 type CreateTicketResponse = {
-  ticket: { id: string; shortId: string; status: string };
+  ticket: { id: string; shortId?: string; mode?: string; status: string };
   run?: { id: string };
 };
+
+const VALID_MODES = ["AUTO", "BUILD", "FIX", "RESEARCH", "EXECUTE"] as const;
 
 export async function cmdTicketsCreate(config: HxConfig, args: string[]): Promise<void> {
   if (isHelpRequested(args)) {
@@ -23,16 +25,30 @@ export async function cmdTicketsCreate(config: HxConfig, args: string[]): Promis
     process.exit(1);
   }
 
+  const modeRaw = getFlag(args, "--mode");
+  let mode: string | undefined;
+  if (modeRaw !== undefined) {
+    const normalized = modeRaw.toUpperCase();
+    if (!(VALID_MODES as readonly string[]).includes(normalized)) {
+      console.error(`Error: Invalid mode "${modeRaw}". Allowed values: ${VALID_MODES.join(", ")}`);
+      process.exit(1);
+    }
+    mode = normalized;
+  }
+
   const data = (await hxFetch(config, "/tickets", {
     method: "POST",
-    body: { title, description, repositoryIds },
+    body: { title, description, repositoryIds, ...(mode && { mode }) },
     basePath: "/api",
   })) as CreateTicketResponse;
 
   console.log(`Ticket created:`);
   console.log(`  ID:       ${data.ticket.id}`);
-  console.log(`  Short ID: ${data.ticket.shortId}`);
+  console.log(`  Short ID: ${data.ticket.shortId ?? "(pending)"}`);
   console.log(`  Status:   ${data.ticket.status}`);
+  if (data.ticket.mode) {
+    console.log(`  Mode:     ${data.ticket.mode}`);
+  }
   if (data.run) {
     console.log(`  Run ID:   ${data.run.id}`);
   }
