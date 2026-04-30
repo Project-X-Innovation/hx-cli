@@ -1,0 +1,71 @@
+{
+  "questions": [
+    "Why do `hlx tickets get 339` and `hlx tickets get BLD-339` return HTTP 404 when the tickets are visible in `hlx tickets list`?",
+    "Why do subcommand --help flags fail or execute normal command behavior instead of printing usage?",
+    "Why do run timestamps render as 'Invalid Date' in `hlx tickets get` output?",
+    "Why is there no --json output mode for ticket list and get commands?",
+    "Why does `hlx inspect db` have shell quoting problems on PowerShell for SQL with Postgres double-quoted identifiers?",
+    "Is client-side ticket resolution via the list endpoint viable, or does the backend need new lookup endpoints?"
+  ],
+  "answers": [
+    {
+      "answer": "resolveTicketId() in src/tickets/index.ts (lines 13-26) extracts raw user input and returns it unchanged. This raw string is interpolated directly into API URL paths like /tickets/${ticketId}. The API endpoint /api/tickets/{id} expects internal CUID-format IDs, so short IDs ('BLD-339') and numeric strings ('339') yield 404. All 7 ticket subcommands that accept a ticket reference (get, artifacts, artifact, rerun, continue, bundle, and latest indirectly) use this same raw-passthrough pattern.",
+      "evidence": [
+        "src/tickets/index.ts:13-26 — resolveTicketId() returns raw input with no ID-type detection or resolution",
+        "src/tickets/get.ts:26 — hxFetch(config, `/tickets/${ticketId}`, ...) passes raw input to API",
+        "src/tickets/artifacts.ts:18 — same raw ticketId in /tickets/${ticketId}/artifacts",
+        "src/tickets/artifact.ts:33,42 — raw ticketId in two separate API calls",
+        "src/tickets/rerun.ts:9 — raw ticketId in POST /tickets/${ticketId}/rerun",
+        "src/tickets/continue.ts:24 — raw ticketId in POST /tickets/${ticketId}/rerun",
+        "src/tickets/bundle.ts:33 — raw ticketId in /tickets/${ticketId}",
+        "src/comments/index.ts:6-14 — duplicate resolveTicketId() with identical raw-passthrough logic"
+      ]
+    },
+    {
+      "answer": "Two defects combine: (1) src/index.ts main switch (lines 51-94) has no case for '--help' or '-h'. They fall through to the default branch which prints 'Unknown command' and generic usage. The SKIP_AUTO_UPDATE set (line 43) includes --help/-h but only affects the auto-update check, not command dispatch. (2) No subcommand router (tickets, inspect, comments) checks for --help/-h before dispatching. When --help is passed as a subcommand arg (e.g., 'hlx tickets get --help'), resolveTicketId(['--help']) finds no --ticket flag, no env var, and no positional arg (since '--help' starts with '--' and is filtered at line 21), then exits with 'No ticket ID provided'.",
+      "evidence": [
+        "src/index.ts:43 — SKIP_AUTO_UPDATE includes '--help', '-h' but only skips auto-update check",
+        "src/index.ts:51-94 — switch statement has no case for '--help' or '-h'; falls to default at line 91",
+        "src/tickets/index.ts:42-99 — runTickets() has no --help/-h check before switch dispatch",
+        "src/tickets/index.ts:21 — positional arg finder: args.find(a => !a.startsWith('--')) skips '--help'",
+        "src/inspect/index.ts:17-58 — runInspect() has no --help/-h check before switch dispatch",
+        "src/comments/index.ts:24-45 — runComments() has no --help/-h check"
+      ]
+    },
+    {
+      "answer": "src/tickets/get.ts line 50 calls new Date(run.createdAt).toLocaleString(). If run.createdAt is an empty string, undefined (coerced to 'undefined'), or a format the JavaScript Date constructor cannot parse, it produces 'Invalid Date'. Line 51 handles completedAt === null by showing 'in progress' but does not validate the Date output for completedAt either, and does not cross-reference the run's status field.",
+      "evidence": [
+        "src/tickets/get.ts:50 — const created = new Date(run.createdAt).toLocaleString()",
+        "src/tickets/get.ts:51 — const completed = run.completedAt ? new Date(run.completedAt).toLocaleString() : 'in progress'",
+        "src/tickets/get.ts:13-18 — TicketDetail.runs type: createdAt is string, completedAt is string|null"
+      ]
+    },
+    {
+      "answer": "This is a missing feature. Neither cmdTicketsList() nor printTicketDetail()/cmdTicketsGet() check for a --json flag. All output is hardcoded as formatted console.log text. Additionally, list.ts line 88 omits the internal id field from text output despite TicketItem type having it, and get.ts line 57 truncates descriptions at 500 chars with no override option.",
+      "evidence": [
+        "src/tickets/list.ts:85-89 — output loop uses console.log with formatted string, no id field, no --json check",
+        "src/tickets/get.ts:25-60 — printTicketDetail() uses only console.log text, no --json check",
+        "src/tickets/get.ts:57 — description truncated: ticket.description.slice(0, 500) + '...'",
+        "src/lib/flags.ts — hasFlag() available but never called for '--json' in any ticket command"
+      ]
+    },
+    {
+      "answer": "src/inspect/index.ts line 29 constructs the SQL query by joining positional arguments: const query = positional.join(' '). There is no --query flag alternative. PowerShell treats double quotes as string delimiters, so Postgres quoted identifiers like '\"Tickets\"' conflict with the shell's quoting rules. The only current workaround is escaping, which is error-prone.",
+      "evidence": [
+        "src/inspect/index.ts:28-29 — const positional = getPositionalArgs(rest, ['--repo']); const query = positional.join(' ')",
+        "src/inspect/db.ts:5-12 — cmdDb() receives the pre-joined query string, no alternative input path",
+        "src/lib/flags.ts:15-21 — getPositionalArgs filters out flags and their values, leaving raw positional tokens"
+      ]
+    },
+    {
+      "answer": "Client-side resolution via the /api/tickets list endpoint is viable and is the correct approach. The list endpoint already returns items with internal 'id' and 'shortId' fields (confirmed by TicketItem type in list.ts:5-12 and demonstrated by latest.ts:44-45 which uses latest.id to call printTicketDetail). The existing resolve-repo.ts pattern (fetch list, match client-side by exact ID, name, or partial match) is a proven template. No new backend endpoints are needed.",
+      "evidence": [
+        "src/tickets/list.ts:5-12 — TicketItem type includes id (internal) and shortId fields",
+        "src/tickets/latest.ts:44-45 — uses data.items[0].id to call printTicketDetail, proving list returns internal IDs",
+        "src/lib/resolve-repo.ts:11-37 — existing fetch-list-then-match pattern for repo resolution"
+      ]
+    }
+  ],
+  "statement": "The helix-cli ticket commands fail on short IDs and numeric ticket numbers because resolveTicketId() passes raw user input directly to API endpoints that require internal CUID IDs. The fix is a new shared ticket resolver (following the existing resolve-repo.ts pattern) that fetches the ticket list and matches client-side by internal ID, short ID, or numeric ticket number. Five additional defects compound the usability problem: missing --help interception at all dispatch levels, missing --json output for ticket list/get, unsafe Date construction for run timestamps, missing internal ID in list text output, and positional-only SQL input in inspect db. All fixes are within helix-cli; no backend changes needed.",
+  "followups": []
+}

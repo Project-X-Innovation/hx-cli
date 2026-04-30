@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "All 5 root causes (ticket ID resolution, --help handling, --json output, timestamp rendering, inspect db quoting) are within the helix-cli source. The fix uses client-side resolution via the existing /api/tickets list endpoint; no backend API changes are needed. The existing resolve-repo.ts pattern provides a proven template for the new ticket resolver. Test infrastructure (node:test) must also be added here."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
