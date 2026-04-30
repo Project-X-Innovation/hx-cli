@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Why can't the CLI use one hxi_ key across multiple organizations?",
+    "What specific CLI code paths need to change?",
+    "What happens to the hxi_ key when a user switches orgs?"
+  ],
+  "answers": [
+    {
+      "answer": "hxFetch (http.ts:52-57) only sends auth headers (X-API-Key or Authorization Bearer). No X-Helix-Org-ID header is sent, so the server has no way to know which org the CLI user wants. The server falls back to keyData.organizationId (the key's creation org), making the key usable only for that one org.",
+      "evidence": [
+        "helix-cli/src/lib/http.ts:52-57 — only auth headers set, no org header",
+        "HxConfig (config.ts:15-16) — orgId and orgName fields exist but are never sent in requests"
+      ]
+    },
+    {
+      "answer": "Three CLI files need changes: (1) http.ts must add X-Helix-Org-ID header when config has orgId and key is hxi_, (2) switch.ts must do local-only config update for hxi_ keys instead of calling POST /api/auth/switch-org, (3) list.ts must mark current org by config.orgId for hxi_ keys instead of server response org.",
+      "evidence": [
+        "http.ts:52-57 — no org header sent",
+        "switch.ts:43-56 — calls POST /api/auth/switch-org and replaces apiKey with JWT",
+        "list.ts:20 — marks current by data.organization.id match"
+      ]
+    },
+    {
+      "answer": "cmdOrgSwitch (switch.ts:43-56) calls POST /api/auth/switch-org which returns a JWT accessToken. The CLI then sets config.apiKey = data.accessToken (switch.ts:51), permanently replacing the hxi_ key with a session JWT. The API key is irrecoverably lost.",
+      "evidence": [
+        "switch.ts:49-51 — `apiKey: data.accessToken` in updatedConfig",
+        "org-switch-service.ts:103-106 — server issues JWT via issueAccessToken",
+        "org-switch-service.ts:74 — server also mutates User.organizationId"
+      ]
+    }
+  ],
+  "statement": "The CLI lacks org-selection request headers and destructively replaces hxi_ API keys with session JWTs during org switch. The fix requires: adding X-Helix-Org-ID header emission in hxFetch when using hxi_ keys with a configured orgId, making org switch local-only for hxi_ keys, and updating org list current-org marking to use local config for hxi_ key auth.",
+  "followups": []
+}

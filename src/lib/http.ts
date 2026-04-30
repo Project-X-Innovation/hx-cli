@@ -56,6 +56,10 @@ export async function hxFetch(
     headers["Authorization"] = `Bearer ${config.apiKey}`;
   }
 
+  if (config.orgId && config.apiKey.startsWith("hxi_")) {
+    headers["X-Helix-Org-ID"] = config.orgId;
+  }
+
   let body: string | undefined;
   if (options.body) {
     headers["Content-Type"] = "application/json";

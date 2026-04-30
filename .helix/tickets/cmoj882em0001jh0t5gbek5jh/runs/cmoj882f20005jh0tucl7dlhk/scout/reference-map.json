@@ -1,0 +1,101 @@
+{
+  "problem": "CLI org switch calls POST /api/auth/switch-org which mutates User.organizationId and issues a new JWT — replacing the hxi_ API key with a session token. For hxi_ API key auth, org switch must instead update local config only and send X-Helix-Org-ID header with requests. Currently no org header is sent by hxFetch, orgId/orgName are not used in HTTP requests, and env-var-based config does not include orgId.",
+  "files": [
+    {
+      "path": "src/lib/config.ts",
+      "why": "HxConfig already has optional orgId/orgName (L15-16). loadConfig reads them from file (L40-41) but env-var path returns without orgId (L29). saveConfig does read-merge-write (L62-73). requireConfig enforces apiKey+url but not orgId.",
+      "lines": "12-82"
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "hxFetch (L37-130) sets auth headers (L52-57) but does NOT send X-Helix-Org-ID or any org context header. This is the central place to add the header when config.orgId is present and apiKey starts with hxi_.",
+      "lines": "37-63"
+    },
+    {
+      "path": "src/org/switch.ts",
+      "why": "cmdOrgSwitch (L14-58) calls POST /api/auth/switch-org, receives new accessToken, and REPLACES apiKey in config (L51). For hxi_ keys, this must change to local-only config update without server call. Also resolves org by name via /auth/me (L27).",
+      "lines": "14-58"
+    },
+    {
+      "path": "src/org/current.ts",
+      "why": "cmdOrgCurrent (L17-24) calls GET /api/auth/me and displays org from response. For hxi_ key with X-Helix-Org-ID, server response should reflect the selected org. May also want to show local config orgId for confirmation.",
+      "lines": "17-24"
+    },
+    {
+      "path": "src/org/list.ts",
+      "why": "cmdOrgList (L10-23) calls GET /api/auth/me. Uses data.organization.id to mark current org (L20). For hxi_ key auth, the 'current' marker should match config.orgId (local selection) not server-side User.organizationId.",
+      "lines": "10-23"
+    },
+    {
+      "path": "src/org/index.ts",
+      "why": "Org command dispatcher routing current/list/switch subcommands. May need small wiring updates.",
+      "lines": "1-36"
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point. Command wiring for org at L67-70. May need small updates if command signatures change.",
+      "lines": "49-90"
+    },
+    {
+      "path": "src/login.ts",
+      "why": "Manual login saves apiKey without orgId (L38). After login with hxi_ key, user may need to run hlx org switch before org-scoped commands work. No orgId is set on initial login.",
+      "lines": "31-41"
+    }
+  ],
+  "facts": [
+    {
+      "claim": "HxConfig type already defines optional orgId and orgName fields",
+      "source": "src/lib/config.ts:15-16"
+    },
+    {
+      "claim": "loadConfig reads orgId/orgName from config file (L40-41) but env-var-based config does NOT include them (L29)",
+      "source": "src/lib/config.ts:29, 40-41"
+    },
+    {
+      "claim": "hxFetch sends X-API-Key header for hxi_ tokens and Authorization: Bearer for others — no org header is sent",
+      "source": "src/lib/http.ts:52-57"
+    },
+    {
+      "claim": "cmdOrgSwitch calls POST /api/auth/switch-org, receives new accessToken, and replaces apiKey in config — this means the hxi_ key is LOST after switching orgs",
+      "source": "src/org/switch.ts:43-56"
+    },
+    {
+      "claim": "cmdOrgList marks current org by matching org.id === data.organization.id from /auth/me response",
+      "source": "src/org/list.ts:20"
+    },
+    {
+      "claim": "cmdOrgSwitch resolves org name to ID via /auth/me availableOrganizations before switching",
+      "source": "src/org/switch.ts:27-40"
+    },
+    {
+      "claim": "Manual login (hlx login --manual) saves only apiKey and url — no orgId set",
+      "source": "src/login.ts:38"
+    },
+    {
+      "claim": "No test files exist in the CLI repo",
+      "source": "glob search for *.test.ts and *.spec.ts returned no results"
+    },
+    {
+      "claim": "TypeScript strict mode, ES2022, Node16 module resolution. Build: tsc. No lint or test scripts.",
+      "source": "tsconfig.json, package.json"
+    },
+    {
+      "claim": "No CLAUDE.md or README.md exists in the repo",
+      "source": "glob search returned no results"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "Should the CLI send X-Helix-Org-ID for all requests or only when config.apiKey starts with hxi_?",
+      "impact": "The ticket says send selected org when authenticated with hxi_ key. Session JWT auth should continue using the server-side org."
+    },
+    {
+      "question": "When user logs in with hlx login --manual and provides an hxi_ key, there is no orgId set. Should the CLI require hlx org switch before org-scoped commands work, or auto-detect?",
+      "impact": "Ticket says API-key auth must fail closed when X-Helix-Org-ID is missing. CLI must guide user to set org."
+    },
+    {
+      "question": "Should env-var-based config support orgId via an environment variable (e.g. HELIX_ORG_ID)?",
+      "impact": "Currently env-var path returns config without orgId. CI/automation use cases may need env-var org selection."
+    }
+  ]
+}

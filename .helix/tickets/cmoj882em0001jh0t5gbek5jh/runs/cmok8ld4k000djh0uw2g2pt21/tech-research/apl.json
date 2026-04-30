@@ -1,0 +1,60 @@
+{
+  "questions": [
+    "What config shape supports multiple org tokens with a current-org pointer?",
+    "How does loadConfig maintain HxConfig compatibility while supporting the new format?",
+    "How does hlx token add validate and store a new token?",
+    "How do hlx org list and hlx org switch work as local-only operations?",
+    "How do env-var overrides continue to work with the new config shape?"
+  ],
+  "answers": [
+    {
+      "answer": "Config shape: { orgs: [{ orgId, orgName, token, url, alias? }, ...], currentOrg?: string, autoUpdate?, installSource? }. Each entry in the orgs array represents one org-scoped token. currentOrg points to the orgId of the active entry. autoUpdate and installSource are preserved metadata. The orgs array is natural for iteration (hlx org list) and the list is small (typically 1-5 entries).",
+      "evidence": [
+        "config.ts L12-19: current HxConfig type with single apiKey — must support multiple tokens",
+        "config.ts L62-73: saveConfig does read-merge-write preserving unrelated fields",
+        "config.ts L17-18: autoUpdate and installSource already stored in config — must be preserved",
+        "Continuation context: 'The local config must support multiple org token entries and one current org pointer'"
+      ]
+    },
+    {
+      "answer": "loadConfig() internally resolves the current org entry from the orgs array and returns the same HxConfig shape: { apiKey: entry.token, url: entry.url, orgId: entry.orgId, orgName: entry.orgName }. The env-var path (L26-29) returns immediately with { apiKey, url } — unchanged. If orgs array exists but no currentOrg matches, returns null. If file has legacy format (no orgs array), returns null. All consumers (hxFetch, commands) see the same interface they always have.",
+      "evidence": [
+        "config.ts L24-49: loadConfig reads single apiKey/url from file or env vars — compatibility point",
+        "config.ts L26-29: env var checks return { apiKey, url } immediately — unchanged",
+        "http.ts L53-54: hxFetch reads config.apiKey — works unchanged with compatibility layer",
+        "http.ts L59-61: hxFetch reads config.orgId for X-Helix-Org-ID header — works unchanged"
+      ]
+    },
+    {
+      "answer": "hlx token add --token <hxi_key> [--url <url>] [--name <alias>] [--current] flow: (1) parse flags, (2) call /api/auth/me with the token to validate and learn key's org, (3) on failure: print error (masked token), exit 1, write nothing, (4) on success: extract organization.id and organization.name from response, (5) store entry { orgId, orgName, token, url, alias } in orgs array (replace existing entry for same orgId), (6) if --current or no currentOrg: set currentOrg, (7) print masked confirmation.",
+      "evidence": [
+        "routes/api.ts L168: /api/auth/me accessible for API-key auth after server fix",
+        "auth-controller.ts L33-57: getMe returns { organization: { id, name }, user: { ... } }",
+        "No hlx token add command exists — index.ts L49-90 dispatch",
+        "flags.ts L5-9: getFlag helper for --token, --url, --name",
+        "flags.ts L11-13: hasFlag helper for --current",
+        "Continuation context: 'hlx token add must validate the token with the server'"
+      ]
+    },
+    {
+      "answer": "hlx org list reads the local orgs array from config.json. No server call. Shows orgId, orgName, alias (if set), and '(current)' marker for the currentOrg entry. hlx org switch reads local orgs array, matches input against orgId (exact), alias (exact), or orgName (case-insensitive). If no match: error with list of configured orgs. If multiple name matches: error listing all matches (fail on ambiguity). On match: set currentOrg to matched orgId. No server call.",
+      "evidence": [
+        "list.ts L10-26: currently calls /api/auth/me — must change to local read",
+        "switch.ts L25-48: currently resolves names via /api/auth/me — must change to local resolution",
+        "switch.ts L39-44: existing ambiguity handling with .filter() — pattern to follow",
+        "Continuation context: 'hlx org list must read local config only'",
+        "Continuation context: 'hlx org switch must switch only to an already configured local entry'"
+      ]
+    },
+    {
+      "answer": "Completely unchanged. loadConfig (config.ts L26-29) checks env vars first: HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for token; HELIX_URL > HELIX_INSPECT_BASE_URL > HELIX_INSPECT_URL for URL. When env vars are set, config returns { apiKey, url } immediately — the orgs array is never consulted. hxFetch receives this config and does not send X-Helix-Org-ID (no orgId in config). The server resolves the key's own org server-side.",
+      "evidence": [
+        "config.ts L26-29: env var checks return { apiKey, url } immediately — before any file reading",
+        "http.ts L59-61: X-Helix-Org-ID only sent when config.orgId is set — env-var path has no orgId",
+        "Continuation context: 'If env token variables are present, they must continue to override local config'"
+      ]
+    }
+  ],
+  "statement": "CLI changes restructure config to orgs array with currentOrg pointer, add hlx token add command for server-validated onboarding, make hlx org list and hlx org switch local-only, and maintain HxConfig compatibility through loadConfig's internal resolution. hxFetch and all existing commands work without modification because loadConfig returns the same { apiKey, url, orgId, orgName } shape. Env-var override path is completely unchanged. X-Helix-Org-ID header emission (http.ts L59-61) is retained for server-side validation. Token masking applied to all CLI output.",
+  "followups": []
+}
