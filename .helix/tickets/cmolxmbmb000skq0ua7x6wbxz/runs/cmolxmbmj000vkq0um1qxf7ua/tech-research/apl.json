@@ -1,0 +1,57 @@
+{
+  "questions": [
+    "What is the correct technical approach for adding --run to the artifacts command?",
+    "What is the correct approach for hardening 404 errors in the artifact command?",
+    "Should the --run flag on artifacts auto-resolve to the latest run when omitted, like the artifact command does?",
+    "Should error hardening be done at the hxFetch level, the command level, or the global handler level?",
+    "What is the exact server query parameter name for run filtering on the artifacts endpoint?"
+  ],
+  "answers": [
+    {
+      "answer": "Follow the established pattern from artifact.ts (lines 29-40): add an `args: string[]` parameter to `cmdTicketsArtifacts`, use `getFlag(args, '--run')` to read the flag, and pass it as `queryParams: { runId }` to the existing `hxFetch` call. Update the router in index.ts (line 79) to pass `rest` and add `[--run <runId>]` to the usage text at line 36. This is a direct pattern replication requiring no new abstractions.",
+      "evidence": [
+        "src/tickets/artifact.ts:19 — cmdTicketsArtifact already accepts args: string[] and uses getFlag",
+        "src/tickets/artifact.ts:29 — getFlag(args, '--run') pattern",
+        "src/tickets/index.ts:85 — cmdTicketsArtifact(config, ticketId, rest) shows args forwarding pattern",
+        "src/lib/http.ts:46-49 — hxFetch already supports queryParams: Record<string, string>",
+        "src/lib/flags.ts:5-8 — getFlag(args, flag) returns string | undefined"
+      ]
+    },
+    {
+      "answer": "Wrap the hxFetch call at artifact.ts lines 42-45 in a try-catch block. On error, print a clean user-facing message that names the step and repo (e.g., 'No artifact found for step X in repo Y') and exit with code 1. This follows the graceful error pattern from bundle.ts lines 68-71, adapted for the single-artifact use case where the user should see exactly what was not found.",
+      "evidence": [
+        "src/tickets/artifact.ts:42-45 — hxFetch call with no try-catch",
+        "src/tickets/bundle.ts:68-71 — try-catch pattern: catch { console.error('Warning: ...') }",
+        "src/lib/http.ts:101-103 — 404 triggers throw new Error(buildErrorMessage(response))",
+        "src/index.ts:95-97 — global catch logs error.message and exits 1",
+        "product/product.md — 'Error hardening is scoped to the artifact command call site, not a global behavior change'"
+      ]
+    },
+    {
+      "answer": "No. The product spec explicitly states: 'If --run is omitted from artifacts, behavior stays as-is (server default). No auto-resolve logic is added.' This is an intentional design choice — the artifacts command lists summaries, and the server default is acceptable. Only the artifact command (single-artifact fetch) auto-resolves to the latest run, because it requires a runId to construct the API path.",
+      "evidence": [
+        "product/product.md — Features Explicitly Out of Scope: 'Automatic run selection / run discovery: If --run is omitted from artifacts, behavior stays as-is'",
+        "src/tickets/artifact.ts:32-39 — artifact command needs runId for path construction: `/tickets/${ticketId}/runs/${runId}/step-artifacts/${stepId}`",
+        "src/tickets/artifacts.ts:18 — artifacts command calls `/tickets/${ticketId}/artifacts` which works without runId"
+      ]
+    },
+    {
+      "answer": "At the command level (artifact.ts call site). The hxFetch utility is a shared HTTP layer that should continue to throw on non-2xx errors — callers handle expected errors contextually. The global handler is the last resort for unexpected errors. This matches the established bundle.ts pattern and is explicitly scoped by the product spec.",
+      "evidence": [
+        "product/product.md — 'Changes to the global error handler (src/index.ts): Error hardening is scoped to the artifact command call site'",
+        "src/tickets/bundle.ts:68-71 — established pattern: command-level try-catch around hxFetch",
+        "src/lib/http.ts — shared utility used by all commands; changing it would affect all callers"
+      ]
+    },
+    {
+      "answer": "The ticket states the server accepts `runId` as a query parameter. This is not independently verifiable from CLI source alone. The safest approach is to use `runId` as the parameter name, consistent with how the ticket describes the server endpoint. Runtime inspection is unavailable to verify. This remains a low-risk assumption since incorrect naming would simply return unfiltered results (not an error), and can be verified during manual testing.",
+      "evidence": [
+        "ticket.md — 'The server artifact summary endpoint already supports a runId query parameter'",
+        "scout/reference-map.json — unknown: 'Does the server artifact summary endpoint accept the query param as runId or run?'",
+        "/tmp/helix-inspect/manifest.json — not present, no runtime verification available"
+      ]
+    }
+  ],
+  "statement": "The technical approach for both defects follows established codebase patterns with no new abstractions or dependencies. Defect 1 (missing --run on artifacts) is solved by replicating the args-forwarding and flag-reading pattern from artifact.ts into artifacts.ts and its router call in index.ts. Defect 2 (noisy 404 on artifact) is solved by wrapping the hxFetch call site in a try-catch that prints a clean message, following the bundle.ts graceful error pattern. Both changes touch three files (artifacts.ts, artifact.ts, index.ts) using only existing utilities (getFlag, hxFetch queryParams). No new dependencies, no architectural changes, no changes to the shared HTTP layer or global error handler.",
+  "followups": []
+}
