@@ -1,0 +1,105 @@
+{
+  "problem": "The CLI `hlx tickets artifacts` command does not expose a `--run <runId>` flag, so it always calls `/tickets/${ticketId}/artifacts` with no query params. The server endpoint already supports a `runId` query parameter. Separately, when `hlx tickets artifact` returns HTTP 404 for a missing step artifact, Node emits an assertion failure instead of a clean error message.",
+  "files": [
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Primary file: `cmdTicketsArtifacts` signature takes only (config, ticketId) with no args parameter — cannot read --run flag. The hxFetch call at line 18 passes no queryParams, so runId is never forwarded to the server."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Subcommand router: line 79 calls `cmdTicketsArtifacts(config, ticketId)` without passing `rest` (args). Compare with line 85 which passes `rest` to `cmdTicketsArtifact`. Usage text at line 36 does not show --run for `artifacts` subcommand."
+    },
+    {
+      "path": "src/tickets/artifact.ts",
+      "why": "Sibling command that already implements --run support (lines 29-40) with a fallback pattern: read --run flag → if absent, fetch ticket detail → use currentRun?.id ?? runs[0]?.id. This is the reference pattern for adding --run to artifacts.ts. Also the surface where 404 triggers the Node assertion failure — the hxFetch call at lines 42-45 throws on 404, propagating through the global error handler."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "Central HTTP utility: hxFetch handles query params (lines 46-49), error responses (lines 80-103), and error formatting (lines 28-35). 404 is not in RETRYABLE_STATUS_CODES, so it falls through to buildErrorMessage → throw Error. The thrown error message format is `HTTP 404 Not Found — {body text}`. No special handling for expected 404s."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Flag-parsing utilities: getFlag (line 5) reads a named flag value from args array. This is the API used by artifact.ts to read --run and will be used by artifacts.ts."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Top-level entry point: global catch at lines 95-97 catches errors from all subcommands, logs error.message, and exits 1. This is where hxFetch-thrown errors ultimately surface to the user."
+    },
+    {
+      "path": "src/tickets/bundle.ts",
+      "why": "Context file: also calls `/tickets/${ticketId}/artifacts` without runId (line 43). Uses try-catch around individual artifact fetches (lines 68-71) to gracefully skip failures — demonstrates the graceful error-handling pattern absent from artifact.ts."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "cmdTicketsArtifacts accepts only (config, ticketId) — no args parameter",
+      "evidence": "src/tickets/artifacts.ts line 17: `export async function cmdTicketsArtifacts(config: HxConfig, ticketId: string): Promise<void>`"
+    },
+    {
+      "claim": "The artifacts endpoint is called without query params",
+      "evidence": "src/tickets/artifacts.ts line 18: `hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: \"/api\" })`"
+    },
+    {
+      "claim": "The subcommand router does not pass args to cmdTicketsArtifacts",
+      "evidence": "src/tickets/index.ts line 79: `await cmdTicketsArtifacts(config, ticketId)` — compare line 85 `await cmdTicketsArtifact(config, ticketId, rest)` which does pass rest"
+    },
+    {
+      "claim": "artifact.ts already supports --run with a fallback to currentRun?.id",
+      "evidence": "src/tickets/artifact.ts lines 29-40: reads getFlag(args, '--run'), fetches ticket detail if absent, resolves runId"
+    },
+    {
+      "claim": "hxFetch supports queryParams via Record<string, string>",
+      "evidence": "src/lib/http.ts lines 40 and 46-49: options.queryParams iterated and set on URL searchParams"
+    },
+    {
+      "claim": "404 responses are not retried — they throw an Error via buildErrorMessage",
+      "evidence": "src/lib/http.ts line 6: RETRYABLE_STATUS_CODES = Set([429, 500, 502, 503, 504]); lines 101-103: non-retryable status throws"
+    },
+    {
+      "claim": "buildErrorMessage reads body as text and formats: 'HTTP {status} {statusText} — {body slice}'",
+      "evidence": "src/lib/http.ts lines 33-34: `response.text().catch(() => '')` then template string with `text.slice(0, 500)`"
+    },
+    {
+      "claim": "bundle.ts uses try-catch to gracefully skip 404s/failures",
+      "evidence": "src/tickets/bundle.ts lines 68-71: `catch { console.error('Warning: Could not fetch artifact ...') }`"
+    },
+    {
+      "claim": "No test files exist in the repository",
+      "evidence": "Glob search for **/*.test.{ts,js} returned no files"
+    },
+    {
+      "claim": "No CI workflow files exist",
+      "evidence": "Glob search for **/.github/**/*.{yml,yaml} returned no files"
+    },
+    {
+      "claim": "Build/typecheck commands: `tsc` and `tsc --noEmit`",
+      "evidence": "package.json scripts: build = 'tsc', typecheck = 'tsc --noEmit'"
+    },
+    {
+      "claim": "No ORM or database dependencies — no migration awareness needed",
+      "evidence": "package.json has only @types/node and typescript as devDependencies, no runtime dependencies"
+    },
+    {
+      "claim": "Runtime inspection manifest not available",
+      "evidence": "/tmp/helix-inspect/manifest.json does not exist"
+    },
+    {
+      "claim": "Usage text for artifacts subcommand does not mention --run",
+      "evidence": "src/tickets/index.ts line 36: `hlx tickets artifacts <ticket-id>` — no `[--run <runId>]` shown"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "What exact Node assertion failure occurs on 404? The ticket description is truncated after 'HTTP 404 Not Found — {error:No'. The code path (buildErrorMessage → throw → console.error) appears clean, so the assertion failure source is unclear from static analysis alone.",
+      "impact": "Understanding the root mechanism is needed to determine the correct hardening approach — whether it's in hxFetch, artifact.ts, or elsewhere."
+    },
+    {
+      "question": "Does the server artifact summary endpoint (/tickets/${ticketId}/artifacts) accept the query param as `runId` or `run`?",
+      "impact": "The exact query parameter name must match the server expectation. The ticket says the server 'supports a runId query parameter' but this is not verified from CLI code."
+    },
+    {
+      "question": "Should bundle.ts also pass runId when calling the artifacts summary endpoint?",
+      "impact": "bundle.ts line 43 also calls /tickets/${ticketId}/artifacts without runId — may be a secondary surface but is not explicitly in ticket scope."
+    }
+  ]
+}
