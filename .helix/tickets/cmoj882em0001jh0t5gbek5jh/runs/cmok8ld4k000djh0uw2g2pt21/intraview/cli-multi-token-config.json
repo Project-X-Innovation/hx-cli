@@ -1,0 +1,60 @@
+{
+  "title": "CLI: Multi-Token Org-Scoped Config",
+  "description": "Redesign CLI config for multiple org tokens with local switching",
+  "steps": [
+    {
+      "file": "src/lib/config.ts",
+      "line": 22,
+      "title": "OrgEntry and MultiTokenConfig types",
+      "description": "New types for multi-token config: each OrgEntry has orgId, orgName, token, url, and optional alias. MultiTokenConfig wraps the orgs array with currentOrg pointer."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 43,
+      "title": "loadConfig — env-var path unchanged",
+      "description": "Lines 44-49 are the env-var path — completely unchanged. HELIX_API_KEY/HELIX_INSPECT_TOKEN + HELIX_URL take priority over config file."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 55,
+      "title": "loadConfig — multi-token resolution",
+      "description": "If config has orgs array, find entry matching currentOrg. Single-org convenience: if only 1 entry and no currentOrg, use it. Returns compatible HxConfig."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 128,
+      "title": "addOrgEntry — add/replace with alias uniqueness",
+      "description": "Reads config, validates alias uniqueness, replaces entry with same orgId or appends. Sets currentOrg if makeCurrent or no current exists."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 163,
+      "title": "maskToken — security helper",
+      "description": "Returns hxi_<first8>... to avoid printing full tokens in output."
+    },
+    {
+      "file": "src/token/add.ts",
+      "line": 10,
+      "title": "cmdTokenAdd — token validation flow",
+      "description": "Parses flags, validates hxi_ prefix, calls /api/auth/me with temp config, extracts org from response, stores via addOrgEntry. Fails without writing config on any error."
+    },
+    {
+      "file": "src/org/list.ts",
+      "line": 3,
+      "title": "cmdOrgList — local-only",
+      "description": "No config parameter, no hxFetch. Reads getOrgEntries() and loadRawConfig() directly. Shows alias and current marker."
+    },
+    {
+      "file": "src/org/switch.ts",
+      "line": 18,
+      "title": "cmdOrgSwitch — multi-token local switch",
+      "description": "For hxi_ tokens: resolves input against local entries by orgId, alias, then case-insensitive orgName. JWT path unchanged."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 55,
+      "title": "token command wiring",
+      "description": "New token case dispatches to runToken. Does NOT call requireConfig() — token add creates config."
+    }
+  ]
+}

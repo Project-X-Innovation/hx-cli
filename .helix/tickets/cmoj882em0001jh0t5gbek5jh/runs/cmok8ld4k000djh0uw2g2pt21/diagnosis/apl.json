@@ -1,0 +1,52 @@
+{
+  "questions": [
+    "What must change in CLI config to support multiple org-scoped tokens?",
+    "How should hlx token add validate and store a new token?",
+    "What must change in hlx org list and hlx org switch for local-only operation?",
+    "How does hxFetch need to change to use the correct token from multi-token config?",
+    "How do env-var overrides continue to work with the new config shape?"
+  ],
+  "answers": [
+    {
+      "answer": "HxConfig (config.ts L12-19) currently stores a single apiKey + url + optional orgId/orgName. Under org-scoped multi-token model, config.json must store an array of org token entries plus a currentOrg pointer. Proposed shape: { orgs: [{ orgId, orgName, token, url, alias? }, ...], currentOrg?: string, autoUpdate?, installSource? }. loadConfig must resolve the current org entry from the orgs array. saveConfig must preserve the array structure. requireConfig must check for a valid current org entry.",
+      "evidence": [
+        "config.ts L12-19: current HxConfig type with single apiKey field",
+        "config.ts L24-49: loadConfig reads single apiKey/url from file or env vars",
+        "config.ts L62-73: saveConfig does read-merge-write preserving unrelated fields"
+      ]
+    },
+    {
+      "answer": "hlx token add --token <hxi_key> [--url <server_url>] [--name <alias>] [--current] must: (1) call /api/auth/me with the token to validate it and learn the key's org, (2) on success, extract organization.id and organization.name from the response, (3) store a new entry { orgId, orgName, token, url, alias } in the orgs array, (4) if --current or no current org exists, set currentOrg to this entry's orgId. The /api/auth/me endpoint works without X-Helix-Org-ID because the server resolves the key's own org (after the server-side fix). The --url flag allows configuring different server URLs per org. The --name flag allows an alias for easier switching.",
+      "evidence": [
+        "routes/api.ts L168: /api/auth/me registered before requireOrgForApiKey gate",
+        "auth-controller.ts L33-57: getMe returns { organization: { id, name }, user: { ... } }",
+        "No hlx token add command exists currently — src/index.ts L49-90 command dispatch"
+      ]
+    },
+    {
+      "answer": "hlx org list (list.ts L10-26) currently calls /api/auth/me to get availableOrganizations from server. Must change to read local orgs array from config.json and display only configured entries. hlx org switch (switch.ts L14-72) currently resolves names via /api/auth/me for non-CUID input (L27-48) and does local-only saveConfig for hxi_ (L50-53). Must change to: (1) resolve names from local orgs array, (2) switch currentOrg pointer to the matched entry. No server call needed for either command. For JWT tokens, switch behavior can remain as-is (server-side call).",
+      "evidence": [
+        "list.ts L10-26: calls /api/auth/me, reads availableOrganizations from server",
+        "switch.ts L25-48: resolves org name via /api/auth/me availableOrganizations",
+        "switch.ts L50-53: hxi_ path already does local-only saveConfig({ orgId, orgName })"
+      ]
+    },
+    {
+      "answer": "hxFetch (http.ts L37-134) currently reads config.apiKey directly. Under multi-token model, loadConfig must return the token for the current org entry. hxFetch itself may not need structural changes if loadConfig returns { apiKey: currentEntry.token, url: currentEntry.url, orgId: currentEntry.orgId, orgName: currentEntry.orgName }. The X-Helix-Org-ID header at L59-61 should still be sent for server-side validation (continuation context says: if header present, must match key's org exactly or fail closed).",
+      "evidence": [
+        "http.ts L53-54: sets X-API-Key header from config.apiKey",
+        "http.ts L59-61: already sends X-Helix-Org-ID when config.orgId set and key is hxi_",
+        "config.ts L36-43: loadConfig returns { apiKey, url, orgId?, orgName? } from file"
+      ]
+    },
+    {
+      "answer": "loadConfig (config.ts L24-29) env var priority: HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for token; HELIX_URL > HELIX_INSPECT_BASE_URL > HELIX_INSPECT_URL for URL. When env vars are set, config returns { apiKey, url } only (no orgId/orgName). This must continue working unchanged — env vars override local config for Helix agent runs. The multi-token orgs array is only consulted when env vars are absent.",
+      "evidence": [
+        "config.ts L26-29: env var checks return early with { apiKey, url } only",
+        "Continuation context: 'If env token variables are present, they must continue to override local config for Helix agent runs'"
+      ]
+    }
+  ],
+  "statement": "The CLI currently stores a single token and makes server calls for org list/switch. Under the org-scoped multi-token model, the config shape must change to support an orgs array with a currentOrg pointer. A new hlx token add command must validate tokens via /api/auth/me and store entries under the key's actual org. hlx org list and hlx org switch must become local-only, reading from the orgs array. hxFetch resolves the correct token from the current org entry. Env var overrides continue to take priority. The existing hxFetch X-Helix-Org-ID header emission (http.ts L59-61) should be retained for server-side validation.",
+  "followups": []
+}

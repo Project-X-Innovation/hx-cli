@@ -1,0 +1,39 @@
+{
+  "questions": [
+    "Does the CLI send X-Helix-Org-ID header only for hxi_ key requests when orgId is set?",
+    "Does hlx org switch with an hxi_ key preserve the API key and update only local config?",
+    "Does hlx org list mark the current org from local config for hxi_ keys?",
+    "Is JWT token behavior completely unchanged in all three modified files?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The header is only added when both config.orgId is truthy AND config.apiKey.startsWith('hxi_'). JWT requests never include it.",
+      "evidence": [
+        "src/lib/http.ts L59-61: conditional check for orgId AND hxi_ prefix before setting X-Helix-Org-ID header"
+      ]
+    },
+    {
+      "answer": "Yes. When config.apiKey starts with 'hxi_', the switch command calls saveConfig with only orgId and orgName (read-merge-write preserves apiKey), and never calls /api/auth/switch-org.",
+      "evidence": [
+        "src/org/switch.ts L50-53: hxi_ branch calls saveConfig({ orgId, orgName }) without apiKey field",
+        "src/org/switch.ts L54-67: JWT else branch retains existing server call behavior"
+      ]
+    },
+    {
+      "answer": "Yes. For hxi_ keys, the current marker compares org.id === config.orgId (local state). For JWT tokens, it compares org.id === data.organization.id (server state).",
+      "evidence": [
+        "src/org/list.ts L20-22: ternary branch on config.apiKey.startsWith('hxi_')"
+      ]
+    },
+    {
+      "answer": "Yes. All three files use config.apiKey.startsWith('hxi_') to branch. The else/non-hxi branches preserve the exact existing JWT behavior.",
+      "evidence": [
+        "src/lib/http.ts: header only set for hxi_ keys",
+        "src/org/switch.ts L54-67: else branch is unchanged server call + apiKey replacement",
+        "src/org/list.ts L22: else branch uses data.organization.id (unchanged)"
+      ]
+    }
+  ],
+  "statement": "CLI updated to send X-Helix-Org-ID header on hxi_ API key requests, perform local-only org switch for API keys (preserving the key), and mark the current org from local config in org list. JWT token behavior is completely unchanged in all three files. Typecheck and build pass.",
+  "followups": []
+}

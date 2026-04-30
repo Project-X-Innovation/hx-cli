@@ -1,0 +1,117 @@
+{
+  "problem": "The continuation context (takes priority) requires making CLI tokens org-scoped with local multi-token storage. Currently the CLI stores a single apiKey + optional orgId/orgName. The continuation context requires: (1) new 'hlx token add' command that validates a token with the server and stores it under the key's actual org, (2) multi-org token entries in ~/.hlx/config.json with current-org pointer, (3) 'hlx org list' must be local-only (currently calls /api/auth/me), (4) 'hlx org switch' must switch which stored token is current (not just update orgId), (5) env var token override must continue working for Helix agents.",
+  "files": [
+    {
+      "path": "src/lib/config.ts",
+      "why": "Core config module (82 lines). HxConfig type (L12-19) has single apiKey, url, optional orgId/orgName, autoUpdate, installSource. loadConfig() (L24-49): env vars (HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for token; HELIX_URL > HELIX_INSPECT_BASE_URL > HELIX_INSPECT_URL for URL) take priority; falls back to config.json. saveConfig() (L62-73): read-merge-write. Must change to support multi-token config shape: orgs array of { orgId, orgName, token, url, alias? } entries + currentOrg pointer."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (134 lines). hxFetch() (L37-134): sets X-API-Key for hxi_ tokens (L53-54), Authorization: Bearer for others (L56). Already sends X-Helix-Org-ID when config.orgId is set AND token starts with hxi_ (L59-61). Under org-scoped model the token already represents its org; header may still be sent for server-side validation (must match key's org)."
+    },
+    {
+      "path": "src/org/current.ts",
+      "why": "cmdOrgCurrent (L17-24): calls /api/auth/me and displays org name, ID, user name, email. Under multi-token model, current org is determined by which token entry is selected locally."
+    },
+    {
+      "path": "src/org/list.ts",
+      "why": "cmdOrgList (L10-26): currently calls /api/auth/me to get availableOrganizations from server. For hxi_ tokens, marks current by comparing org.id === config.orgId (L20-22). Continuation context requires this to be LOCAL-ONLY, reading configured org entries from config.json."
+    },
+    {
+      "path": "src/org/switch.ts",
+      "why": "cmdOrgSwitch (L14-72): resolves org name via /api/auth/me for non-CUID input (L27-48). For hxi_ tokens does local-only switch: saveConfig({ orgId, orgName }) (L50-53). For JWT does server-side switch (L55-71). Under multi-token model, switch must change which stored token entry is current, and name resolution must use local config entries."
+    },
+    {
+      "path": "src/org/index.ts",
+      "why": "Org command dispatcher (35 lines). Routes current/list/switch subcommands. May need new subcommand routing or top-level 'token' command may be separate."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main entry point (94 lines). Command dispatch switch (L49-90). Would need a new 'token' command case for 'hlx token add'. requireConfig() called for auth-needed commands."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "Login flows (109 lines): OAuth browser flow (L49-108) and --manual paste (L31-41). Both save single token via saveConfig(). Under multi-token model, login may need adjustment or remain as a separate JWT-oriented flow."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "CLI flag parsing utilities. Needed for implementing --token, --url, --name, --current flags on token add command."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "Build config: strict mode, ES2022 target, Node16 module resolution, outDir: dist. No test config."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Current HxConfig type: { apiKey: string, url: string, orgId?: string, orgName?: string, autoUpdate?: boolean, installSource?: InstallSource }. Single token only.",
+      "source": "src/lib/config.ts:12-19"
+    },
+    {
+      "claim": "loadConfig() env var priority: HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for token; HELIX_URL > HELIX_INSPECT_BASE_URL > HELIX_INSPECT_URL for URL. When env vars used, orgId/orgName NOT loaded (returns { apiKey, url } only).",
+      "source": "src/lib/config.ts:26-29"
+    },
+    {
+      "claim": "hxFetch already sends X-Helix-Org-ID header when config.orgId is set AND token starts with hxi_: headers['X-Helix-Org-ID'] = config.orgId.",
+      "source": "src/lib/http.ts:59-61"
+    },
+    {
+      "claim": "hlx org list currently makes a server call to /api/auth/me and reads availableOrganizations. For hxi_ tokens marks current by config.orgId; for JWT by data.organization.id.",
+      "source": "src/org/list.ts:10-26"
+    },
+    {
+      "claim": "hlx org switch for hxi_ tokens already does local-only switch: saveConfig({ orgId: organizationId, orgName: orgName }). No server call.",
+      "source": "src/org/switch.ts:50-53"
+    },
+    {
+      "claim": "hlx org switch for non-CUID names resolves org name via /api/auth/me availableOrganizations. Handles ambiguous names with error. Under local-only model this must use local config entries.",
+      "source": "src/org/switch.ts:25-48"
+    },
+    {
+      "claim": "No 'hlx token add' command exists. Token management is via 'hlx login' (OAuth or --manual), both saving a single apiKey.",
+      "source": "src/index.ts:49-90, src/login.ts"
+    },
+    {
+      "claim": "No test files exist in the CLI repo. No test script in package.json.",
+      "source": "package.json, file system search"
+    },
+    {
+      "claim": "Quality gates: typecheck (tsc --noEmit), build (tsc). No test or lint commands.",
+      "source": "package.json scripts"
+    },
+    {
+      "claim": "requireConfig() exits with process.exit(1) and message: 'Not authenticated. Run hlx login <server-url> or set HELIX_API_KEY + HELIX_URL env vars.'",
+      "source": "src/lib/config.ts:75-82"
+    },
+    {
+      "claim": "Config stored at ~/.hlx/config.json (CONFIG_DIR = ~/.hlx). saveConfig does read-merge-write with mkdirSync recursive.",
+      "source": "src/lib/config.ts:21-22, 62-73"
+    },
+    {
+      "claim": "Config file is also used to store autoUpdate and installSource metadata from the update system.",
+      "source": "src/lib/config.ts:17-18"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "What should the new multi-token config.json shape look like? Likely an 'orgs' array of { orgId, orgName, token, url, alias? } entries plus a 'currentOrg' pointer, with backward-compat fields (autoUpdate, installSource) preserved.",
+      "impact": "Config shape drives all CLI command changes. Must be decided in diagnosis."
+    },
+    {
+      "question": "Should 'hlx token add' validate the token by calling /api/auth/me to learn the key's org? The continuation context says 'validate the token with the server, learn the token's actual org.'",
+      "impact": "Determines which server endpoint to call and what response shape to expect. Currently /api/auth/me requires requireAuth + requireOrgForApiKey which may block a new token without org header."
+    },
+    {
+      "question": "How should 'hlx login' (OAuth and manual) interact with the new multi-token model? OAuth returns a JWT, not an hxi_ key. Manual login could receive an hxi_ key.",
+      "impact": "May need hlx login --manual to become an alias for hlx token add, or remain a separate flow for JWT-based auth."
+    },
+    {
+      "question": "Should the CLI still send X-Helix-Org-ID header under org-scoped model? The server continuation context says 'if an org header is still accepted for compatibility, it must match the key's org exactly or fail closed.'",
+      "impact": "Determines whether http.ts org header logic stays, is removed, or sends the key's org for validation."
+    },
+    {
+      "question": "How does token validation work for 'hlx token add' when the key has no org header set yet? The server currently requires X-Helix-Org-ID for API-key auth on /api/auth/me (behind requireOrgForApiKey). But under org-scoped model, the key always resolves its own org.",
+      "impact": "Chicken-and-egg: the CLI needs to validate the token before knowing the org, but the server might need the org header. Under org-scoped model this resolves naturally since the key always knows its org."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "questions": [
+    "What is the correct step ordering for the CLI multi-token config changes?",
+    "How does loadConfig maintain backward compatibility while supporting multi-token config?",
+    "How should hlx token add handle the --url flag default?",
+    "How does hlx org switch resolve org names locally?",
+    "How do env-var overrides interact with the new multi-token config?"
+  ],
+  "answers": [
+    {
+      "answer": "Step 1: Redesign config module (types, loadConfig, helpers). Step 2: Create hlx token add command. Step 3: Rewrite hlx org list (local-only). Step 4: Rewrite hlx org switch (local-only). Step 5: Update main entry point, usage, org dispatcher. Step 6: Quality gates. Step 1 is foundational — all other steps depend on the new config types and helpers. Steps 2-4 are independent of each other but all depend on Step 1. Step 5 wires everything together.",
+      "evidence": [
+        "config.ts L12-19: current HxConfig type — Step 1 extends this",
+        "No token add command exists — Step 2 creates it",
+        "list.ts calls /api/auth/me — Step 3 makes local-only",
+        "switch.ts resolves via server — Step 4 makes local-only",
+        "index.ts command dispatch — Step 5 adds token command"
+      ]
+    },
+    {
+      "answer": "loadConfig() continues to return HxConfig | null. Internally it reads the orgs array, finds the entry matching currentOrg, and returns { apiKey: entry.token, url: entry.url, orgId: entry.orgId, orgName: entry.orgName }. All consumers (hxFetch, runInspect, runComments, etc.) see the same { apiKey, url, orgId, orgName } shape they always have. Zero changes needed in hxFetch or any command that consumes HxConfig. The env-var path (L26-29) returns { apiKey, url } immediately, bypassing the multi-token config entirely.",
+      "evidence": [
+        "config.ts L24-49: loadConfig returns HxConfig | null",
+        "http.ts L53-61: hxFetch reads config.apiKey and config.orgId",
+        "config.ts L26-29: env-var path returns early"
+      ]
+    },
+    {
+      "answer": "If --url not provided: use URL from first existing org entry (if any). If no entries exist and no --url, print error and exit. Rationale: most users have one server. Requiring --url on every hlx token add when adding a second token for the same server is poor UX. But the first token must establish the server URL. Each entry stores its own url, so tokens for different servers coexist.",
+      "evidence": [
+        "tech-research/tech-research.md Decision 5: --url flag behavior confirmed"
+      ]
+    },
+    {
+      "answer": "Match input against local orgs array in priority order: (1) exact orgId match, (2) exact alias match, (3) case-insensitive orgName match. If no match: error with list of configured orgs. If multiple name matches: error listing all matches with IDs (fail on ambiguity). This replaces the prior server-based resolution via /api/auth/me availableOrganizations.",
+      "evidence": [
+        "switch.ts L25-48: current server-based resolution to be replaced",
+        "tech-research/tech-research.md: hlx org switch resolution order confirmed"
+      ]
+    },
+    {
+      "answer": "Completely unchanged. loadConfig (L26-29) checks env vars first: HELIX_API_KEY > HELIX_INSPECT_TOKEN > HELIX_INSPECT_API_KEY for token; HELIX_URL > HELIX_INSPECT_BASE_URL > HELIX_INSPECT_URL for URL. When env vars are set, loadConfig returns { apiKey, url } immediately (no orgId, no orgName). The multi-token orgs array is never consulted. This is correct — env vars override for Helix agent runs, which don't need local config.",
+      "evidence": [
+        "config.ts L26-29: env var checks return early with { apiKey, url }",
+        "Continuation context: 'If env token variables are present, they must continue to override local config'"
+      ]
+    }
+  ],
+  "statement": "The CLI implementation plan restructures config to support an orgs array with currentOrg pointer while maintaining HxConfig return type compatibility. Six steps: config module redesign with helper functions, new hlx token add command that validates via /api/auth/me, local-only hlx org list, local-only hlx org switch with ID/alias/name resolution, main entry point wiring, and quality gates. The env-var override path is completely unchanged. hxFetch and all existing commands work without modification through the compatibility layer.",
+  "followups": []
+}
