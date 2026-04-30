@@ -66,7 +66,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
 
     case "create":
       if (isHelpRequested(rest)) {
-        console.log("Usage: hlx tickets create --title <title> --description <desc> --repos <repo1,repo2>");
+        console.log("Usage: hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]");
         process.exit(0);
       }
       await cmdTicketsCreate(config, rest);
