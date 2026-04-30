@@ -31,7 +31,8 @@ function configOrHelp(subArgs: string[]) {
 }
 
 function usage(exitCode: number = 1): never {
-  console.error(`hlx — Helix CLI workbench
+  const output = exitCode === 0 ? console.log : console.error;
+  output(`hlx — Helix CLI workbench
 
 Usage:
   hlx login <server-url>          Authenticate with a Helix server
