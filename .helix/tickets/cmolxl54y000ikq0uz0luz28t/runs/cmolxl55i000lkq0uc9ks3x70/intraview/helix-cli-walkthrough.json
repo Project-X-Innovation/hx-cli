@@ -1,72 +1,73 @@
 {
-  "title": "FIX-347: Post-Install Validation for hlx update",
-  "description": "Walkthrough of changes that add post-install validation to hlx update, ensuring broken installs are detected and reported instead of silently succeeding.",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-347: hlx update Post-Install Validation Walkthrough",
+  "description": "This tour walks through the changes made to add post-install validation to `hlx update`. Previously, the update command declared success based solely on npm's exit code, which could be 0 even when the installed package was broken (missing dist/index.js). The fix refactors performUpdate() to capture stderr via spawnSync, introduces a new validateInstall() function that checks the actual installed artifact, and gates metadata persistence on validation success in both the manual and auto-update code paths.",
   "steps": [
     {
       "file": "src/update/perform.ts",
       "line": 1,
-      "title": "execSync replaced with spawnSync",
-      "description": "The import is changed from execSync to spawnSync. This is the foundation for capturing npm stderr on the success path."
+      "description": "The root cause of the bug was here: performUpdate() used execSync and returned {success: true} whenever npm exited 0, with no further checks. npm can exit 0 while emitting TAR_ENTRY_ERROR warnings that indicate a broken install. Additionally, in quiet (auto-update) mode, stderr was piped but never read on the success path, so npm warnings were silently discarded. This file is the first change in the data-flow sequence because the new stderr field it introduces is required by both validation gates in index.ts.",
+      "title": "Overview: Why performUpdate() needed to change"
     },
     {
       "file": "src/update/perform.ts",
-      "line": 13,
-      "title": "Return type extended with stderr field",
-      "description": "The function's return type now includes `stderr?: string`. This is additive and backward-compatible — existing callers that only destructure `success` and `error` are unaffected."
+      "line": 12,
+      "description": "The return type is widened from {success: boolean; error?: string} to {success: boolean; error?: string; stderr?: string}. This is an additive, non-breaking change. Only two consumers exist — both in src/update/index.ts — and both correctly handle the case where stderr is undefined (non-quiet mode, where output is inherited and not captured). The new field allows callers to surface npm warnings to the user when post-install validation subsequently fails.",
+      "title": "Return type extended with stderr field"
     },
     {
       "file": "src/update/perform.ts",
-      "line": 17,
-      "title": "spawnSync call with shell:true and encoding:utf8",
-      "description": "The npm install command is passed as a single string with shell:true (required for Windows npm.cmd resolution) and encoding:utf8 (returns strings not Buffers). The full command string avoids DEP0190 deprecation warnings."
-    },
-    {
-      "file": "src/update/perform.ts",
-      "line": 44,
-      "title": "stderr captured and returned on success",
-      "description": "In quiet mode, stderr is captured and returned even on success. This allows callers to surface npm tar warnings when post-install validation fails."
-    },
-    {
-      "file": "src/update/validate.ts",
-      "line": 14,
-      "title": "validateInstall function — the core validation logic",
-      "description": "New function that validates the globally-installed package. Returns { valid, binTargetPath, error? } — never throws. Three sequential checks: npm root resolution, file existence, and version execution."
-    },
-    {
-      "file": "src/update/validate.ts",
       "line": 20,
-      "title": "Step 1: Resolve global node_modules via npm root -g",
-      "description": "Uses npm root -g (not npm prefix -g) to get the exact global node_modules path. This is cross-platform and works regardless of npm configuration."
+      "description": "The execSync call is replaced with spawnSync so that the child process's stderr output is available as a buffer on the success path. In quiet mode the stderr pipe is read and returned; in non-quiet (inherit) mode the field is left undefined because output is already visible on the terminal. This enables the validation gates in index.ts to surface npm tar warnings alongside the validation failure message, giving developers actionable context about what went wrong during the install.",
+      "title": "execSync replaced with spawnSync for stderr capture"
+    },
+    {
+      "file": "src/update/validate.ts",
+      "line": 1,
+      "description": "This new module is the core of the fix. It exports validateInstall() which resolves the global npm prefix using 'npm root -g', constructs the expected path to the package's bin target (dist/index.js per the package.json bin contract), and verifies that the file exists and is executable JavaScript. The function avoids import.meta.url because that would check the running CLI, not the newly installed package. All path resolution uses path.join() for cross-platform correctness.",
+      "title": "New file: validateInstall() — validates the actual installed artifact"
     },
     {
       "file": "src/update/validate.ts",
       "line": 50,
-      "title": "Step 2: Check bin target file existence",
-      "description": "Checks that dist/index.js exists at the expected path under the global node_modules. This catches the exact failure scenario from the ticket — a dist/ tree with .d.ts files but no compiled JavaScript."
-    },
-    {
-      "file": "src/update/validate.ts",
-      "line": 59,
-      "title": "Step 3: Run version check to confirm CLI can start",
-      "description": "Runs `node <binTarget> --version` with HLX_SKIP_UPDATE_CHECK=1 to prevent recursion. This catches cases where the file exists but is corrupt or has missing dependencies."
+      "description": "This is the check that catches the exact failure mode described in the ticket: tsconfig.json has declaration:true, which means a partial tsc build produces .d.ts files in dist/ without the corresponding .js files. npm sees a populated dist/ directory and exits 0, but dist/index.js is missing. The existsSync check here returns {valid: false, error: 'Bin target missing: <path>'} in that case, naming the exact path so the error message is actionable. This satisfies acceptance criteria (2): missing dist/index.js exits non-zero with the path named.",
+      "title": "existsSync check — the critical guard against declaration-only builds"
     },
     {
       "file": "src/update/index.ts",
-      "line": 12,
-      "title": "Import validateInstall",
-      "description": "The new validate module is imported into the update command handler."
+      "line": 73,
+      "description": "In runUpdate(), after performUpdate() returns success, validateInstall() is now called before saveConfig(). If validation fails, the function logs the error with the missing path, appends any captured npm stderr (so tar warnings are visible), prints a recovery message mentioning rebuild/relink (acceptance criterion 5), and calls process.exit(1) so the shell receives a non-zero exit code (acceptance criterion 2). The saveConfig() call that persists the commit SHA is only reached when validation passes, preserving the retry path.",
+      "title": "Manual update path: validation gate inserted before metadata save"
     },
     {
       "file": "src/update/index.ts",
-      "line": 80,
-      "title": "Manual update: validation gate before metadata save",
-      "description": "After npm succeeds but BEFORE saveConfig(), validateInstall() is called. If validation fails: error message, npm stderr, and recovery instructions are printed, then process.exit(1). This ensures broken installs are never reported as successful and metadata is never poisoned."
+      "line": 81,
+      "description": "When validateInstall() returns {valid: false}, this block logs the validation error (naming the missing file path), conditionally appends result.stderr so npm tar warnings surfaced by the spawnSync refactor are shown to the user, and emits a recovery message directing the developer to rebuild or relink the package. This satisfies acceptance criteria (3) — npm warnings are visible — and (5) — recovery message mentions rebuild/relink.",
+      "title": "Manual path: error display and recovery message"
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 96,
+      "description": "Because the validation failure branch calls process.exit(1), execution only reaches saveConfig() when the install is confirmed valid. This fixes the second part of the original bug: previously the commit SHA was persisted even for broken installs, which caused subsequent 'hlx update' runs to see 'Already up to date' and skip the retry. Now metadata persistence is correctly gated on a healthy install.",
+      "title": "Manual path: saveConfig now only reached after validation passes"
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 152,
+      "description": "The same validation pattern is applied to the silent auto-update code path (checkAutoUpdate). Here the failure mode is different: a broken silent update should not crash the shell session, so instead of process.exit(1) the function logs a warning and returns early without persisting metadata. This means the next CLI invocation will retry the auto-update. The result.stderr field is checked here too — it is populated from the spawnSync quiet-mode capture, making npm tar warnings visible even in the auto-update path.",
+      "title": "Auto-update path: validation gate in checkAutoUpdate()"
     },
     {
       "file": "src/update/index.ts",
       "line": 155,
-      "title": "Auto-update: validation gate with warn-and-continue",
-      "description": "In the auto-update path, validation failure warns to stderr but does NOT call process.exit(). It returns early before saveConfig(), preserving the user's ability to retry with 'hlx update'. This ensures auto-update never blocks the user's current command."
+      "description": "In checkAutoUpdate(), validation failure triggers a console.warn (not process.exit) and an early return before saveConfig(). This preserves the principle that background auto-updates should never abort the user's current command. The metadata is not saved, so the next CLI run will re-attempt the update. This satisfies acceptance criterion (4): declaration-only dist/ installs are not accepted, and (6): valid installs are entirely unaffected — this branch is only entered when performUpdate() succeeded but validateInstall() did not.",
+      "title": "Auto-update path: warn-and-return instead of exit"
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 1,
+      "description": "The full post-fix data flow is: (1) performUpdate() runs npm install -g and captures stderr via spawnSync; (2) if npm exits non-zero, the existing error path fires unchanged; (3) if npm exits 0, validateInstall() resolves the global npm prefix and checks that dist/index.js exists and is runnable; (4) if validation fails, the appropriate failure handler fires (exit+error in manual mode, warn+return in auto mode) without saving metadata; (5) only if validation passes does saveConfig() persist the new commit SHA. All changes are confined to src/update/ as required. No other modules import performUpdate or validateInstall, so there is zero regression surface outside this subsystem.",
+      "title": "Summary: data flow through the complete update pipeline"
     }
   ]
 }
