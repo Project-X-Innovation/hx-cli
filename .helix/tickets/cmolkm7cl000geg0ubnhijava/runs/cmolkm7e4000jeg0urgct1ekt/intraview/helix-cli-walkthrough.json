@@ -1,0 +1,102 @@
+{
+  "title": "Helix CLI Ticket Resolution, Help, JSON Output & Inspect Ergonomics",
+  "description": "Tour of the changes to improve ticket lookup, help handling, JSON output, and inspection ergonomics in the Helix CLI.",
+  "steps": [
+    {
+      "file": "src/lib/flags.ts",
+      "line": 24,
+      "title": "New isHelpRequested utility",
+      "description": "Added shared help-check function used by all routers and commands to detect --help/-h before any validation or API calls."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 18,
+      "title": "extractTicketRef: Parse ticket reference from args",
+      "description": "Replaces the duplicated resolveTicketId() functions. Extracts raw ticket reference from --ticket flag, HELIX_TICKET_ID env var, or first positional arg."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 49,
+      "title": "matchTicket: Pure ticket matching logic",
+      "description": "Core matching function (primary test target). Match priority: exact ID > case-insensitive short ID > numeric suffix. Returns null for ambiguous matches."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 86,
+      "title": "resolveTicket: API-backed resolution",
+      "description": "Fetches ticket list from GET /api/tickets, calls matchTicket, and returns {id, shortId}. Error messages include the input reference and org context."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 22,
+      "title": "configOrHelp: Auth-free help support",
+      "description": "Key deviation from plan: requireConfig() runs before routers, so help would fail without auth. configOrHelp() provides a stub config for help-only invocations."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 108,
+      "title": "Global --help/-h case in main switch",
+      "description": "Added explicit --help/-h cases that call usage(0) for a clean exit. The usage() function now accepts an optional exit code parameter."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 35,
+      "title": "Router-level help check",
+      "description": "Shows parent tickets usage when subcommand is --help/-h or missing. Uses direct comparison (not isHelpRequested(args)) so per-command help isn't intercepted."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 57,
+      "title": "tickets get: Shared resolver + --json",
+      "description": "Resolves ticket reference via shared resolver, passes rest args to cmdTicketsGet for --json flag detection."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 30,
+      "title": "formatDate: Safe timestamp rendering",
+      "description": "Validates Date objects before rendering. Handles null/undefined completedAt based on run status (in progress vs N/A). Fixes the Invalid Date bug."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 86,
+      "title": "tickets get --json output",
+      "description": "JSON branch fetches ticket data and outputs full JSON with untruncated description. Text branch retains existing format with fixed timestamps."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 90,
+      "title": "tickets list --json output",
+      "description": "JSON branch outputs the full items array as JSON. Text branch now includes abbreviated internal ID alongside short ID."
+    },
+    {
+      "file": "src/tickets/continue.ts",
+      "line": 9,
+      "title": "continue: rawRef parameter for positional filtering",
+      "description": "New rawRef parameter fixes the positional[0] === ticketId comparison when the user passed '339' but ticketId was resolved to a CUID."
+    },
+    {
+      "file": "src/comments/index.ts",
+      "line": 1,
+      "title": "Comments: Duplicate resolver eliminated",
+      "description": "Removed duplicate resolveTicketId(), imported shared resolver. Comments now support short ID and numeric ticket number resolution."
+    },
+    {
+      "file": "src/inspect/index.ts",
+      "line": 49,
+      "title": "inspect db: --query flag for PowerShell safety",
+      "description": "Added --query flag as alternative to positional SQL args. Avoids double-quote issues in PowerShell. Help text includes PowerShell-safe example."
+    },
+    {
+      "file": "src/lib/resolve-ticket.test.ts",
+      "line": 1,
+      "title": "Unit tests: Resolver and extraction",
+      "description": "24 tests covering matchTicket (ID, short ID, numeric, no match, ambiguity) and extractTicketRef (flag, env, positional, priority)."
+    },
+    {
+      "file": "src/lib/flags.test.ts",
+      "line": 1,
+      "title": "Unit tests: Help detection and flags",
+      "description": "6 tests for isHelpRequested plus additional tests for hasFlag, getFlag, and getPositionalArgs."
+    }
+  ]
+}

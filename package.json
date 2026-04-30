@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test dist/**/*.test.js",
     "prepare": "npm run build"
   },
   "engines": {

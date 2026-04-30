@@ -1,40 +1,47 @@
 import type { HxConfig } from "../lib/config.js";
-import { getFlag } from "../lib/flags.js";
+import { isHelpRequested } from "../lib/flags.js";
+import { extractTicketRef, resolveTicket } from "../lib/resolve-ticket.js";
 import { cmdList } from "./list.js";
 import { cmdPost } from "./post.js";
 
-function resolveTicketId(args: string[]): string {
-  const flagValue = getFlag(args, "--ticket");
-  if (flagValue) return flagValue;
+function commentsUsage(exitCode: number = 1): never {
+  const output = exitCode === 0 ? console.log : console.error;
+  output(`Usage:
+  hlx comments list [--ticket <ref>] [--helix-only] [--since <iso-date>]
+  hlx comments post [--ticket <ref>] <message>
 
-  const envValue = process.env.HELIX_TICKET_ID;
-  if (envValue) return envValue;
-
-  console.error("Error: No ticket ID provided. Use --ticket <id> or set HELIX_TICKET_ID env var.");
-  process.exit(1);
-}
-
-function commentsUsage(): never {
-  console.error(`Usage:
-  hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
-  hlx comments post [--ticket <id>] <message>`);
-  process.exit(1);
+Ticket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).`);
+  process.exit(exitCode);
 }
 
 export async function runComments(config: HxConfig, args: string[]): Promise<void> {
   const subcommand = args[0];
   const rest = args.slice(1);
 
+  if (!subcommand || subcommand === "--help" || subcommand === "-h") {
+    commentsUsage(0);
+  }
+
   switch (subcommand) {
     case "list": {
-      const ticketId = resolveTicketId(rest);
-      await cmdList(config, ticketId, rest);
+      if (isHelpRequested(rest)) {
+        console.log("Usage: hlx comments list [--ticket <ref>] [--helix-only] [--since <iso-date>]");
+        process.exit(0);
+      }
+      const rawRef = extractTicketRef(rest);
+      const resolved = await resolveTicket(config, rawRef);
+      await cmdList(config, resolved.id, rest);
       break;
     }
 
     case "post": {
-      const ticketId = resolveTicketId(rest);
-      await cmdPost(config, ticketId, rest);
+      if (isHelpRequested(rest)) {
+        console.log("Usage: hlx comments post [--ticket <ref>] <message>");
+        process.exit(0);
+      }
+      const rawRef = extractTicketRef(rest);
+      const resolved = await resolveTicket(config, rawRef);
+      await cmdPost(config, resolved.id, rest);
       break;
     }
 

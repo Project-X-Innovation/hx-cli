@@ -1,6 +1,6 @@
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
-import { requireFlag, getFlag } from "../lib/flags.js";
+import { requireFlag, getFlag, isHelpRequested } from "../lib/flags.js";
 
 type CreateTicketResponse = {
   ticket: { id: string; shortId: string; status: string };
@@ -8,6 +8,11 @@ type CreateTicketResponse = {
 };
 
 export async function cmdTicketsCreate(config: HxConfig, args: string[]): Promise<void> {
+  if (isHelpRequested(args)) {
+    console.log("Usage: hlx tickets create --title <title> --description <desc> --repos <repo1,repo2>");
+    process.exit(0);
+  }
+
   const title = requireFlag(args, "--title", "--title <title> is required.");
   const description = requireFlag(args, "--description", "--description <desc> is required.");
   const reposRaw = requireFlag(args, "--repos", "--repos <repo1,repo2> is required.");
