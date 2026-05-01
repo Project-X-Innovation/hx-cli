@@ -17,27 +17,5 @@ Helix manages operations. It has a sandbox. It has agents. It can do all sorts o
 
 #RSH-354 #RSH-353
 
-## Referenced Tickets
-
-2 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### RSH-353: Mind Map For Agents & Humans
-- Mode: RESEARCH | Status: RUNNING
-- Completed runs: 0 ()
-- Materialized files: 0 artifacts
-- Path: `.helix-refs/RSH-353/`
-- Manifest: `.helix-refs/RSH-353/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
-### RSH-354: Helix Global For SMB
-- Mode: RESEARCH | Status: RUNNING
-- Completed runs: 0 ()
-- Materialized files: 0 artifacts
-- Path: `.helix-refs/RSH-354/`
-- Manifest: `.helix-refs/RSH-354/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - (none)
