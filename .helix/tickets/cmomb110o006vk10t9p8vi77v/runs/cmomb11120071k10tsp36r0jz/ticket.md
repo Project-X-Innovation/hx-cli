@@ -45,18 +45,5 @@ So maybe that's the future, having a repo for business intel, and that's how we 
 
 #RSH-358
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### RSH-358: Repository vs Database
-- Mode: RESEARCH | Status: REPORT_READY
-- Completed runs: 1 (run-1)
-- Materialized files: 22 artifacts
-- Path: `.helix-refs/RSH-358/`
-- Manifest: `.helix-refs/RSH-358/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - (none)
