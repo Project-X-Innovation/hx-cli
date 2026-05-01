@@ -1,0 +1,33 @@
+{
+  "problem": "RSH-358 mentions the CLI as a limitation of the database approach: 'there is a CLI that other agents can use but it's not inherently portable.' The CLI currently has no mind map commands. If storage moves to repository-based, the CLI's role in mind map access would change — agents could interact with mind maps directly via git/files rather than through CLI HTTP calls.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main entry point. Registers top-level commands: login, token, org, tickets, inspect, comments, update. No mind map commands exist."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch) with retry logic and auth headers. All CLI operations go through this to reach the server API. This is the 'not inherently portable' layer the user references."
+    },
+    {
+      "path": "src/tickets/",
+      "why": "Ticket command implementations. Closest analog to what mind map commands would look like if added."
+    },
+    {
+      "path": "package.json",
+      "why": "CLI binary definition (hlx), dependencies. TypeScript + Commander.js CLI framework."
+    }
+  ],
+  "facts": [
+    "No mind map commands exist in the CLI — zero references to mindmap/mind-map in the command registry.",
+    "The CLI communicates with the server exclusively via HTTP REST API (hxFetch with X-API-Key or Bearer auth).",
+    "The ticket explicitly calls out the CLI as not 'inherently portable' — agents must go through Helix's API to interact with data.",
+    "The CLI supports: tickets (CRUD, rerun, continue, artifacts, bundle), inspect (db, logs, api), comments, org management, auth.",
+    "With repository-based storage, agents could bypass the CLI entirely and work with mind map files directly via git operations."
+  ],
+  "unknowns": [
+    "Whether the CLI would still need mind map commands if storage is repository-based (agents could use git directly).",
+    "Whether a CLI mind map command set was planned for the database approach in RSH-353 (no evidence found).",
+    "What 'portability' means in the CLI context: format portability, access portability, or independence from Helix infrastructure."
+  ]
+}
