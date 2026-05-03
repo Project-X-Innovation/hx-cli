@@ -1,0 +1,28 @@
+{
+  "problem": "The ticket asks for better platform abstractions across Helix Global, Netsuite, and SMB. The helix-cli is completely platform-agnostic — it has zero platform-specific gating logic. All platform differentiation is handled server-side. The CLI operates uniformly regardless of which platform the connected organization uses.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point with command routing. No platform branching — all commands operate uniformly."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config types (HxConfig, OrgEntry, MultiTokenConfig). No platform field in config — only authentication and org identity."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch). Token format detection (hxi_ prefix) but no platform branching."
+    }
+  ],
+  "facts": [
+    "Zero instances of platform-specific gating (NETSUITE, GENERAL, SMB, helix-global, helix-netsuite, helix-smb) found in helix-cli source code.",
+    "CLI config types (HxConfig, OrgEntry, MultiTokenConfig) contain no platform field.",
+    "All commands (login, org, tickets, inspect, comments, token, update) operate uniformly regardless of connected org platform.",
+    "Only conditional logic: token format detection (hxi_ prefix), OS detection for browser opening (process.platform), and org matching by ID/alias/name.",
+    "Build: tsc. Typecheck: tsc --noEmit. No lint or test runner configured."
+  ],
+  "unknowns": [
+    "Whether a future platform abstraction would need to surface in the CLI (e.g., platform-aware commands or output formatting).",
+    "Whether the CLI should be aware of platform capabilities for command validation before sending to server."
+  ]
+}
