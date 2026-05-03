@@ -1,0 +1,65 @@
+{
+  "problem": "The ticket describes an Ego Agent concept requiring CLI-level support for agent-to-system interaction. The CLI currently provides comment posting/listing (hlx comments) and production inspection (hlx inspect) as a stateless command executor for agents. It is the mechanism through which in-sandbox agents post feedback and read runtime data, making it a critical interface layer for the ego agent's operational capabilities.",
+  "files": [
+    {
+      "path": "src/comments/post.ts",
+      "why": "CLI command to post a comment to a ticket. Used by in-sandbox agents to post @Helix-tagged comments. Resolves ticket ID from --ticket flag or HELIX_TICKET_ID env var."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "CLI command to list comments with --helix-only and --since filters. Used by agents to read discussion context."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comment command router. Dispatches to list/post subcommands."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Execute SQL queries against production databases. Relevant to ego agent's ability to diagnose production issues."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Query production logs. Relevant to ego agent's deploy failure diagnosis capability."
+    },
+    {
+      "path": "src/inspect/api.ts",
+      "why": "Call production API endpoints. Relevant to ego agent's runtime inspection capabilities."
+    },
+    {
+      "path": "src/inspect/repos.ts",
+      "why": "List available repositories and their inspection types (DATABASE, LOGS, API)."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client with 30s timeout, 3 retries with exponential backoff. Centralized resilience for all CLI operations."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Configuration loading from env vars (HELIX_API_KEY, HELIX_INSPECT_TOKEN, HELIX_URL) or ~/.hlx/config.json."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point. Routes to login, inspect, or comments commands."
+    },
+    {
+      "path": "package.json",
+      "why": "Zero runtime dependencies, Node >=18. Build: tsc. Typecheck: tsc --noEmit."
+    }
+  ],
+  "facts": [
+    "The CLI is a stateless command executor: agents provide context (ticket ID, SQL, log queries), CLI makes HTTP requests, returns JSON, exits.",
+    "Comment commands: hlx comments list (with --helix-only, --since filters) and hlx comments post (positional message arg).",
+    "Inspect commands: hlx inspect db (SQL), hlx inspect logs (with --limit), hlx inspect api (HTTP proxy), hlx inspect repos (list available).",
+    "Auth supports both Bearer token and API key (hxi_ prefix detection). Config from env vars or ~/.hlx/config.json.",
+    "HTTP layer has 30s timeout, 3 retries with exponential backoff (2s base + jitter), retryable on 429/5xx.",
+    "Zero runtime dependencies - uses only Node.js built-in fetch and standard library.",
+    "The CLI does NOT clone repositories, manage sandboxes, or orchestrate runs. It is a thin RPC interface.",
+    "HELIX_TICKET_ID env var provides implicit ticket context for comments commands inside sandbox agents."
+  ],
+  "unknowns": [
+    "No CLI command exists for listing or managing multiple tickets (only per-ticket comment interaction). Unknown if a grand ego agent would need CLI-level multi-ticket commands.",
+    "No CLI command for APL inspection or modification. Unknown if agents need CLI access to APL artifacts.",
+    "No CLI command for viewing run status or triggering reruns. These operations go through the web API directly.",
+    "Unknown if the CLI would need to support real-time streaming (SSE/WebSocket) for live ego agent interaction, or if comment polling is sufficient."
+  ]
+}
