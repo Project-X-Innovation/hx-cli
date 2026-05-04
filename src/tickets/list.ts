@@ -37,6 +37,7 @@ async function resolveUserId(config: HxConfig, input: string): Promise<string> {
 
 export async function cmdTicketsList(config: HxConfig, args: string[]): Promise<void> {
   const queryParams: Record<string, string> = {};
+  const jsonOutput = hasFlag(args, "--json");
 
   // --archived (boolean flag)
   if (hasFlag(args, "--archived")) {
@@ -78,13 +79,23 @@ export async function cmdTicketsList(config: HxConfig, args: string[]): Promise<
   }
 
   if (items.length === 0) {
-    console.log("No tickets found.");
+    if (jsonOutput) {
+      console.log("[]");
+    } else {
+      console.log("No tickets found.");
+    }
+    return;
+  }
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(items, null, 2));
     return;
   }
 
   for (const ticket of items) {
     const reporter = ticket.reporter.name ?? ticket.reporter.email;
     const updated = new Date(ticket.updatedAt).toLocaleString();
-    console.log(`${ticket.shortId}  ${ticket.status.padEnd(12)}  ${reporter.padEnd(20)}  ${updated}  ${ticket.title}`);
+    const idAbbr = ticket.id.slice(0, 8) + "...";
+    console.log(`${ticket.shortId}  ${idAbbr}  ${ticket.status.padEnd(12)}  ${reporter.padEnd(20)}  ${updated}  ${ticket.title}`);
   }
 }

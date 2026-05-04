@@ -1,0 +1,46 @@
+{
+  "questions": [
+    "What is the correct step ordering and dependency chain for implementing ticket resolution, help handling, JSON output, and timestamp fixes?",
+    "How should the continue.ts command handle the mismatch between raw ticket reference and resolved internal ID for positional arg filtering?",
+    "What is the minimal set of files that need direct modification versus those that only need resolver adoption through the router?",
+    "What unit tests are needed to verify resolver behavior without requiring API access?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation follows a bottom-up dependency chain: (1) shared utilities first (isHelpRequested in flags.ts, test script in package.json), (2) core resolver module (resolve-ticket.ts), (3) global help in index.ts, (4) ticket router refactoring (tickets/index.ts), (5-6) individual command fixes (get.ts for timestamps/JSON, list.ts for JSON), (7) help in remaining commands, (8) continue.ts positional arg fix, (9) comments dedup, (10) inspect ergonomics, (11) tests, (12) build verification. Each step depends only on prior steps and can be verified incrementally with typecheck.",
+      "evidence": [
+        "src/tickets/index.ts:13-26 — resolveTicketId must be replaced before commands can use the shared resolver",
+        "src/lib/flags.ts — isHelpRequested must exist before any help checks can be added",
+        "src/tickets/get.ts:50-51 — timestamp fix and --json are independent of resolver but depend on router passing args",
+        "tech-research/tech-research.md — three-level help requires utility → global → router → command ordering"
+      ]
+    },
+    {
+      "answer": "The continue.ts command (lines 12-15) compares positional[0] === ticketId to filter the ticket reference from continuation context. After resolution, ticketId is the internal CUID while positional[0] remains the raw input (e.g., '339'). Fix: pass the raw reference as a fourth parameter rawRef to cmdTicketsContinue, and compare positional[0] against rawRef ?? ticketId. This is the minimal change that preserves the existing filtering logic while handling all reference formats.",
+      "evidence": [
+        "src/tickets/continue.ts:12-15 — positional[0] === ticketId comparison breaks when ticketId is resolved",
+        "src/tickets/index.ts:71-75 — router passes resolveTicketId(rest) result as ticketId, rest as args",
+        "tech-research/tech-research.md:52-56 — extractTicketRef replaces resolveTicketId; the raw ref is available before resolution"
+      ]
+    },
+    {
+      "answer": "Direct modifications: flags.ts (+isHelpRequested), resolve-ticket.ts (new), index.ts (+help case), tickets/index.ts (router refactor), get.ts (timestamps/JSON), list.ts (JSON), latest.ts (+help), create.ts (+help), continue.ts (+rawRef param), comments/index.ts (dedup), inspect/index.ts (+query/help), package.json (+test script). Files that need NO direct modification because the resolver is applied in the router: artifacts.ts, artifact.ts, rerun.ts, bundle.ts. These commands receive the resolved internal ID from the router and their internal logic is unchanged.",
+      "evidence": [
+        "src/tickets/artifacts.ts:18 — receives ticketId from router, no internal ID extraction",
+        "src/tickets/rerun.ts:9 — receives ticketId from router, no internal ID extraction",
+        "src/tickets/artifact.ts:19-27 — uses getFlag for --step/--repo/--run, ticketId from router",
+        "src/tickets/bundle.ts:29-30 — uses requireFlag for --out, ticketId from router"
+      ]
+    },
+    {
+      "answer": "The pure matchTicket() function is the primary test target — it takes a pre-built items array and reference string, requiring zero HTTP or API access. Tests should cover: (1) exact internal ID match, (2) case-insensitive short ID match, (3) numeric suffix extraction and match, (4) no-match returns null, (5) ambiguous numeric match (two items with same suffix) returns null, (6) empty items array. Additionally, extractTicketRef can be tested with mock args/env. isHelpRequested is a simple array-includes check testable with fixture arrays. formatDate (if exported) can be tested with various date string inputs.",
+      "evidence": [
+        "tech-research/tech-research.md:97-99 — matchTicket is a pure function, no side effects, primary test target",
+        "tech-research/tech-research.md:174-179 — compile-first approach with node:test, zero added deps",
+        "src/lib/resolve-repo.ts:20-31 — existing resolution pattern shows pure matching logic is easily testable"
+      ]
+    }
+  ],
+  "statement": "The implementation plan defines 12 atomic, sequenced steps to fix 5 defect categories in helix-cli: ticket ID resolution (shared resolver following resolve-repo.ts pattern), --help handling (three-level with shared utility), --json output (for tickets list and get), timestamp rendering (validated Date construction), and inspect db ergonomics (--query flag). Steps follow a bottom-up dependency chain from shared utilities through router refactoring to individual command fixes, tests, and build verification. All changes are within helix-cli with zero new dependencies. The continue.ts positional arg filtering issue is addressed by passing the raw reference alongside the resolved ID. Files that only receive the resolved ID through the router (artifacts.ts, artifact.ts, rerun.ts, bundle.ts) need no direct modification.",
+  "followups": []
+}

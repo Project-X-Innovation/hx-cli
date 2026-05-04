@@ -1,0 +1,97 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Helix CLI: Ticket Resolution, Help Handling, JSON Output & Inspection Ergonomics",
+  "description": "This tour walks through a multi-defect fix in helix-cli that addresses five root causes: (1) raw ticket ID passthrough causing HTTP 404s for short IDs and numeric references, (2) missing --help interception at global/router/command levels, (3) absent --json output mode for agent consumption, (4) Invalid Date rendering for run timestamps, and (5) PowerShell-unsafe SQL input in inspect db. The fix introduces a shared client-side ticket resolver (fetch-list-then-match), a shared help-detection utility, --json flags on list/get, a safe formatDate helper, and a --query flag for inspect db — all with 30 unit tests and zero new dependencies.",
+  "steps": [
+    {
+      "file": "src/lib/flags.ts",
+      "line": 1,
+      "description": "Foundation layer. This file gains the `isHelpRequested` utility plus shared helpers `hasFlag`, `getFlag`, and `getPositionalArgs`. All three levels of help interception (global, router, per-command) depend on `isHelpRequested` existing here first. Without a central utility, every command would need its own ad-hoc argv scan, which was the root cause (RC-2) of --help flags either erroring or silently executing command logic instead of printing usage.",
+      "title": "Step 1 — Shared flag utilities and isHelpRequested"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 1,
+      "description": "New module implementing the fetch-list-then-match pattern (mirroring the proven `resolve-repo.ts`). `matchTicket` performs three-tier matching in priority order: (1) exact internal CUID match against `item.id`, (2) case-insensitive short ID match against `item.shortId` (e.g. 'BLD-339'), (3) numeric suffix match extracting the number from `item.shortId` (e.g. '339' matches 'BLD-339'). Ambiguity produces an explicit error listing all matches and the org name; not-found produces an error showing the input ref and org name. This directly fixes RC-1: the old `resolveTicketId()` returned raw input unchanged, which the API rejected with 404 for any non-CUID format.",
+      "title": "Step 2 — Core shared ticket resolver"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 117,
+      "description": "Lines 117-126 emit the two user-facing error paths. The ambiguous-match error lists all candidate tickets and names the org so the user can supply a more specific reference. The not-found error echoes back the exact input ref plus org name so the user knows which org was searched. This satisfies AC-9 (unresolved references fail with clear errors including org context) and the implementation principle 'Fail clearly, never silently'.",
+      "title": "Step 2b — Ambiguity and not-found error messages with org context"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 1,
+      "description": "The top-level entry point gains a `configOrHelp()` guard so that `hlx --help` and `hlx -h` print usage and exit before any config loading or API calls. RC-2 identified that the main switch had no early-exit for the help flag at this level; users got config errors or unexpected behavior instead of usage text. The change also ensures the help output is written to stdout (not stderr) for correct pipe and pager behaviour.",
+      "title": "Step 3 — Global --help/-h interception"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 1,
+      "description": "The router replaces the old `resolveTicketId()` raw-passthrough (lines 13-26) with `extractTicketRef` + `resolveTicket` from `resolve-ticket.ts`. A single resolution call now serves all six ticket-ref subcommands (get, artifacts, artifact, rerun, continue, bundle). Lines 35-37 add router-level help interception; lines 57-59 add per-command help checks. This is the highest-leverage change: one refactor eliminates 404s across every ticket subcommand simultaneously.",
+      "title": "Step 4 — Ticket router refactoring: adopt shared resolver + per-command help"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 32,
+      "description": "Lines 32-44 replace unsafe `new Date(rawString).toLocaleString()` with a `formatDate` helper that validates the Date object with an `isNaN` check before formatting. If the date is invalid it returns the raw string rather than 'Invalid Date'. The helper also cross-references `runStatus` to omit finish timestamps for runs that have not yet completed. This fixes RC-4 (Invalid Date rendering) and satisfies AC-8.",
+      "title": "Step 5a — formatDate: safe date validation and terminal status cross-reference"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 85,
+      "description": "Lines 85-94 check for the `--json` flag and, when present, emit `JSON.stringify` of the full ticket object with the untruncated description field. The existing human-readable text output remains the default, preserving backward compatibility. This satisfies AC-6 and the 'additive, not destructive' implementation principle.",
+      "title": "Step 5b — --json output for tickets get"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 90,
+      "description": "Lines 90-93 add `--json` output mode for `tickets list`, emitting all `TicketItem` fields including the internal `id` field that agents need for subsequent API calls. The text output path is also updated to display the internal ID alongside the short ID, satisfying AC-5 and the agent-consumption requirements of the product spec.",
+      "title": "Step 6 — --json output for tickets list + internal ID in text output"
+    },
+    {
+      "file": "src/tickets/latest.ts",
+      "line": 1,
+      "description": "A help interception guard is added before the command's API call sequence. Previously `hlx tickets latest --help` would execute the full network request and then print or fail. The guard satisfies AC-7 (help flags work at all three levels without API calls) for this subcommand.",
+      "title": "Step 7a — Help check in tickets latest"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 1,
+      "description": "Same pattern: `isHelpRequested` guard added before validation logic so that `hlx tickets create --help` exits cleanly without triggering required-field errors. Fixes the RC-2 manifestation in the create command.",
+      "title": "Step 7b — Help check in tickets create"
+    },
+    {
+      "file": "src/tickets/continue.ts",
+      "line": 1,
+      "description": "This command compared `positional[0] === ticketId` to strip the ticket reference from the continuation context args. After resolution, `ticketId` is the internal CUID while `positional[0]` is still the raw user input (e.g. '339'), so the comparison always failed and the raw ref leaked into the continuation payload. The fix passes the raw reference as a fourth `rawRef` parameter so the filter uses the original string. Help interception is also added before any validation.",
+      "title": "Step 8 — continue.ts rawRef parameter for positional arg filtering"
+    },
+    {
+      "file": "src/comments/index.ts",
+      "line": 1,
+      "description": "The comments router contained a duplicate `resolveTicketId()` (lines 6-14) with identical raw-passthrough logic — the same RC-1 defect. This block is removed and replaced with the shared `resolveTicket` call from `resolve-ticket.ts`. Help handling is also added. Removing the duplicate ensures there is exactly one ticket resolution code path in the codebase, eliminating drift risk.",
+      "title": "Step 9 — Remove duplicate resolveTicketId and adopt shared resolver"
+    },
+    {
+      "file": "src/inspect/index.ts",
+      "line": 57,
+      "description": "Lines 57-59 add a `--query` / `-q` flag as an alternative to positional SQL arguments. On PowerShell, passing SQL containing Postgres double-quoted identifiers (e.g. `SELECT \"id\" FROM ...`) as positional args causes quoting failures. The `--query` flag accepts the SQL as a named string value, sidestepping shell quoting rules. Updated usage examples include PowerShell-safe invocations. Help checks are also added for all inspect subcommands. Satisfies AC-11.",
+      "title": "Step 10 — --query flag for inspect db and PowerShell-safe examples"
+    },
+    {
+      "file": "src/lib/resolve-ticket.test.ts",
+      "line": 1,
+      "description": "Tests for `matchTicket` cover internal ID exact match, short ID case-insensitive match, numeric suffix match, ambiguity detection, empty list, and priority ordering. Tests for `extractTicketRef` cover --ticket flag, HELIX_TICKET_ID env var, and positional arg fallback. Tests for `isHelpRequested`, `hasFlag`, `getFlag`, and `getPositionalArgs` are in `flags.test.ts`. All 30 tests run via `node:test` (Node >= 18 built-in), zero new dependencies. The `test` script is wired into `package.json`. Satisfies AC-10.",
+      "title": "Step 11 — Unit tests: 30 tests covering all resolution paths"
+    },
+    {
+      "file": "package.json",
+      "line": 1,
+      "description": "The `test` script entry added here runs `node:test` against the two new test files. This is the final integration checkpoint: `npm test` verifies all 30 unit tests pass, `tsc --noEmit` confirms typecheck passes across all 14 changed files. Together these gates confirm that the shared resolver, flag utilities, --json flags, formatDate, rawRef fix, duplicate removal, and inspect ergonomics all compose correctly with no regressions in unmodified code paths.",
+      "title": "Step 12 — Test script and build verification"
+    }
+  ]
+}

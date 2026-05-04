@@ -1,0 +1,117 @@
+{
+  "problem": "hlx update reports success based solely on npm exit code without validating that the installed package is actually usable. A broken install (dist/ containing only .d.ts files, no compiled JS entrypoint) leaves global hlx unusable while the update command exits 0 with a success message.",
+  "files": [
+    {
+      "path": "src/update/perform.ts",
+      "why": "Core update execution. Runs `npm install -g` and returns success/failure based only on npm exit code (line 19). No post-install validation of the installed package contents. This is the primary gap — success is declared when npm exits 0 even if the installed package is missing dist/index.js.",
+      "lines": "1-33"
+    },
+    {
+      "path": "src/update/index.ts",
+      "why": "Update command handler with two paths: manual `runUpdate()` (line 33-90) and auto `checkAutoUpdate()` (line 97-151). Both trust performUpdate().success without any post-install validation. Manual path prints 'Update complete' (line 89) and saves metadata (line 80-87) immediately on npm success. Auto path similarly saves metadata (line 139-145) and prints 'Updated to latest' (line 147).",
+      "lines": "1-151"
+    },
+    {
+      "path": "src/update/check.ts",
+      "why": "Defines CANONICAL_REPO ('Project-X-Innovation/helix-cli'), CANONICAL_BRANCH ('main'), and CANONICAL_REPO_URL. fetchRemoteSha() uses git ls-remote. These constants are used in the npm install spec (`github:${CANONICAL_REPO}#${CANONICAL_BRANCH}`).",
+      "lines": "1-44"
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "getPackageVersion() reads package.json at runtime from a path relative to the compiled dist/ location. Could serve as a lightweight validation probe since it exercises the same dist/ path resolution that a broken install would fail.",
+      "lines": "1-20"
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entrypoint. Routes 'update' command to runUpdate() (line 82-83). Runs checkAutoUpdate() pre-dispatch for non-skipped commands (line 47-49). SKIP_AUTO_UPDATE set includes 'update', '--version', '-v' (line 43). The --version handler calls getPackageVersion() (line 88).",
+      "lines": "1-98"
+    },
+    {
+      "path": "package.json",
+      "why": "Defines the bin contract: `\"hlx\": \"dist/index.js\"` (line 7). The 'files' field includes only 'dist' (line 17-19). tsconfig generates both .js and .d.ts to dist/. The prepare script runs build on install. No test script or test framework configured.",
+      "lines": "1-25"
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "Build configuration: outDir=dist, rootDir=src, declaration=true (generates .d.ts alongside .js). The declaration:true setting means dist/ will always contain .d.ts files even in partial/broken builds, which is how the failure scenario produces a dist/ tree with .d.ts but no .js.",
+      "lines": "1-15"
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines InstallSource type (mode, repo, branch, commit) and HxConfig type. saveConfig() merges updates into ~/.hlx/config.json. loadFullConfig() reads the raw config. The update flow persists installSource metadata here on success — relevant because premature metadata save on a broken install would poison the local SHA comparison for future updates.",
+      "lines": "1-221"
+    }
+  ],
+  "facts": [
+    {
+      "claim": "performUpdate() returns {success: true} solely based on npm install -g exit code 0",
+      "evidence": "src/update/perform.ts lines 14-19: try block runs execSync npm install, returns {success: true} with no further checks"
+    },
+    {
+      "claim": "No post-install validation exists anywhere in the update flow",
+      "evidence": "src/update/index.ts lines 72-89 and 136-147: both runUpdate() and checkAutoUpdate() check only result.success from performUpdate(), then immediately save metadata and print success"
+    },
+    {
+      "claim": "The bin contract requires dist/index.js to exist",
+      "evidence": "package.json line 7: \"bin\": { \"hlx\": \"dist/index.js\" }"
+    },
+    {
+      "claim": "tsconfig.json generates declaration files (.d.ts) alongside JavaScript output",
+      "evidence": "tsconfig.json line 14: \"declaration\": true — this explains how a broken build could produce .d.ts files without .js files"
+    },
+    {
+      "claim": "npm stderr output is only captured on failure (exception path), not on success",
+      "evidence": "src/update/perform.ts lines 15-17: in quiet mode stdio is ['pipe','pipe','pipe'] but stdout/stderr are not inspected on success. In non-quiet mode stdio is 'inherit' so warnings print to terminal but are not captured programmatically."
+    },
+    {
+      "claim": "The prepare script (npm run build → tsc) runs during npm install from GitHub",
+      "evidence": "package.json line 12: \"prepare\": \"npm run build\" — this is the npm lifecycle hook that builds during install"
+    },
+    {
+      "claim": "performUpdate sets HLX_SKIP_UPDATE_CHECK=1 env var to prevent recursive update during install",
+      "evidence": "src/update/perform.ts line 18: env: { ...process.env, HLX_SKIP_UPDATE_CHECK: '1' }"
+    },
+    {
+      "claim": "No test framework, test files, or test script exist in the repository",
+      "evidence": "package.json has no test script; devDependencies contain only @types/node and typescript; glob for **/*.test.* returned no files"
+    },
+    {
+      "claim": "No CI workflow files exist",
+      "evidence": "Glob for .github/**/* returned no results"
+    },
+    {
+      "claim": "Quality gates available: npm run build (tsc) and npm run typecheck (tsc --noEmit)",
+      "evidence": "package.json lines 10-11: \"build\": \"tsc\", \"typecheck\": \"tsc --noEmit\""
+    },
+    {
+      "claim": "Two distinct update paths exist with different failure behavior: manual exits process, auto silently continues",
+      "evidence": "src/update/index.ts: runUpdate() calls process.exit(1) on failure (line 76); checkAutoUpdate() logs warning and returns without blocking (line 149)"
+    },
+    {
+      "claim": "The install spec uses GitHub source, not npm registry",
+      "evidence": "src/update/perform.ts line 12: installSpec = `github:${CANONICAL_REPO}#${CANONICAL_BRANCH}` resulting in 'github:Project-X-Innovation/helix-cli#main'"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "How should post-install validation interact with the auto-update path (checkAutoUpdate)? Manual update should fail hard, but auto-update currently never blocks command execution.",
+      "impact": "Design decision for whether a broken auto-update should warn-and-continue or block the subsequent command"
+    },
+    {
+      "question": "What is the correct way to determine the installed package path for the bin target after a global npm install?",
+      "impact": "Validation needs to locate the actual installed dist/index.js, not the local repo copy. npm prefix or resolve-from-bin approaches have different portability characteristics (Windows vs Unix, nvm vs system Node)"
+    },
+    {
+      "question": "Should validation run hlx --version as a subprocess or just check file existence?",
+      "impact": "The ticket says both: check file exists AND verify --version succeeds. Running --version is a stronger check but introduces recursion concerns (the new CLI might trigger its own auto-update)"
+    },
+    {
+      "question": "Should the installSource metadata still be saved when validation fails?",
+      "impact": "If metadata is saved with the new commit SHA but the install is broken, future `hlx update` would see 'Already up to date' and not re-attempt. If not saved, the user can re-run `hlx update` to retry."
+    },
+    {
+      "question": "What test infrastructure should be introduced for validation tests given no test framework exists?",
+      "impact": "Ticket scope includes 'focused tests or equivalent local verification' but no test runner is configured"
+    }
+  ]
+}

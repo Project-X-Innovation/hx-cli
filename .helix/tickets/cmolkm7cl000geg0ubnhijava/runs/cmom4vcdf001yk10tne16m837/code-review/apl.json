@@ -1,0 +1,32 @@
+{
+  "questions": [
+    "Was the merge conflict in src/tickets/index.ts correctly resolved with both branch intents preserved?",
+    "Are there any remaining conflict markers in the resolved file or elsewhere in the source?",
+    "Are there any inconsistencies introduced by the merge resolution?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The ticketsUsage() function correctly merges the HLX-342 ticket-ref improvements (ticket-ref nomenclature, --json on get, explanation footer, dynamic exitCode) with the staging --mode flag on the create command.",
+      "evidence": [
+        "src/tickets/index.ts lines 14-29 show merged usage string with both ticket-ref and --mode changes",
+        "All imports from ticket branch (isHelpRequested, extractTicketRef, resolveTicket) resolve correctly"
+      ]
+    },
+    {
+      "answer": "No conflict markers remain. Verified by searching for <<<<<<<, =======, and >>>>>>> in the file and across the entire src/ directory.",
+      "evidence": [
+        "Grep for conflict markers in src/tickets/index.ts returned no matches",
+        "Grep for conflict markers across src/ directory returned no matches"
+      ]
+    },
+    {
+      "answer": "One inconsistency found and fixed: the case-level create help (line 69) was missing the --mode flag that staging added to the top-level usage (line 20). Fixed by adding --mode to the case-level help string.",
+      "evidence": [
+        "Line 20 (top-level usage): includes [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]",
+        "Line 69 (case-level help): was missing --mode, now fixed to include it"
+      ]
+    }
+  ],
+  "statement": "Conflict resolution in src/tickets/index.ts is correct. Both branch intents preserved. Fixed one inconsistency: create case-level help now includes the --mode flag from staging. TypeScript compiles cleanly.",
+  "followups": []
+}

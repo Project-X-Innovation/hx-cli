@@ -1,5 +1,6 @@
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
+import { hasFlag } from "../lib/flags.js";
 
 type TicketDetail = {
   id: string;
@@ -22,7 +23,27 @@ type TicketDetail = {
 
 type TicketResponse = { ticket: TicketDetail };
 
-export async function printTicketDetail(config: HxConfig, ticketId: string): Promise<void> {
+const TERMINAL_STATUSES = new Set(["failed", "error", "cancelled", "completed", "succeeded"]);
+
+/**
+ * Safely format a date value for display.
+ * Returns a human-readable string, "in progress", "N/A", or "unknown".
+ */
+export function formatDate(value: string | null | undefined, runStatus?: string): string {
+  if (value === null || value === undefined) {
+    if (runStatus && TERMINAL_STATUSES.has(runStatus.toLowerCase())) {
+      return "N/A";
+    }
+    return "in progress";
+  }
+  const d = new Date(value);
+  if (isNaN(d.getTime())) {
+    return "unknown";
+  }
+  return d.toLocaleString();
+}
+
+export async function printTicketDetail(config: HxConfig, ticketId: string): Promise<TicketDetail> {
   const data = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
   const ticket = data.ticket;
 
@@ -47,8 +68,8 @@ export async function printTicketDetail(config: HxConfig, ticketId: string): Pro
   if (ticket.runs.length > 0) {
     console.log(`\nRuns:`);
     for (const run of ticket.runs) {
-      const created = new Date(run.createdAt).toLocaleString();
-      const completed = run.completedAt ? new Date(run.completedAt).toLocaleString() : "in progress";
+      const created = formatDate(run.createdAt);
+      const completed = formatDate(run.completedAt, run.status);
       console.log(`  ${run.id}  ${run.status.padEnd(12)}  ${created}  ${completed}`);
     }
   }
@@ -57,8 +78,17 @@ export async function printTicketDetail(config: HxConfig, ticketId: string): Pro
     const desc = ticket.description.length > 500 ? ticket.description.slice(0, 500) + "..." : ticket.description;
     console.log(`\nDescription:\n${desc}`);
   }
+
+  return ticket;
 }
 
-export async function cmdTicketsGet(config: HxConfig, ticketId: string): Promise<void> {
-  await printTicketDetail(config, ticketId);
+export async function cmdTicketsGet(config: HxConfig, ticketId: string, args?: string[]): Promise<void> {
+  const jsonOutput = args && hasFlag(args, "--json");
+
+  if (jsonOutput) {
+    const data = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
+    console.log(JSON.stringify(data.ticket, null, 2));
+  } else {
+    await printTicketDetail(config, ticketId);
+  }
 }

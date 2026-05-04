@@ -9,6 +9,7 @@ import {
   CANONICAL_BRANCH,
 } from "./check.js";
 import { performUpdate } from "./perform.js";
+import { validateInstall } from "./validate.js";
 
 /**
  * Check whether an installSource matches the canonical GitHub source.
@@ -76,6 +77,21 @@ export async function runUpdate(args: string[]): Promise<void> {
     process.exit(1);
   }
 
+  // Validate the installed package before declaring success
+  const validation = validateInstall();
+  if (!validation.valid) {
+    console.error(`\nUpdate validation failed: ${validation.error}`);
+    if (result.stderr) {
+      console.error(`\nnpm output:\n${result.stderr}`);
+    }
+    console.error(`\nThe update installed a broken package. To recover:`);
+    console.error(`  1. git clone or pull the helix-cli repository`);
+    console.error(`  2. Run: npm run build`);
+    console.error(`  3. Run: npm link (may need elevated permissions on Windows)`);
+    console.error(`\nYou can also re-run 'hlx update' to retry.`);
+    process.exit(1);
+  }
+
   // Persist install-source metadata on success
   saveConfig({
     installSource: {
@@ -136,6 +152,14 @@ export async function checkAutoUpdate(): Promise<void> {
   const result = performUpdate({ quiet: true });
 
   if (result.success) {
+    const validation = validateInstall();
+    if (!validation.valid) {
+      console.error(`Warning: auto-update installed a broken package (${validation.error}). Run 'hlx update' to retry.`);
+      if (result.stderr) {
+        console.error(`npm output:\n${result.stderr}`);
+      }
+      return;
+    }
     saveConfig({
       installSource: {
         mode: "github",
