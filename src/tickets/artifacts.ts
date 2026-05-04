@@ -1,5 +1,6 @@
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
+import { getFlag } from "../lib/flags.js";
 
 type ArtifactsResponse = {
   items: Array<{
@@ -14,8 +15,12 @@ type ArtifactsResponse = {
   }>;
 };
 
-export async function cmdTicketsArtifacts(config: HxConfig, ticketId: string): Promise<void> {
-  const data = (await hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: "/api" })) as ArtifactsResponse;
+export async function cmdTicketsArtifacts(config: HxConfig, ticketId: string, args: string[]): Promise<void> {
+  const runId = getFlag(args, "--run");
+  const data = (await hxFetch(config, `/tickets/${ticketId}/artifacts`, {
+    basePath: "/api",
+    ...(runId ? { queryParams: { runId } } : {}),
+  })) as ArtifactsResponse;
 
   if (data.items.length > 0) {
     console.log("Artifacts:\n");

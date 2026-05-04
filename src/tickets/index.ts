@@ -33,7 +33,7 @@ function ticketsUsage(): never {
   hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
   hlx tickets rerun <ticket-id>
   hlx tickets continue <ticket-id> "continuation context"
-  hlx tickets artifacts <ticket-id>
+  hlx tickets artifacts <ticket-id> [--run <runId>]
   hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey> [--run <runId>]
   hlx tickets bundle <ticket-id> --out <dir>`);
   process.exit(1);
@@ -76,7 +76,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
 
     case "artifacts": {
       const ticketId = resolveTicketId(rest);
-      await cmdTicketsArtifacts(config, ticketId);
+      await cmdTicketsArtifacts(config, ticketId, rest);
       break;
     }
 

@@ -1,0 +1,38 @@
+{
+  "questions": [
+    "Why does `hlx tickets artifacts` ignore the `--run <runId>` flag?",
+    "Why does requesting a missing step artifact via `hlx tickets artifact` trigger a noisy Node assertion failure?",
+    "What existing patterns in the codebase should the fix follow?"
+  ],
+  "answers": [
+    {
+      "answer": "`cmdTicketsArtifacts` in `src/tickets/artifacts.ts` (line 17) accepts only `(config: HxConfig, ticketId: string)` — it has no `args` parameter, so it cannot read any CLI flags. The subcommand router at `src/tickets/index.ts` line 79 calls `cmdTicketsArtifacts(config, ticketId)` without passing `rest`. The `hxFetch` call at line 18 uses no `queryParams`, so `runId` is never sent to the server even though the server already supports it.",
+      "evidence": [
+        "src/tickets/artifacts.ts:17 — function signature: `(config: HxConfig, ticketId: string): Promise<void>`",
+        "src/tickets/artifacts.ts:18 — hxFetch call: `hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: \"/api\" })` — no queryParams",
+        "src/tickets/index.ts:79 — router: `await cmdTicketsArtifacts(config, ticketId)` — rest not passed (compare line 85 which passes rest to cmdTicketsArtifact)"
+      ]
+    },
+    {
+      "answer": "When `hxFetch` receives a 404 response, it builds an error message via `buildErrorMessage` (reading response body as text) and throws `new Error(message)`. This propagates to the global catch at `src/index.ts:95-97` which logs the message and calls `process.exit(1)`. The `artifact.ts` command at lines 42-45 has no try-catch around its `hxFetch` call, unlike `bundle.ts` (lines 68-71) which wraps individual artifact fetches in try-catch for graceful failure. The exact assertion failure mechanism is not determinable from static analysis alone, but the fix is clear: handle 404 at the call site in `artifact.ts` with a try-catch providing a clean user-facing message, preventing the raw HTTP error from reaching the global handler.",
+      "evidence": [
+        "src/tickets/artifact.ts:42-45 — hxFetch call with no error handling",
+        "src/lib/http.ts:102-103 — non-retryable status throws: `const message = await buildErrorMessage(response); throw new Error(message)`",
+        "src/lib/http.ts:6 — 404 not in RETRYABLE_STATUS_CODES: `Set([429, 500, 502, 503, 504])`",
+        "src/lib/http.ts:33-34 — buildErrorMessage reads body: `response.text()` then formats `HTTP ${status} ${statusText} — ${text.slice(0, 500)}`",
+        "src/index.ts:95-97 — global catch: `console.error(error.message); process.exit(1)`",
+        "src/tickets/bundle.ts:68-71 — reference graceful pattern: try-catch with console.error warning"
+      ]
+    },
+    {
+      "answer": "Two established patterns exist. For --run flag support: `artifact.ts` lines 29-40 reads `--run` via `getFlag(args, '--run')` and passes it as a query parameter. For error handling: `bundle.ts` lines 68-71 wraps `hxFetch` calls in try-catch and prints a warning on failure. The `flags.ts` utility provides `getFlag(args, flag)` which returns the value or undefined.",
+      "evidence": [
+        "src/tickets/artifact.ts:29-40 — --run flag pattern: getFlag → if absent, fetch ticket detail → fallback to currentRun?.id ?? runs[0]?.id",
+        "src/tickets/bundle.ts:68-71 — graceful error pattern: `catch { console.error('Warning: Could not fetch artifact ...') }`",
+        "src/lib/flags.ts:5-8 — getFlag API: `getFlag(args, flag)` returns `string | undefined`"
+      ]
+    }
+  ],
+  "statement": "Two independent defects exist in the helix-cli artifact commands. (1) `cmdTicketsArtifacts` in `src/tickets/artifacts.ts` lacks an `args` parameter, and the router in `src/tickets/index.ts` does not pass CLI args to it, so the `--run` flag is never read or forwarded as a query parameter despite the server already supporting `runId`. (2) `cmdTicketsArtifact` in `src/tickets/artifact.ts` has no error handling around its `hxFetch` call at lines 42-45; a 404 response for a missing step artifact propagates as a thrown error through the global handler, producing a noisy error message and potentially triggering Node assertion failures on exit. Both fixes follow well-established patterns already present in sibling commands within the same codebase.",
+  "followups": []
+}

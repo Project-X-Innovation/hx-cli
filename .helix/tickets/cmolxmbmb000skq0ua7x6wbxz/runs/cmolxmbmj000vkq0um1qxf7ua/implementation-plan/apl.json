@@ -1,0 +1,37 @@
+{
+  "questions": [
+    "What is the correct step ordering and file-level change plan for adding --run to artifacts and hardening 404 errors?",
+    "What verification checks are runnable by an automated agent given no test infrastructure and no guaranteed API access?",
+    "Are there any cross-repo dependencies or migration requirements?"
+  ],
+  "answers": [
+    {
+      "answer": "Four sequential steps: (1) Modify src/tickets/artifacts.ts to accept args, import getFlag, read --run, and conditionally pass runId via queryParams. (2) Modify src/tickets/index.ts to pass rest at line 79 and update usage text at line 36. (3) Modify src/tickets/artifact.ts to wrap the hxFetch call at lines 42-45 in a try-catch that prints a clean error message and exits 1. (4) Run typecheck and build to verify. Steps 1-2 address Defect 1 (missing --run), Step 3 addresses Defect 2 (noisy 404), Step 4 is verification. Steps 1 and 2 must be done together (they create a matching signature change). Step 3 is independent.",
+      "evidence": [
+        "src/tickets/artifacts.ts:17-18 — current signature lacks args, hxFetch has no queryParams",
+        "src/tickets/index.ts:79 — router call omits rest; line 85 shows correct pattern",
+        "src/tickets/artifact.ts:42-45 — hxFetch call with no try-catch",
+        "src/tickets/bundle.ts:68-71 — established try-catch pattern for reference",
+        "src/tickets/artifact.ts:29-40 — established --run flag pattern for reference"
+      ]
+    },
+    {
+      "answer": "Three required checks: (CHK-01) npm run typecheck passes with exit code 0, (CHK-02) npm run build passes with exit code 0, (CHK-03) source inspection of all three modified files confirms each specified change is present. No live API testing is possible without dev setup config, and no test infrastructure exists (no test files, CI, or lint config). The Helix API server availability is listed as unknown in pre-conditions.",
+      "evidence": [
+        "package.json scripts: build = 'tsc', typecheck = 'tsc --noEmit'",
+        "scout/scout-summary.md — 'No test files found', 'No CI workflow files found', 'No lint script or config found'",
+        "No dev setup configuration available per run context"
+      ]
+    },
+    {
+      "answer": "No cross-repo dependencies or migration requirements. helix-cli is the sole change target. The repository has zero runtime dependencies, no ORM, no database, and no migrations. All changes use existing in-repo utilities (getFlag, hxFetch queryParams).",
+      "evidence": [
+        "repo-guidance.json — helix-cli is sole target repo",
+        "package.json — only @types/node and typescript as devDependencies",
+        "scout/reference-map.json — 'No ORM or database dependencies — no migration awareness needed'"
+      ]
+    }
+  ],
+  "statement": "The implementation plan specifies four atomic steps across three files in helix-cli: (1) add args parameter, getFlag import, and conditional queryParams to artifacts.ts, (2) forward rest and update usage text in index.ts, (3) wrap the hxFetch call in artifact.ts with a try-catch for clean 404 handling, (4) verify typecheck and build pass. All changes follow established patterns from sibling commands. No new dependencies, abstractions, or cross-repo changes. Verification relies on typecheck (tsc --noEmit), build (tsc), and source inspection of the three modified files.",
+  "followups": []
+}

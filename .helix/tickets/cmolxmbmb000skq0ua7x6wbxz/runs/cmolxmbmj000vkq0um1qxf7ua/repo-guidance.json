@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Both defects (missing --run on artifacts command, noisy 404 on artifact command) are in helix-cli source files. All changes are in src/tickets/artifacts.ts, src/tickets/artifact.ts, and src/tickets/index.ts. No other repositories are selected or impacted."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
