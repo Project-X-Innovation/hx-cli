@@ -3,21 +3,15 @@
   "mergeSource": "staging",
   "conflictFiles": [
     {
-      "path": "src/index.ts",
+      "path": "src/tickets/index.ts",
       "ticketCommits": [
-        "31c64eb chore(helix): implementation artifacts (cmog2uk9t005pi00ufof780d9)"
+        "5cfbd79 chore(helix): code-review artifacts (cmom4vcdf001yk10tne16m837)",
+        "ca6c51b chore(helix): implementation artifacts (cmom4vcdf001yk10tne16m837)",
+        "210d9fc Merge remote-tracking branch 'origin/staging' into helix/auto/HLX-342-improve-helix-cli-ticket-lookup-help-json-output",
+        "758fce3 chore(helix): implementation artifacts (cmolkm7e4000jeg0urgct1ekt)"
       ],
       "stagingCommits": [
-        "905f33c chore(helix): implementation artifacts (cmog2ul96005ri00ur1sfk518)"
-      ]
-    },
-    {
-      "path": "src/lib/config.ts",
-      "ticketCommits": [
-        "31c64eb chore(helix): implementation artifacts (cmog2uk9t005pi00ufof780d9)"
-      ],
-      "stagingCommits": [
-        "905f33c chore(helix): implementation artifacts (cmog2ul96005ri00ur1sfk518)"
+        "6a4215c chore(helix): implementation artifacts (cmolxmbmj000vkq0um1qxf7ua)"
       ]
     }
   ]

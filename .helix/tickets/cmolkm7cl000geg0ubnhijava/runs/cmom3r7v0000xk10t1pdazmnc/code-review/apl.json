@@ -1,0 +1,43 @@
+{
+  "questions": [
+    "Does the implementation correctly address all 11 ticket acceptance criteria?",
+    "Are there any correctness issues, regressions, or behavior inconsistencies in the changed files?",
+    "Do quality gates (typecheck, tests) pass after code review changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 11 acceptance criteria are addressed: shared resolver handles internal IDs, short IDs, and numeric ticket numbers (AC-1 through AC-4); --json output added for tickets list and get (AC-5, AC-6); help flags work at global, router, and command levels without API calls (AC-7); formatDate validates dates with terminal status cross-referencing (AC-8); unresolved references fail with clear errors including org context (AC-9); 30 unit tests cover all resolution scenarios and help detection (AC-10); --query flag and PowerShell-safe examples added to inspect db (AC-11).",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: matchTicket implements three-tier matching (ID, shortId, numeric) with ambiguity detection",
+        "src/tickets/index.ts: all 6 ticket-ref commands use shared resolver via extractTicketRef + resolveTicket",
+        "src/tickets/get.ts:85-94: cmdTicketsGet checks --json flag and outputs full JSON with untruncated description",
+        "src/tickets/list.ts:90-93: --json outputs JSON.stringify(items) with all TicketItem fields including id",
+        "src/tickets/index.ts:35-37: router-level help check; lines 57-59: per-command get help",
+        "src/tickets/get.ts:32-44: formatDate validates Date with isNaN check, cross-references runStatus",
+        "src/lib/resolve-ticket.ts:117-119: ambiguous match error includes ticket list and org name",
+        "src/lib/resolve-ticket.ts:123-126: not-found error includes input ref and org name",
+        "30 tests pass covering matchTicket, extractTicketRef, isHelpRequested, hasFlag, getFlag, getPositionalArgs",
+        "src/inspect/index.ts:57-59: --query flag with getFlag and positional fallback"
+      ]
+    },
+    {
+      "answer": "One inconsistency found and fixed: the global usage() function in src/index.ts unconditionally used console.error for all output, meaning hlx --help sent help text to stderr. All router-level usage functions (ticketsUsage, commentsUsage, inspectUsage) correctly used console.log for help (exit 0) and console.error for errors (exit 1). Fixed usage() to match the same pattern. No regressions found in shared code, API contracts, or existing behavior.",
+      "evidence": [
+        "src/index.ts:33-34 (before fix): function usage(exitCode: number = 1): never { console.error(... — always stderr",
+        "src/tickets/index.ts:15: const output = exitCode === 0 ? console.log : console.error — correct pattern",
+        "src/comments/index.ts:8: const output = exitCode === 0 ? console.log : console.error — correct pattern",
+        "src/inspect/index.ts:9: const output = exitCode === 0 ? console.log : console.error — correct pattern",
+        "src/index.ts:34 (after fix): const output = exitCode === 0 ? console.log : console.error — now consistent"
+      ]
+    },
+    {
+      "answer": "Yes. After the code review fix, typecheck passes with zero errors and all 30 tests pass with zero failures.",
+      "evidence": [
+        "npm run typecheck — exit 0, zero errors",
+        "npm test — 30 tests, 6 suites, 0 failures, 0 cancelled"
+      ]
+    }
+  ],
+  "statement": "Reviewed all 14 changed files against ticket requirements, product spec, and diagnosis. Implementation correctly addresses all 11 acceptance criteria: shared resolver (F1), JSON output for list and get (F2/F3), three-level help (F4), timestamp fix (F5), clear error messages (F6), PowerShell-safe inspect db (F7), and 30 unit tests (F8). One fix applied: global usage() function now sends help output to stdout for consistency with router-level help handlers. No missed requirements, no regressions, no critical issues. Quality gates pass (typecheck 0 errors, 30/30 tests pass).",
+  "followups": []
+}

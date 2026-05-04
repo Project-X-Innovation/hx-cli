@@ -1,6 +1,6 @@
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
-import { getFlag, hasFlag } from "../lib/flags.js";
+import { getFlag, hasFlag, isHelpRequested } from "../lib/flags.js";
 import { printTicketDetail } from "./get.js";
 
 type TicketItem = {
@@ -14,6 +14,11 @@ type TicketItem = {
 type TicketsResponse = { items: TicketItem[] };
 
 export async function cmdTicketsLatest(config: HxConfig, args: string[]): Promise<void> {
+  if (isHelpRequested(args)) {
+    console.log("Usage: hlx tickets latest [--status-not-in <s1,s2>] [--archived] [--sprint <id>]");
+    process.exit(0);
+  }
+
   const queryParams: Record<string, string> = {};
 
   if (hasFlag(args, "--archived")) {

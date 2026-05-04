@@ -1,0 +1,111 @@
+{
+  "problem": "The Helix CLI ticket commands (get, artifacts, artifact, rerun, continue) pass raw user input directly to /api/tickets/{ticketId} endpoints which require internal IDs. Short IDs (BLD-339) and numeric ticket numbers (339) return 404. No --help handling exists in any subcommand router. No --json output flag is supported. Run timestamps render as Invalid Date. No test infrastructure exists.",
+  "files": [
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Ticket subcommand router. Contains resolveTicketId() (lines 13-26) which extracts raw ticket reference from --ticket flag, HELIX_TICKET_ID env, or first positional arg and passes it directly to API calls without any ID resolution. All ticket subcommands (get, rerun, continue, artifacts, artifact, bundle) route through here. No --help/-h check before dispatch."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Implements tickets get command. printTicketDetail() (lines 25-60) calls /api/tickets/{ticketId} with raw ID. Truncates description at 500 chars (line 57). Run timestamps use new Date(run.createdAt).toLocaleString() (line 50) which produces Invalid Date for unparseable values. No --json flag support. Also exported and used by latest.ts."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Implements tickets list command. cmdTicketsList() outputs formatted text only (line 88). Omits internal id field from output despite TicketItem type having it. No --json flag support. TicketItem type (lines 5-12) shows fields available from /api/tickets endpoint: id, shortId, title, status, updatedAt, reporter."
+    },
+    {
+      "path": "src/tickets/latest.ts",
+      "why": "Implements tickets latest command. Fetches /api/tickets and calls printTicketDetail() with first item's internal id (line 45). Demonstrates that list endpoint returns internal IDs that could be used for client-side resolution."
+    },
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Implements tickets artifacts command. Calls /api/tickets/{ticketId}/artifacts with raw ticketId (line 18). Needs resolver adoption."
+    },
+    {
+      "path": "src/tickets/artifact.ts",
+      "why": "Implements tickets artifact command. Calls /api/tickets/{ticketId} and /api/tickets/{ticketId}/runs/{runId}/step-artifacts/{stepId} with raw ticketId (lines 33, 42). Needs resolver adoption."
+    },
+    {
+      "path": "src/tickets/rerun.ts",
+      "why": "Implements tickets rerun command. POSTs to /api/tickets/{ticketId}/rerun with raw ticketId (line 9). Needs resolver adoption."
+    },
+    {
+      "path": "src/tickets/continue.ts",
+      "why": "Implements tickets continue command. POSTs to /api/tickets/{ticketId}/rerun with raw ticketId (line 24). Needs resolver adoption."
+    },
+    {
+      "path": "src/tickets/bundle.ts",
+      "why": "Implements tickets bundle command. Calls /api/tickets/{ticketId} with raw ticketId (line 33). Needs resolver adoption."
+    },
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Implements tickets create command. Does not take a ticket reference (creates new tickets). May need --help handling but does not need resolver."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point and command dispatcher. SKIP_AUTO_UPDATE set includes --help/-h (line 43) but main switch (lines 51-94) has no case for --help/-h — these fall through to default which prints Unknown command and usage. No global help interception."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Shared flag parsing: getFlag, hasFlag, getPositionalArgs, requireFlag. No help-specific utilities. hasFlag could be used to check --help/-h but is not currently used for that purpose anywhere."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client hxFetch(). All ticket API calls route through this. Builds URL from config.url + basePath + path. Handles retry, auth headers, timeout. Error messages include HTTP status (line 34) which is what users see for 404s."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "HxConfig type definition (lines 12-19) includes url, apiKey, orgId, orgName. requireConfig() used by ticket commands. orgId/orgName available for error messages about current org context."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repository resolution pattern: exact ID match -> exact name match (case-insensitive) -> partial name match. Analogous pattern could be used for ticket resolution. Fetches list from API then matches client-side."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Inspect subcommand router. No --help/-h check. inspect db query is joined from positional args (line 29) with no --query flag alternative."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Inspect db command. Takes repoNameOrId and query string. No --query flag; query comes from positional args only, causing PowerShell quoting issues with Postgres quoted identifiers."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Comments subcommand router. Has its own separate resolveTicketId() (lines 6-14) duplicating tickets/index.ts logic. Demonstrates the duplication that shared resolution should eliminate."
+    },
+    {
+      "path": "package.json",
+      "why": "Project metadata. No test runner (jest/vitest/mocha) in dependencies. Scripts: build (tsc), typecheck (tsc --noEmit), prepare (npm run build). No test or lint scripts."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. strict: true, ES2022 target, Node16 module system, output to dist/. Tests would need to be integrated with this config."
+    }
+  ],
+  "facts": [
+    "resolveTicketId() in src/tickets/index.ts (lines 13-26) extracts raw user input and passes it directly as the ticketId to API endpoint URLs without any ID-type detection or resolution",
+    "A duplicate resolveTicketId() exists in src/comments/index.ts (lines 6-14) with identical logic minus positional arg support",
+    "All 7 ticket subcommands that take a ticket reference (get, artifacts, artifact, rerun, continue, bundle, and latest indirectly) use hxFetch with /api/tickets/{rawInput} URL pattern",
+    "No subcommand router (tickets, inspect, org, token, comments) checks for --help or -h before dispatching. The main index.ts switch has no case for --help/-h despite including them in SKIP_AUTO_UPDATE set",
+    "No --json flag is checked or supported in any ticket command (list or get)",
+    "tickets list text output (list.ts line 88) omits the internal id field even though TicketItem type includes it",
+    "tickets get truncates description to 500 characters (get.ts line 57) with no option to get full text",
+    "Run timestamps in get.ts (line 50-51) use new Date(run.createdAt).toLocaleString() which produces 'Invalid Date' when input is not parseable by Date constructor",
+    "completedAt null check (get.ts line 51) correctly shows 'in progress' for null but does not validate the actual run status field",
+    "src/lib/resolve-repo.ts demonstrates the existing pattern for name-to-ID resolution: fetch list from API, then match client-side by exact ID, exact name, or partial name",
+    "tickets latest (latest.ts line 44-45) demonstrates that the /api/tickets list endpoint returns objects with internal id fields that could be used for client-side ticket resolution",
+    "inspect db (inspect/index.ts line 29) joins positional args as query string with no --query flag alternative, creating shell quoting difficulties for PowerShell with Postgres double-quoted identifiers",
+    "No test files exist in the repository. No test runner in package.json dependencies. No CI configuration files found",
+    "TypeScript typecheck (tsc --noEmit) passes cleanly on the current codebase",
+    "Package has build script (tsc) and typecheck script (tsc --noEmit) as the only quality gates",
+    "HELIX_CLI_NOTES.md referenced in ticket was not found at workspace root or in helix-cli directory"
+  ],
+  "unknowns": [
+    "Whether the backend API supports ticket lookup by shortId or numeric ticket number directly (e.g., /api/tickets/BLD-339 or /api/tickets?shortId=BLD-339), or if client-side resolution via the list endpoint is the required approach",
+    "Whether the /api/tickets list endpoint response includes all fields needed for reliable client-side resolution (it includes id, shortId, title, status, updatedAt, reporter — but unknown if ticketNumber is a separate field or derivable from shortId)",
+    "What timestamp format the API returns for run createdAt/completedAt fields and what specific values trigger the Invalid Date rendering",
+    "Whether the /api/tickets list endpoint supports pagination and if resolution needs to handle paginated results for orgs with many tickets",
+    "What test framework the team prefers since none is currently configured (node:test is available with Node>=18 and would add zero dependencies)",
+    "Whether the HELIX_CLI_NOTES.md field report was committed to a different branch or was never persisted"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "title": "Merge Conflict Resolution in tickets/index.ts",
+  "description": "Resolved merge conflict between HLX-342 ticket-ref improvements and staging's --mode flag addition in the tickets usage string.",
+  "steps": [
+    {
+      "file": "src/tickets/index.ts",
+      "line": 14,
+      "title": "ticketsUsage function - conflict location",
+      "description": "The conflict was in this function. The ticket branch changed the exitCode parameter and output routing, while staging kept the simpler version. Resolution: kept ticket branch's dynamic exitCode."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 19,
+      "title": "Merged get command usage",
+      "description": "Kept ticket branch's <ticket-ref> nomenclature and [--json] flag from HLX-342."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 20,
+      "title": "Merged create command usage",
+      "description": "Added staging's [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] flag to the create command line, combined with ticket branch's formatting."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 27,
+      "title": "Ticket-ref explanation footer",
+      "description": "Kept the ticket branch's explanation footer that documents what ticket references accept (internal ID, short ID, ticket number)."
+    }
+  ]
+}

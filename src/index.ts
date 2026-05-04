@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { requireConfig } from "./lib/config.js";
+import { requireConfig, loadConfig } from "./lib/config.js";
+import { isHelpRequested } from "./lib/flags.js";
 import { runComments } from "./comments/index.js";
 import { runInspect } from "./inspect/index.js";
 import { runLogin } from "./login.js";
@@ -13,8 +14,25 @@ import { runUpdate, checkAutoUpdate } from "./update/index.js";
 const args = process.argv.slice(2);
 const command = args[0];
 
-function usage(): never {
-  console.error(`hlx — Helix CLI workbench
+/**
+ * Get config, but allow help requests to proceed without authentication.
+ * For help-only invocations, provides a stub config so the router can
+ * intercept --help before any API calls.
+ */
+function configOrHelp(subArgs: string[]) {
+  if (isHelpRequested(subArgs) || subArgs.length === 0) {
+    // Try loading config, but don't fail — help should always work
+    const config = loadConfig();
+    if (config) return config;
+    // Return stub config; the router will exit for help before any API call
+    return { apiKey: "", url: "" };
+  }
+  return requireConfig();
+}
+
+function usage(exitCode: number = 1): never {
+  const output = exitCode === 0 ? console.log : console.error;
+  output(`hlx — Helix CLI workbench
 
 Usage:
   hlx login <server-url>          Authenticate with a Helix server
@@ -36,7 +54,7 @@ Usage:
   hlx update --disable-auto     Disable automatic update checks
   hlx --version                 Show version`);
 
-  process.exit(1);
+  process.exit(exitCode);
 }
 
 // Commands that skip the auto-update check
@@ -58,13 +76,13 @@ try {
       break;
 
     case "inspect": {
-      const config = requireConfig();
+      const config = configOrHelp(args.slice(1));
       await runInspect(config, args.slice(1));
       break;
     }
 
     case "comments": {
-      const config = requireConfig();
+      const config = configOrHelp(args.slice(1));
       await runComments(config, args.slice(1));
       break;
     }
@@ -74,7 +92,7 @@ try {
       break;
 
     case "tickets": {
-      const config = requireConfig();
+      const config = configOrHelp(args.slice(1));
       await runTickets(config, args.slice(1));
       break;
     }
@@ -86,6 +104,11 @@ try {
     case "--version":
     case "-v":
       console.log(getPackageVersion());
+      break;
+
+    case "--help":
+    case "-h":
+      usage(0);
       break;
 
     default:

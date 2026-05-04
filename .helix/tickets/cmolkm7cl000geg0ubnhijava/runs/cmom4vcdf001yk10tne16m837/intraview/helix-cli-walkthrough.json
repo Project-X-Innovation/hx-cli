@@ -1,0 +1,91 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Helix CLI: Ticket Lookup, Help, JSON Output & Inspection Ergonomics",
+  "description": "This tour walks through a multi-defect fix in the helix-cli repository. The primary problem was that resolveTicketId() passed raw user input (short IDs like 'BLD-339' or numeric refs like '339') directly to API endpoints expecting internal CUIDs, causing HTTP 404s. Five additional defects were fixed: missing --help interception at router and command levels, no --json output mode for ticket list/get, 'Invalid Date' rendering from unsafe Date construction, missing internal IDs in text output, and PowerShell quoting problems in inspect db. The fix introduces a shared client-side resolver (resolve-ticket.ts) that fetches the tickets list and matches by internal ID, short ID, or numeric suffix — following the proven resolve-repo.ts pattern already in the codebase.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "Start here to understand the five root causes. RC-1 (primary): resolveTicketId() in src/tickets/index.ts returned raw user input unchanged, so API calls like /tickets/339 returned 404 because the backend expects internal CUIDs. RC-2: No --help interception existed at router or command level. RC-3: No --json flag for machine-readable output. RC-4: Unsafe new Date() construction produced 'Invalid Date'. RC-5: inspect db had no safe input path for PowerShell users. All fixes stay client-side — no backend changes required.",
+      "title": "Overview: Root Causes Diagnosed"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The implementation follows a strict bottom-up order: (1) shared utilities in flags.ts and package.json, (2) core resolver module resolve-ticket.ts, (3) global help in index.ts, (4) ticket router refactoring in tickets/index.ts, (5-6) individual command fixes in get.ts and list.ts, (7) help in remaining commands, (8) continue.ts positional arg fix, (9) comments deduplication, (10) inspect ergonomics, (11) tests, (12) build verification. This ordering ensures each step depends only on prior completed steps.",
+      "title": "Implementation Plan: Bottom-Up Dependency Chain"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/diagnosis/apl.json",
+      "line": 1,
+      "description": "The APL confirms that client-side ticket resolution via the list endpoint is viable. The proof: src/tickets/latest.ts already fetched /api/tickets and used data.items[0].id to call printTicketDetail(), confirming the list endpoint returns internal IDs. This established the pattern for the new shared resolver: fetch list once, match by (1) internal ID exact match, (2) short ID case-insensitive match, (3) numeric suffix extraction from shortId.",
+      "title": "Diagnosis APL: Resolver Viability Confirmed"
+    },
+    {
+      "file": ".helix/merge-conflicts.json",
+      "line": 1,
+      "description": "The merge-conflicts.json change shows the scope of conflicts shrank significantly. Previously two files conflicted (src/index.ts and src/lib/config.ts); now only src/tickets/index.ts has a conflict between ticket branch commit 758fce3 and staging commit a4434f3. This reflects that the router refactoring in tickets/index.ts is the most structurally significant change — it removes the old resolveTicketId() raw-passthrough and wires all 6 ticket subcommands through the new shared resolver.",
+      "title": "Merge Conflicts: Scope Reduced to tickets/index.ts"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "The code review covers all 14 changed files. Key findings: src/lib/resolve-ticket.ts implements three-tier matching with ambiguity detection and org-context error messages; src/tickets/index.ts adopts the shared resolver for all 6 ticket-ref commands; src/tickets/get.ts adds formatDate() with isNaN validation and --json output; src/tickets/list.ts adds --json with all TicketItem fields including internal id; src/comments/index.ts removes its duplicate resolveTicketId(); src/inspect/index.ts adds --query flag and PowerShell-safe SQL examples; 30 unit tests pass covering all resolution scenarios.",
+      "title": "Code Review: All 14 Changed Files Verified"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/code-review/apl.json",
+      "line": 1,
+      "description": "The APL confirms all 11 acceptance criteria are addressed. AC-1 through AC-4: shared resolver handles internal IDs, short IDs, and numeric ticket numbers with ambiguity detection. AC-5, AC-6: --json output added for tickets list and get. AC-7: help flags work at global, router, and command levels without API calls. AC-8: formatDate validates dates with terminal status cross-referencing. AC-9: unresolved references fail with clear errors including org context. AC-10: 30 unit tests cover all resolution scenarios and help detection. AC-11: --query flag and PowerShell-safe examples added to inspect db.",
+      "title": "Code Review APL: All 11 Acceptance Criteria Met"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 30,
+      "description": "The new src/lib/resolve-ticket.ts module is the heart of the fix. matchTicket() implements three-tier priority matching: (1) exact match on item.id for internal CUIDs, (2) case-insensitive match on item.shortId for 'BLD-339' style refs, (3) numeric extraction from shortId suffix for bare '339' refs. Ambiguous matches (multiple items sharing a numeric suffix) produce an error listing all candidates with org name. Not-found errors include the input ref and org name. The module exports extractTicketRef() (replacing resolveTicketId()) and resolveTicket() (the API-calling resolver).",
+      "title": "Core Resolver: resolve-ticket.ts Three-Tier Match"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 50,
+      "description": "src/tickets/index.ts is the central router change tracked in merge-conflicts.json. The old resolveTicketId() raw-passthrough (lines 13-26) is removed entirely. All 6 ticket-ref commands (get, artifacts, artifact, rerun, continue, bundle) now call extractTicketRef() to parse the user's input from flags/env/positional args, then pass it to resolveTicket() which performs the three-tier match against the API list. Router-level help check (lines 35-37) short-circuits before any API calls when --help/-h is present.",
+      "title": "Router Refactoring: tickets/index.ts Wires Shared Resolver"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 200,
+      "description": "src/tickets/get.ts receives two independent fixes. First, formatDate() (lines 32-44) now validates the Date object with an isNaN check and cross-references runStatus to determine whether a missing end timestamp means the run is still in progress or has no data — eliminating 'Invalid Date' rendering. Second, lines 85-94 check for --json flag and output the full ticket detail as JSON.stringify() with all fields including untruncated description, enabling agent consumption of ticket data.",
+      "title": "get.ts: formatDate Fix and --json Output"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 250,
+      "description": "src/tickets/list.ts adds two improvements. Lines 90-93 check the --json flag and output JSON.stringify(items) with all TicketItem fields including the internal CUID id field — this enables downstream scripts to capture internal IDs for subsequent API calls. The text output path also now includes the internal id in each row, addressing the usability gap where users had no way to see internal IDs without --json.",
+      "title": "list.ts: --json Output with Internal IDs"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 300,
+      "description": "src/tickets/continue.ts had a subtle bug: it compared positional[0] === ticketId to filter the ticket reference from continuation context args. After resolution, ticketId is the internal CUID while positional[0] is the raw user input ('339'). The fix adds rawRef as a fourth parameter to continue's dispatch call, so the filter compares against the original raw string rather than the resolved CUID. This ensures continuation context args are correctly separated from the ticket reference.",
+      "title": "continue.ts: rawRef Parameter for Positional Arg Filtering"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 400,
+      "description": "src/comments/index.ts contained a duplicate resolveTicketId() implementation (lines 6-14) with identical raw-passthrough logic to the one in tickets/index.ts. This is removed and replaced with the shared extractTicketRef() + resolveTicket() calls from resolve-ticket.ts. Help handling is also added before command dispatch. This ensures comments commands (which also accept ticket references) benefit from the same three-tier resolution without code duplication.",
+      "title": "comments/index.ts: Duplicate Resolver Removed"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 500,
+      "description": "src/inspect/index.ts gains two improvements for the db subcommand. Lines 57-59 add a --query/-q flag that accepts SQL as a named flag value rather than requiring it as a positional argument. This is critical for PowerShell users because Postgres double-quoted identifiers (e.g., \"TableName\") are interpreted as PowerShell string delimiters when passed as positional args. Help text is updated with PowerShell-safe examples using --query. Help checks are also added for all inspect subcommands before dispatch.",
+      "title": "inspect/index.ts: --query Flag and PowerShell Safety"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/code-review/code-review-actual.md",
+      "line": 90,
+      "description": "The complete data flow is now: user input (internal ID, short ID, or numeric) → extractTicketRef() parses from --ticket flag / HELIX_TICKET_ID env / positional arg → resolveTicket() fetches /api/tickets list once → matchTicket() applies three-tier priority matching → resolved internal CUID passed to API endpoint. Help flags are intercepted before any config loading or API calls at three levels: global (index.ts), router (tickets/index.ts, comments/index.ts), and individual commands. JSON output is additive — text output remains default. 30 unit tests with zero external dependencies verify all resolution scenarios. TypeCheck and tests pass. No regressions introduced.",
+      "title": "Summary: Data Flow Clean, All Code Paths Verified"
+    }
+  ]
+}

@@ -21,6 +21,10 @@ export function getPositionalArgs(args: string[], excludeFlags: string[]): strin
   return args.filter((a) => !a.startsWith("--") && !flagValues.has(a));
 }
 
+export function isHelpRequested(args: string[]): boolean {
+  return args.includes("--help") || args.includes("-h");
+}
+
 export function requireFlag(args: string[], flag: string, errorMsg: string): string {
   const value = getFlag(args, flag);
   if (!value) {
