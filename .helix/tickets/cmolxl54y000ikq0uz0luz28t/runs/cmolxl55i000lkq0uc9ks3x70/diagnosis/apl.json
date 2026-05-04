@@ -1,0 +1,61 @@
+{
+  "questions": [
+    "What is the root cause of hlx update reporting success when the installed package is broken?",
+    "Where in the update flow should post-install validation be inserted?",
+    "How should the installed package's bin target path be resolved for validation?",
+    "How should npm stderr/warnings be captured and surfaced on validation failure?",
+    "What should the auto-update (checkAutoUpdate) path do when validation fails?",
+    "Should installSource metadata be persisted when validation fails?"
+  ],
+  "answers": [
+    {
+      "answer": "performUpdate() in src/update/perform.ts returns {success: true} based solely on execSync not throwing (npm exit code 0). npm can exit 0 even when tar warnings indicate missing package entries, meaning a broken package (dist/ with only .d.ts files, no compiled .js) can be installed without npm signaling an error. The prepare script (npm run build -> tsc) can fail partially because tsconfig.json has declaration:true, which produces .d.ts files even when .js compilation fails or is incomplete.",
+      "evidence": [
+        "src/update/perform.ts lines 14-20: try block runs execSync, returns {success: true} unconditionally when no exception is thrown",
+        "package.json line 7: bin contract requires dist/index.js",
+        "tsconfig.json line 12: declaration:true generates .d.ts alongside .js, enabling a partial build to leave only declarations",
+        "Ticket observed: npm warn tar TAR_ENTRY_ERROR ENOENT during a successful (exit 0) install"
+      ]
+    },
+    {
+      "answer": "Validation should be inserted AFTER performUpdate() returns success but BEFORE installSource metadata is saved via saveConfig(). In runUpdate() this is between lines 77 and 80. In checkAutoUpdate() this is between lines 136 and 138. The validation logic itself should be a new exported function, either added to perform.ts or in a new validate.ts file within src/update/.",
+      "evidence": [
+        "src/update/index.ts lines 72-89: runUpdate() calls performUpdate(), checks result.success, then immediately saves metadata and prints success",
+        "src/update/index.ts lines 134-147: checkAutoUpdate() follows the same pattern silently"
+      ]
+    },
+    {
+      "answer": "Use `npm prefix -g` via execSync to get the global prefix, then construct the path: {globalPrefix}/node_modules/@projectxinnovation/helix-cli/dist/index.js. This is necessary because the currently running process is the OLD CLI installation; import.meta.url (as used in version.ts) resolves relative to the OLD install, not the newly installed one. The package name comes from package.json's name field (@projectxinnovation/helix-cli) and the bin target from package.json's bin field (dist/index.js).",
+      "evidence": [
+        "src/update/version.ts lines 11-13: import.meta.url resolves relative to the currently running dist/update/version.js, which is the OLD installation during an update",
+        "package.json lines 2,7: name is @projectxinnovation/helix-cli, bin target is dist/index.js",
+        "npm prefix -g returns the global installation prefix (e.g., /home/user/.global/npm or C:\\Program Files\\nodejs)"
+      ]
+    },
+    {
+      "answer": "Modify performUpdate() to always pipe stderr and return captured stderr/stdout content in the result object. Currently in quiet mode stdio is ['pipe','pipe','pipe'] but the buffers are never read on success. In non-quiet mode stdio is 'inherit' so warnings are visible but not captured. The fix should capture stderr in all modes and include it as an optional warnings field in the return value, so the caller can surface them when post-install validation fails.",
+      "evidence": [
+        "src/update/perform.ts lines 15-17: quiet mode pipes all stdio but never reads on success path",
+        "src/update/perform.ts line 17: non-quiet mode uses 'inherit', warnings go to terminal but are not captured",
+        "src/update/perform.ts lines 21-31: stderr is only captured in the catch/failure path"
+      ]
+    },
+    {
+      "answer": "checkAutoUpdate() currently never blocks command execution — it logs a warning and returns. When validation fails after an auto-update, it should: (1) NOT save installSource metadata with the new commit SHA (to allow future retry), (2) log a warning to stderr that the auto-update produced a broken install, and (3) continue without blocking the user's command. This is consistent with the existing design where auto-update failures are non-blocking.",
+      "evidence": [
+        "src/update/index.ts lines 95-96: comment explicitly states 'never blocks command execution'",
+        "src/update/index.ts line 149: current failure path logs warning and continues"
+      ]
+    },
+    {
+      "answer": "installSource metadata must NOT be saved when validation fails. If the new commit SHA is persisted but the install is broken, future hlx update calls would see 'Already up to date' (matching SHAs) and skip the retry, leaving the broken install permanent with no automated recovery path. Both runUpdate() and checkAutoUpdate() must gate saveConfig() on validation success, not just npm success.",
+      "evidence": [
+        "src/update/index.ts lines 59-63: SHA comparison short-circuits with 'Already up to date' when local matches remote",
+        "src/update/index.ts lines 80-87: runUpdate saves metadata immediately after performUpdate success",
+        "src/update/index.ts lines 139-145: checkAutoUpdate saves metadata immediately after performUpdate success"
+      ]
+    }
+  ],
+  "statement": "The root cause is that performUpdate() in src/update/perform.ts equates npm exit code 0 with a valid CLI installation. No post-install validation exists anywhere in the update flow. npm can exit 0 while the installed package is missing its compiled JavaScript entrypoint (dist/index.js), particularly when the prepare build step (tsc) fails partially — producing .d.ts declaration files due to tsconfig declaration:true but not generating the .js files. The fix requires: (1) a validation function that checks the installed dist/index.js exists at the global npm prefix path and that hlx --version runs successfully as a subprocess, (2) both runUpdate() and checkAutoUpdate() calling validation after performUpdate() succeeds but before saving metadata, (3) capturing npm stderr to surface relevant warnings when validation fails, and (4) a recovery message directing users to rebuild/relink from a local checkout. Changes are confined to src/update/ — primarily perform.ts and index.ts, with a possible new validate.ts.",
+  "followups": []
+}
