@@ -1,0 +1,17 @@
+{
+  "questions": [
+    "What merge conflicts exist in the helix-cli repo and how should they be resolved?"
+  ],
+  "answers": [
+    {
+      "answer": "One file had merge conflicts: src/tickets/index.ts with two conflict regions. Conflict 1 was in the ticketsUsage() function text — the ticket branch used <ticket-ref> terminology with exitCode param while staging added [--run <runId>] to the artifacts command. Conflict 2 was in the 'artifacts' switch case — the ticket branch added help handling and extractTicketRef/resolveTicket, while staging passed rest args to cmdTicketsArtifacts for --run support. Both conflicts were resolved by preserving both intents: ticket branch's resolver pattern and help handling combined with staging's --run option and rest parameter passthrough.",
+      "evidence": [
+        "src/tickets/index.ts conflict markers at lines 21-37 and 107-118",
+        ".helix/merge-conflicts.json listing src/tickets/index.ts as the only conflicted file",
+        "cmdTicketsArtifacts signature in src/tickets/artifacts.ts accepts (config, ticketId, args) — confirming rest parameter is expected"
+      ]
+    }
+  ],
+  "statement": "Resolved all merge conflicts in src/tickets/index.ts by combining the ticket branch's ticket-ref resolution pattern (extractTicketRef + resolveTicket + isHelpRequested) with the staging branch's --run flag support (rest parameter passthrough to cmdTicketsArtifacts and [--run <runId>] in usage text). TypeScript compilation passes cleanly.",
+  "followups": []
+}

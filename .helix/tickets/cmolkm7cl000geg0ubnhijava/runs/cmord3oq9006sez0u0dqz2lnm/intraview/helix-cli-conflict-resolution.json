@@ -1,0 +1,18 @@
+{
+  "title": "Merge Conflict Resolution: src/tickets/index.ts",
+  "description": "Resolved two conflict regions merging HLX-342 ticket-ref resolution with staging's --run flag support",
+  "steps": [
+    {
+      "file": "src/tickets/index.ts",
+      "line": 23,
+      "title": "Usage text: artifacts --run flag added",
+      "description": "Merged ticket branch's <ticket-ref> terminology and exitCode parameter with staging's [--run <runId>] option on the artifacts subcommand."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 97,
+      "title": "Artifacts case: help + resolver + rest passthrough",
+      "description": "Kept the ticket branch's isHelpRequested check and extractTicketRef/resolveTicket pattern. Added rest as third argument to cmdTicketsArtifacts so the --run flag from staging is supported. Updated help text to mention [--run <runId>]."
+    }
+  ]
+}
