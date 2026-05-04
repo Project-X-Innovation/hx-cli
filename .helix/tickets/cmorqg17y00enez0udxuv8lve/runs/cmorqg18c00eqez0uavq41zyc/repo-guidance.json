@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single repository in scope. All four implementation gaps (package.json metadata, publish workflow, update mechanism migration, tarball cleanup) are contained within this repo. No cross-repo dependencies identified."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
