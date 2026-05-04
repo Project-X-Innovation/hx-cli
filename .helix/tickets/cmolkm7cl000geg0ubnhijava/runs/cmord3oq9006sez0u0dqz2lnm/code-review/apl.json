@@ -1,0 +1,39 @@
+{
+  "questions": [
+    "Were all merge conflict markers fully removed from src/tickets/index.ts?",
+    "Were both the ticket branch's intent (ticket-ref resolution, help handling) and the staging branch's intent (--run flag support for artifacts) preserved?",
+    "Do all function call signatures in index.ts match the actual exported function signatures in their respective modules?",
+    "Does TypeScript compilation pass cleanly after conflict resolution?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. Grep for <<<<<<<, =======, and >>>>>>> across the entire src/ directory returned no matches. All conflict markers have been removed.",
+      "evidence": ["grep for conflict markers in src/ returned 'No files found' for all three marker patterns"]
+    },
+    {
+      "answer": "Yes. The ticket branch's extractTicketRef/resolveTicket pattern, isHelpRequested help flag checks, <ticket-ref> terminology, and exitCode parameter are all present. The staging branch's [--run <runId>] support is preserved in usage text (lines 23-24), help text for artifacts (line 99), and the rest passthrough to cmdTicketsArtifacts (line 104).",
+      "evidence": [
+        "src/tickets/index.ts line 23: hlx tickets artifacts <ticket-ref> [--run <runId>]",
+        "src/tickets/index.ts line 99: help text includes [--run <runId>]",
+        "src/tickets/index.ts line 104: cmdTicketsArtifacts(config, resolved.id, rest)"
+      ]
+    },
+    {
+      "answer": "Yes. Verified all six command function signatures: cmdTicketsArtifacts(config, ticketId, args), cmdTicketsArtifact(config, ticketId, args), cmdTicketsBundle(config, ticketId, args), cmdTicketsGet(config, ticketId, args?), cmdTicketsRerun(config, ticketId), and cmdTicketsContinue(config, ticketId, args, rawRef?). All calls in index.ts match.",
+      "evidence": [
+        "artifacts.ts:18 - cmdTicketsArtifacts(config: HxConfig, ticketId: string, args: string[])",
+        "artifact.ts:19 - cmdTicketsArtifact(config: HxConfig, ticketId: string, args: string[])",
+        "bundle.ts:29 - cmdTicketsBundle(config: HxConfig, ticketId: string, args: string[])",
+        "get.ts:85 - cmdTicketsGet(config: HxConfig, ticketId: string, args?: string[])",
+        "rerun.ts:8 - cmdTicketsRerun(config: HxConfig, ticketId: string)",
+        "continue.ts:9 - cmdTicketsContinue(config: HxConfig, ticketId: string, args: string[], rawRef?: string)"
+      ]
+    },
+    {
+      "answer": "Yes. npx tsc --noEmit completed with zero errors and no output.",
+      "evidence": ["npx tsc --noEmit exited cleanly with no output"]
+    }
+  ],
+  "statement": "Conflict resolution in src/tickets/index.ts is correct. All merge conflict markers are removed, both branch intents are preserved (ticket-ref resolution + --run flag support), all function call signatures match their module exports, and TypeScript compilation passes cleanly. No code changes needed by code review.",
+  "followups": []
+}
