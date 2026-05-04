@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "HLX-342: Improve Helix CLI Ticket Lookup, Help, JSON Output, and Inspection Ergonomics",
+  "description": "This tour walks through the changes made to fix five defect categories in the Helix CLI: (1) ticket ID resolution failures causing HTTP 404s when users pass short IDs like 'BLD-339' or numeric references like '339', (2) missing --help interception at global, router, and command levels, (3) missing --json output mode for agent-friendly consumption, (4) 'Invalid Date' rendering in run timestamps, and (5) PowerShell quoting problems with inspect db SQL. The fix follows a bottom-up dependency chain: shared utilities first, then the core resolver module, then global help, then router and per-command adoption. No backend changes are required — the resolver fetches /api/tickets and matches client-side using the same fetch-list-then-match pattern already proven by resolve-repo.ts.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "Start here to understand WHY these changes were made. The diagnosis identified five root causes: RC-1 — resolveTicketId() in src/tickets/index.ts returned raw user input unchanged, so 'BLD-339' and '339' were interpolated directly into API URLs that only accept internal CUID-format IDs, yielding 404 for all seven ticket subcommands. RC-2 — no --help interception at any level meant help flags either errored or executed real command behavior. RC-3 — no --json flag existed for tickets list or get. RC-4 — new Date() was called unsafely on run timestamps, rendering 'Invalid Date'. RC-5 — inspect db accepted SQL only as positional args, breaking Postgres double-quoted identifiers on PowerShell. All fixes are client-side only.",
+      "title": "Overview: Five Root Causes"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The implementation follows a strict bottom-up ordering: (1) shared flag utilities including isHelpRequested, (2) core resolve-ticket.ts module using the fetch-list-then-match pattern, (3) global --help in index.ts, (4) router refactoring in tickets/index.ts to adopt the shared resolver, (5-6) individual command fixes for get.ts and list.ts, (7) help checks in remaining commands, (8) continue.ts positional-arg fix, (9) comments deduplication, (10) inspect ergonomics, (11) 30 unit tests, (12) build verification. Each step depends only on prior steps and was verified incrementally with typecheck.",
+      "title": "Implementation Plan: Bottom-Up Dependency Chain"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/diagnosis/apl.json",
+      "line": 1,
+      "description": "A key architectural question answered here: is client-side ticket resolution via the list endpoint viable, or does the backend need new lookup endpoints? The answer is yes — client-side is viable and preferred. src/tickets/latest.ts already proved the pattern by fetching /api/tickets and using data.items[0].id to call printTicketDetail(), confirming the list endpoint returns internal IDs. The shared resolver mirrors this approach with three-tier matching: (1) exact match against item.id for internal CUIDs, (2) case-insensitive match against item.shortId for 'BLD-339', (3) numeric suffix extraction for '339' matching 'BLD-339'. No new backend endpoints needed.",
+      "title": "Diagnosis APL: Viability of Client-Side Resolution"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "The code review confirmed all 11 acceptance criteria were addressed across 14 changed files. Key verification points: the shared resolver in src/lib/resolve-ticket.ts implements three-tier matching with ambiguity detection (AC-1 through AC-4); --json output was added to tickets list and get (AC-5, AC-6); help flags work at global, router, and command levels without triggering API calls (AC-7); formatDate validates dates with isNaN checks cross-referencing runStatus (AC-8); unresolved references fail with clear errors including org context (AC-9); 30 unit tests cover all resolution scenarios (AC-10); --query flag and PowerShell-safe examples added to inspect db (AC-11). The review also confirmed backward-compatible text output remains the default and the continue.ts rawRef parameter correctly handles the CUID vs raw-input mismatch in positional arg filtering.",
+      "title": "Code Review: All 11 Acceptance Criteria Verified"
+    },
+    {
+      "file": ".helix/tickets/cmolkm7cl000geg0ubnhijava/runs/cmolkm7e4000jeg0urgct1ekt/code-review/apl.json",
+      "line": 1,
+      "description": "This APL artifact maps each acceptance criterion to its precise source location. Critical evidence: src/lib/resolve-ticket.ts implements matchTicket with three-tier matching and ambiguity detection; src/tickets/index.ts lines 35-37 contain the router-level help check and lines 57-59 the per-command get help; src/tickets/get.ts lines 32-44 contain the formatDate validator with isNaN cross-referencing runStatus; src/lib/resolve-ticket.ts lines 117-119 emit ambiguous-match errors with ticket list and org name; lines 123-126 emit not-found errors with input ref and org name; src/inspect/index.ts lines 57-59 add the --query flag for db. All 30 tests pass. Quality gates (typecheck, tests) pass after code review changes.",
+      "title": "Code Review APL: Evidence Map"
+    },
+    {
+      "file": ".helix/merge-conflicts.json",
+      "line": 1,
+      "description": "This file tracks which files have merge conflicts between the feature branch and staging, and which commits from each side produced those conflicts. The diff shows two important structural changes: (1) the conflict file path changed from src/index.ts to src/tickets/index.ts, reflecting the router refactoring that moved ticket resolution logic into the tickets sub-router rather than the global entry point; (2) src/lib/config.ts was removed from the conflict list entirely, meaning the staging changes to config no longer conflict with the feature branch. The ticket branch now has four commits covering implementation, a staging merge, and a code-review pass, while staging has one implementation commit on the other side of the conflict.",
+      "title": "Merge Conflict Tracking: File Moves and Commit History"
+    }
+  ]
+}
