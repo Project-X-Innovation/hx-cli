@@ -4,18 +4,22 @@ import {
   type InstallSource,
 } from "../lib/config.js";
 import {
-  fetchRemoteSha,
+  fetchLatestVersion,
+  isNewerVersion,
   CANONICAL_REPO,
   CANONICAL_BRANCH,
 } from "./check.js";
+import { getPackageVersion } from "./version.js";
 import { performUpdate } from "./perform.js";
 import { validateInstall } from "./validate.js";
 
 /**
- * Check whether an installSource matches the canonical GitHub source.
+ * Check whether an installSource matches a canonical source.
+ * Accepts both legacy "github" mode (repo/branch check) and "npm" mode.
  */
 function isCanonicalSource(source: InstallSource | undefined): boolean {
   if (!source) return false;
+  if (source.mode === "npm") return true;
   return (
     source.mode === "github" &&
     source.repo === CANONICAL_REPO &&
@@ -29,7 +33,7 @@ function isCanonicalSource(source: InstallSource | undefined): boolean {
  * Flags:
  *   --enable-auto   Enable automatic update checks
  *   --disable-auto  Disable automatic update checks
- *   (no flags)      Check for and apply updates from GitHub main
+ *   (no flags)      Check for and apply updates from npm
  */
 export async function runUpdate(args: string[]): Promise<void> {
   // Handle --enable-auto / --disable-auto flags
@@ -48,27 +52,22 @@ export async function runUpdate(args: string[]): Promise<void> {
   // Run the update check flow
   console.log("Checking for updates...");
 
-  const remoteSha = fetchRemoteSha();
-  if (remoteSha === null) {
+  const remoteVersion = fetchLatestVersion();
+  if (remoteVersion === null) {
     console.error(
-      "Failed to check for updates. Could not reach GitHub or git is not installed.",
+      "Failed to check for updates. Could not reach the npm registry.",
     );
     process.exit(1);
   }
 
-  const config = loadFullConfig();
-  const localSha = config.installSource?.commit;
+  const localVersion = getPackageVersion();
 
-  if (localSha && remoteSha.toLowerCase() === localSha.toLowerCase()) {
+  if (!isNewerVersion(remoteVersion, localVersion)) {
     console.log("Already up to date.");
     return;
   }
 
-  console.log(
-    localSha
-      ? `Update available: ${localSha.slice(0, 7)} → ${remoteSha.slice(0, 7)}`
-      : `Installing latest from ${CANONICAL_REPO}#${CANONICAL_BRANCH}...`,
-  );
+  console.log(`Update available: ${localVersion} → ${remoteVersion}`);
 
   const result = performUpdate({ quiet: false });
 
@@ -85,20 +84,16 @@ export async function runUpdate(args: string[]): Promise<void> {
       console.error(`\nnpm output:\n${result.stderr}`);
     }
     console.error(`\nThe update installed a broken package. To recover:`);
-    console.error(`  1. git clone or pull the helix-cli repository`);
-    console.error(`  2. Run: npm run build`);
-    console.error(`  3. Run: npm link (may need elevated permissions on Windows)`);
-    console.error(`\nYou can also re-run 'hlx update' to retry.`);
+    console.error(`  1. Run: npm install -g @projectxinnovation/helix-cli@latest`);
+    console.error(`  2. Or re-run 'hlx update' to retry.`);
     process.exit(1);
   }
 
   // Persist install-source metadata on success
   saveConfig({
     installSource: {
-      mode: "github",
-      repo: CANONICAL_REPO,
-      branch: CANONICAL_BRANCH,
-      commit: remoteSha,
+      mode: "npm",
+      version: remoteVersion,
     },
   });
 
@@ -131,24 +126,21 @@ export async function checkAutoUpdate(): Promise<void> {
     return;
   }
 
-  const localSha = config.installSource!.commit;
-  if (!localSha) {
-    return;
-  }
+  const localVersion = getPackageVersion();
 
-  // Check remote SHA — silently skip on failure
-  const remoteSha = fetchRemoteSha();
-  if (remoteSha === null) {
+  // Check remote version — silently skip on failure
+  const remoteVersion = fetchLatestVersion();
+  if (remoteVersion === null) {
     return;
   }
 
   // Already current
-  if (remoteSha.toLowerCase() === localSha.toLowerCase()) {
+  if (!isNewerVersion(remoteVersion, localVersion)) {
     return;
   }
 
   // Perform quiet update
-  console.error(`Updating CLI (${localSha.slice(0, 7)} → ${remoteSha.slice(0, 7)})...`);
+  console.error(`Updating CLI (${localVersion} → ${remoteVersion})...`);
   const result = performUpdate({ quiet: true });
 
   if (result.success) {
@@ -162,10 +154,8 @@ export async function checkAutoUpdate(): Promise<void> {
     }
     saveConfig({
       installSource: {
-        mode: "github",
-        repo: CANONICAL_REPO,
-        branch: CANONICAL_BRANCH,
-        commit: remoteSha,
+        mode: "npm",
+        version: remoteVersion,
       },
     });
     console.error("Updated to latest. Changes take effect on the next invocation.");

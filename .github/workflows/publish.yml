@@ -1,0 +1,59 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+        # prepare script runs build automatically after npm ci
+
+      - run: npm test
+
+      # Validate tag version matches package.json version
+      - name: Verify version match
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      # Pack and validate tarball contents
+      - name: Pack and validate
+        run: |
+          npm pack
+          TARBALL=$(ls *.tgz)
+          echo "Tarball: $TARBALL"
+          tar -tzf "$TARBALL" > tarball-contents.txt
+          echo "--- Tarball contents ---"
+          cat tarball-contents.txt
+          echo "--- Validating required files ---"
+          grep -q "package/dist/index.js" tarball-contents.txt || { echo "::error::dist/index.js missing from tarball"; exit 1; }
+          grep -q "package/package.json" tarball-contents.txt || { echo "::error::package.json missing from tarball"; exit 1; }
+          # Verify no test files leaked into tarball
+          if grep -q "\.test\.\(js\|d\.ts\)" tarball-contents.txt; then
+            echo "::error::Test files found in tarball — check .npmignore"
+            exit 1
+          fi
+          echo "Tarball validation passed"
+
+      # Publish the exact validated tarball
+      - name: Publish
+        run: npm publish *.tgz --provenance
