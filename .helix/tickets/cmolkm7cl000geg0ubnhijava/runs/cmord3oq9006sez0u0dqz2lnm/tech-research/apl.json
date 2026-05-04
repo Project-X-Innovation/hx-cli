@@ -1,0 +1,72 @@
+{
+  "questions": [
+    "What is the correct architecture for shared ticket resolution — client-side list matching, backend lookup endpoint, or sequential API retries?",
+    "What match semantics should the resolver use for numeric ticket numbers (e.g., '339') when shortIds have a prefix (e.g., 'BLD-339')?",
+    "Should help interception be a single global interceptor, per-router, or both?",
+    "What test framework and approach should be used given zero existing test infrastructure and the zero-dependency philosophy?",
+    "How should --json output be structured — raw API response passthrough, curated subset, or formatted envelope?",
+    "What is the pagination risk for client-side ticket resolution, and how should it be mitigated?"
+  ],
+  "answers": [
+    {
+      "answer": "Client-side resolution via the /api/tickets list endpoint is the correct architecture. This fetches the ticket list with a single API call, then matches locally by internal ID, short ID, or numeric number. This is the proven pattern from resolve-repo.ts (lines 11-37) and is already demonstrated by latest.ts (line 44-45) which fetches the list and uses the internal id. No backend changes are needed, consistent with the ticket scope constraint. Sequential API retries (try /tickets/{input} with different formats) would be fragile and require 2-3 API calls on failure. A backend lookup endpoint would be cleaner long-term but requires backend changes explicitly excluded from scope.",
+      "evidence": [
+        "src/lib/resolve-repo.ts:11-37 — existing fetch-list-then-match pattern: listRepos -> exact ID match -> exact name match -> partial match",
+        "src/tickets/latest.ts:44-45 — demonstrates list endpoint returns items with internal 'id' field usable for resolution",
+        "src/tickets/list.ts:5-12 — TicketItem type has both 'id' (internal CUID) and 'shortId' fields",
+        "ticket.md line 28 — 'This ticket is scoped to the CLI and any minimal API support required for the CLI to work correctly'",
+        "ticket.md line 56 — 'Replacing the current API client layer' is out of scope"
+      ]
+    },
+    {
+      "answer": "The resolver should extract the numeric suffix from each item's shortId and compare it to the numeric input. For '339', it matches against the number extracted from 'BLD-339' (i.e., 339). This is implemented by splitting shortId on '-' and parsing the last segment as an integer. The ticket explicitly forbids partial matching and fallback to unrelated tickets, so the numeric comparison must be exact on the extracted number. If multiple items have the same numeric suffix (unlikely but possible across different prefixes), the resolver must fail with an ambiguity error per ticket.md line 79: 'If resolution is ambiguous, fail with a clear message instead of choosing one silently.'",
+      "evidence": [
+        "src/tickets/list.ts:5-8 — TicketItem has shortId field (format like 'BLD-339')",
+        "ticket.md lines 37-38 — hlx tickets get 339 must resolve the same ticket as BLD-339 and internal-id",
+        "ticket.md line 79 — 'If resolution is ambiguous, fail with a clear message instead of choosing one silently'",
+        "ticket.md line 77 — 'If a numeric ticket number matches no ticket, do not fall back to an unrelated internal id or latest ticket'"
+      ]
+    },
+    {
+      "answer": "Help must be intercepted at three levels: (1) top-level 'hlx --help' via a new case in the main switch in src/index.ts, (2) router-level 'hlx tickets --help' via a check at the top of each router function before the subcommand switch, and (3) command-level 'hlx tickets get --help' via a check at the beginning of each command before any validation or API calls. A shared isHelpRequested(args) utility in src/lib/flags.ts keeps the checks DRY. This three-level approach is needed because help semantics differ: top-level shows global usage, router-level shows subcommand list, command-level shows command-specific usage.",
+      "evidence": [
+        "src/index.ts:51-94 — main switch has no case for --help/-h; falls through to 'Unknown command'",
+        "src/index.ts:43 — SKIP_AUTO_UPDATE includes --help/-h but only affects auto-update skip, not dispatch",
+        "src/tickets/index.ts:42-99 — runTickets() has no --help check before dispatching to subcommands",
+        "src/tickets/index.ts:21 — resolveTicketId filters out '--help' as a flag prefix, then fails with 'No ticket ID provided'",
+        "src/inspect/index.ts:17-58 — runInspect() has no --help check",
+        "src/comments/index.ts:24-45 — runComments() has no --help check"
+      ]
+    },
+    {
+      "answer": "Use Node.js built-in node:test with a compile-first approach: tests are .test.ts files in src/ alongside source, compiled by tsc to dist/*.test.js, then run with 'node --test'. This adds zero dependencies. The key testable unit is the pure matcher function matchTicket(items, ref) which takes a pre-fetched item array and a reference string, making it testable without HTTP mocking. The test script in package.json should be 'tsc && node --test dist/**/*.test.js'. This is preferred over vitest/jest because the project has zero test dependencies today and the test surface is focused (resolver matching, help detection, date formatting).",
+      "evidence": [
+        "package.json:14 — engines.node >= 18; node:test is available in Node 18+",
+        "package.json:21-24 — devDependencies are only @types/node and typescript; zero test deps",
+        "tsconfig.json:4-5 — target ES2022, module Node16; tsc compiles to dist/ from src/",
+        "src/lib/resolve-repo.ts:11-37 — resolve-repo pattern shows the matcher is a pure function over a fetched list, easily unit-testable"
+      ]
+    },
+    {
+      "answer": "For --json output, emit the full structured data from the API response as JSON to stdout. For 'tickets list --json', emit the items array with all fields including internal id. For 'tickets get --json', emit the full ticket object with untruncated description. This is the simplest approach that satisfies the ticket requirements. Errors continue to go to stderr via console.error. No wrapper envelope is needed for MVP — the raw data structure is the contract. This follows common CLI patterns (gh --json, kubectl -o json) where the output is the resource data, not a status envelope.",
+      "evidence": [
+        "ticket.md lines 39-40 — list --json must include internal ticket id, short id, status, title, reporter, timestamps",
+        "ticket.md lines 41-42 — get --json must return structured details including internal id, short id, status, title, branch, reporter, repositories, runs, archived, description",
+        "ticket.md line 68 — 'hlx tickets get --json must print JSON and avoid truncating the description'",
+        "ticket.md line 80 — 'If JSON output is requested, errors should still be clear and should not emit partial success JSON'",
+        "src/tickets/get.ts:4-21 — TicketDetail type already has all required fields; can be serialized directly"
+      ]
+    },
+    {
+      "answer": "Pagination is an identified risk but not a blocking concern for MVP. The TicketsResponse type in list.ts and latest.ts contains only '{ items: TicketItem[] }' with no pagination metadata visible in the typed response. The list endpoint may return all items for typical org sizes, or it may paginate with fields not currently typed. Mitigation: (1) the resolver error message should mention the org context and suggest trying the full internal ID if resolution fails, (2) implementation should log or inspect the actual API response shape to detect pagination fields, (3) the product doc records this as Q1 for future consideration. If pagination is discovered during implementation, the resolver can be extended to fetch additional pages or the error message can guide the user.",
+      "evidence": [
+        "src/tickets/list.ts:14 — TicketsResponse = { items: TicketItem[] }; no pagination cursor/total fields typed",
+        "src/tickets/latest.ts:14 — same TicketsResponse type without pagination metadata",
+        "product/product.md lines 111-112 — Q1 identifies pagination as an unknown risk",
+        "ticket.md line 77 — 'If a numeric ticket number matches no ticket, do not fall back' — clear error is the only acceptable outcome"
+      ]
+    }
+  ],
+  "statement": "The technical direction for helix-cli ticket improvements is client-side ticket resolution via a new src/lib/resolve-ticket.ts module following the proven resolve-repo.ts fetch-list-then-match pattern. The resolver separates a pure matcher function (testable without HTTP) from a fetch wrapper. Help is intercepted at three levels (global, router, command) using a shared utility in flags.ts. JSON output is added to tickets list and get via a --json flag that emits full structured data to stdout. Timestamps use validated Date construction with safe fallback. Inspect db gains a --query flag for PowerShell safety. Tests use node:test with compile-first approach (zero added deps). All changes are within helix-cli; no backend modifications required.",
+  "followups": []
+}
