@@ -1,0 +1,81 @@
+{
+  "questions": [
+    "Q1: What is the correct workflow trigger mechanism for npm Trusted Publishing from GitHub Actions?",
+    "Q2: How should the tarball be validated before publish to ensure dist/index.js is present?",
+    "Q3: What is the best approach to migrate the update mechanism from git-SHA to npm-version based?",
+    "Q4: How should test files be excluded from the published tarball without breaking the test runner?",
+    "Q5: Can semver comparison be done without adding a runtime dependency?",
+    "Q6: Does npm Trusted Publishing truly work without NODE_AUTH_TOKEN or NPM_TOKEN?",
+    "Q7: What package.json fields are required for npm Trusted Publishing OIDC identity verification?"
+  ],
+  "answers": [
+    {
+      "answer": "Tag push (on: push: tags: ['v*']) is the canonical pattern used in npm's own trusted publishing documentation. It provides a clear, auditable release trigger and the npm UI trusted publisher configuration only needs the workflow filename. The workflow should additionally validate that the tag version matches package.json version.",
+      "evidence": [
+        "npm Trusted Publishing docs (Context7): example workflow uses 'on: push: tags: [\"v*\"]'",
+        "Ticket: 'Document the expected release trigger clearly enough that the UI-side npm trusted publisher configuration can point at a stable workflow filename'",
+        "Product.md lists tag push, GitHub Release, and manual dispatch as considered options"
+      ]
+    },
+    {
+      "answer": "Use npm pack to create the tarball, tar -tzf to list contents, grep for package/dist/index.js (npm's standard tarball prefix is 'package/'), then publish the exact validated tarball via npm publish <tarball>. This validates the actual artifact, not the working directory.",
+      "evidence": [
+        "Ticket: 'inspect the artifact that would actually be published, not just the working tree'",
+        "Ticket: 'Validation must run against the exact single tarball being published'",
+        "npm pack creates a .tgz file with all contents under a 'package/' prefix",
+        "Scout reference-map: 'npm pack --dry-run shows 77 files, 23.3kB packed'"
+      ]
+    },
+    {
+      "answer": "Replace git ls-remote with 'npm view @projectxinnovation/helix-cli version' in check.ts. Replace github: install spec with '@projectxinnovation/helix-cli@latest' in perform.ts. Add 'npm' to InstallSource.mode union and a 'version' field in config.ts. Update isCanonicalSource() to accept both 'github' and 'npm' modes. npm view requires npm on PATH, which is already guaranteed since the CLI is installed via npm.",
+      "evidence": [
+        "src/update/check.ts:13-27: fetchRemoteSha() uses execSync('git ls-remote ...') with 10s timeout",
+        "src/update/perform.ts:15: installSpec = `github:${CANONICAL_REPO}#${CANONICAL_BRANCH}`",
+        "src/update/index.ts:96-103: saves installSource with mode:'github', commit: remoteSha",
+        "src/lib/config.ts:5-10: InstallSource type with mode: 'github' | 'unknown'",
+        "src/update/index.ts:17-24: isCanonicalSource checks mode==='github' && repo && branch",
+        "npm view <pkg> version returns the latest version string (e.g., '1.2.0')"
+      ]
+    },
+    {
+      "answer": "Add a .npmignore file with patterns 'dist/**/*.test.js' and 'dist/**/*.test.d.ts'. When both files and .npmignore are present in package.json, the files field acts as the whitelist and .npmignore further excludes within that whitelist. This excludes test artifacts from the tarball without changing the build or test workflow (test runner requires compiled test files in dist/).",
+      "evidence": [
+        "src/lib/flags.test.ts and src/lib/resolve-ticket.test.ts compile to dist/ and are included in tarball",
+        "Scout: 'Test .d.ts and .test.js files are included in the tarball — unnecessary for installed CLI'",
+        "npm test script: 'tsc && node --test dist/**/*.test.js' — requires test files in dist/",
+        "No .npmignore exists currently; publish controlled by files field only",
+        "Ticket: 'keep published package contents intentionally limited'"
+      ]
+    },
+    {
+      "answer": "Yes. A minimal function that splits 'x.y.z' on '.' and compares major, minor, patch numerically is sufficient. The project uses simple semver (currently 1.2.0, no pre-release tags). This preserves the zero-dependency design. The semver package can be added later if pre-release channels are needed.",
+      "evidence": [
+        "package.json version: '1.2.0' — simple major.minor.patch, no pre-release suffix",
+        "package.json devDependencies: only @types/node and typescript — zero runtime deps",
+        "Ticket: does not mention pre-release versioning or ranges",
+        "Product.md: pre-release channels listed under 'Future Considerations'"
+      ]
+    },
+    {
+      "answer": "Yes. npm Trusted Publishing with OIDC eliminates the need for stored secrets. Per npm documentation, 'The npm CLI automatically detects OIDC environments and uses them for authentication before falling back to traditional tokens.' The workflow needs: (1) permissions.id-token: write, (2) actions/setup-node with registry-url: 'https://registry.npmjs.org', (3) npm publish. No NODE_AUTH_TOKEN or NPM_TOKEN environment variable is required.",
+      "evidence": [
+        "npm Trusted Publishing docs (Context7): GitHub Actions example shows npm publish without NODE_AUTH_TOKEN env var",
+        "npm docs: 'The npm CLI automatically detects OIDC environments and uses them for authentication before falling back to traditional tokens'",
+        "npm docs: 'Trusted publishing allows you to publish npm packages directly from your CI/CD workflows using OpenID Connect (OIDC) authentication, eliminating the need for long-lived npm tokens'",
+        "Ticket: 'Do not use a long-lived NPM_TOKEN for npm publish'"
+      ]
+    },
+    {
+      "answer": "The repository field in package.json is required: {\"type\": \"git\", \"url\": \"https://github.com/Project-X-Innovation/helix-cli.git\"}. npm uses this field to match the GitHub repository requesting the OIDC publish token. Additionally, publishConfig with access: 'public' is needed for the first publish of a scoped package, and provenance: true enables signed provenance attestations.",
+      "evidence": [
+        "package.json lines 1-26: no 'repository' field present",
+        "Diagnosis: 'npm Trusted Publishing uses OIDC identity verification that matches the GitHub repo URL in the package's repository field'",
+        "Ticket: 'package.json must include exact repository metadata for https://github.com/Project-X-Innovation/helix-cli.git'",
+        "npm docs: scoped packages require --access public for first publish",
+        "npm provenance docs: publishConfig.provenance: true or --provenance flag"
+      ]
+    }
+  ],
+  "statement": "The technical direction for BLD-375 is defined across five architecture decisions: (1) tag-push workflow trigger aligned with npm's trusted publishing documentation, (2) tarball-based pack validation using npm pack + tar inspection before publishing the validated artifact, (3) update mechanism migration from git-SHA/GitHub-direct to npm-view/semver-based with InstallSource type extension, (4) minimal numeric semver comparison preserving zero-dependency design, and (5) .npmignore-based test file exclusion. All decisions are grounded in the diagnosis findings (four gaps: metadata, workflow, update mechanism, tarball cleanup) and product requirements (fail-closed, validate-the-artifact, minimal published surface). No new runtime dependencies are introduced. The scope is contained within helix-cli with no cross-repo impact.",
+  "followups": []
+}
