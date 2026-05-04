@@ -1,0 +1,61 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Add --run Flag to hlx tickets artifacts & Harden 404 Errors in hlx tickets artifact",
+  "description": "This tour walks through two independent defect fixes in the helix-cli artifact inspection commands. First, the cmdTicketsArtifacts function is updated to accept a --run <runId> CLI flag and forward it as a query parameter to the server, mirroring the pattern already used by the sibling artifact command. Second, the artifact command is hardened to catch 404 HTTP errors at the call site and emit a clean user-facing message instead of letting a raw error propagate to the global handler. Three files are changed: src/tickets/artifacts.ts, src/tickets/index.ts, and src/tickets/artifact.ts.",
+  "steps": [
+    {
+      "file": "src/tickets/index.ts",
+      "line": 36,
+      "description": "This is the subcommand router for all `hlx tickets` commands. Before this fix, line 36 showed usage text that omitted the --run option for the `artifacts` subcommand, and line 79 called cmdTicketsArtifacts(config, ticketId) without forwarding the parsed `rest` args array. This meant even if a user passed --run, the flag was silently discarded. The fix updates usage text here at line 36 to advertise [--run <runId>], setting correct user expectations before any code runs.",
+      "title": "Overview: Router and Usage Text"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 79,
+      "description": "Line 79 is where the router dispatches to the artifacts command. Previously it called cmdTicketsArtifacts(config, ticketId) without the `rest` args array, making --run unreachable inside that function. The fix adds `rest` as the third argument — matching how the sibling artifact command at line 85 already receives its args. This single-line change is the glue that lets user-supplied flags actually reach the command handler.",
+      "title": "Router: Forward args to cmdTicketsArtifacts"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 3,
+      "description": "Line 3 adds the import of getFlag from src/lib/flags.ts. getFlag(args, '--run') returns the string value following the flag, or undefined if the flag is absent. It does not mutate the args array. Importing it here is the first of three changes that together enable --run support in this command, following the identical import already present in artifact.ts.",
+      "title": "artifacts.ts: Import getFlag Utility"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 18,
+      "description": "Line 18 is the function signature for cmdTicketsArtifacts. The root cause of Defect 1 was that this signature only accepted (config: HxConfig, ticketId: string) with no way to receive CLI args. Adding args: string[] here is necessary for the router change at index.ts:79 to be meaningful — the function can now receive and inspect the full args array passed by the user.",
+      "title": "artifacts.ts: Add args Parameter to Function Signature"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 19,
+      "description": "Line 19 calls getFlag(args, '--run') and assigns the result to runId (string | undefined). When the user supplies --run abc123, runId is 'abc123'. When omitted, runId is undefined. This mirrors the identical pattern in artifact.ts at its line 29-40 block. No mutation of args occurs, and no error is thrown for a missing flag — omitting --run simply preserves the prior behavior where the server uses its own default.",
+      "title": "artifacts.ts: Read --run Flag Value"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 20,
+      "description": "Lines 20-23 use an object spread to conditionally include queryParams: { runId } in the hxFetch options only when runId is defined. When runId is undefined, no queryParams key is added and the server receives the same request as before the fix — zero regression risk for existing callers. When runId is present, the server receives it as a URL query parameter, enabling run-scoped artifact listing that the server already supported but was previously unreachable from the CLI.",
+      "title": "artifacts.ts: Conditionally Pass queryParams to hxFetch"
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 42,
+      "description": "Lines 42-54 address Defect 2. Previously the hxFetch call at this location had no surrounding try-catch. When the server returned 404 for a missing step artifact, hxFetch built an error message from the response body and threw a raw Error. With no local handler, this propagated to the global catch at src/index.ts:95-97, which logged a confusing raw HTTP error and exited. The fix wraps the call in a try-catch: the catch block prints a contextual message naming the step and repo, optionally prints the original error detail, and calls process.exit(1) unconditionally — preventing any error from reaching the global handler. This pattern matches the reference implementation in bundle.ts lines 54-71.",
+      "title": "artifact.ts: Wrap hxFetch in try-catch for 404 Handling"
+    },
+    {
+      "file": "src/tickets/artifact.ts",
+      "line": 49,
+      "description": "Line 49 is the console.error call inside the catch block. It prints a message that names the step and repo so the user immediately understands which artifact was not found, rather than seeing a raw HTTP error string. Lines 50-52 optionally append the original error's message for diagnostic detail. Line 53 calls process.exit(1) unconditionally, ensuring a non-zero exit code for any fetch failure regardless of whether the thrown error had a message. This completes the graceful error path.",
+      "title": "artifact.ts: User-Facing Error Message on Fetch Failure"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 85,
+      "description": "Line 85 shows the router dispatch for the singular `artifact` command, which already correctly passes `rest` to cmdTicketsArtifact. This line serves as confirmation that the pattern introduced for `artifacts` at line 79 is consistent with the existing codebase. Both commands now share the same data flow: router parses ticketId + rest, forwards rest to the command handler, command uses getFlag to extract --run, and hxFetch receives queryParams only when runId is defined. All major code paths — flag parsing, HTTP fetch, error handling, and the global handler — remain clean after these changes.",
+      "title": "Summary: Sibling Command Confirms Clean Patterns"
+    }
+  ]
+}

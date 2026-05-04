@@ -1,0 +1,48 @@
+{
+  "questions": [
+    "Were all four implementation steps completed as planned?",
+    "Does the implementation match all ticket acceptance criteria?",
+    "Are there any deviations from the implementation plan?",
+    "Are there unresolved followups?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All four steps were completed: (1) perform.ts refactored from execSync to spawnSync with stderr capture, (2) validate.ts created with validateInstall(), (3) validation inserted into runUpdate() before saveConfig, (4) validation inserted into checkAutoUpdate() before saveConfig.",
+      "evidence": [
+        "src/update/perform.ts: uses spawnSync with shell:true, encoding:utf8, returns {success, error?, stderr?}",
+        "src/update/validate.ts: new file with validateInstall() using npm root -g, existsSync, and node --version check",
+        "src/update/index.ts line 80-93: validation gate in runUpdate with error, stderr, and recovery messaging",
+        "src/update/index.ts line 155-162: validation gate in checkAutoUpdate with warn-and-continue behavior"
+      ]
+    },
+    {
+      "answer": "Yes. (1) Valid installs continue to work with success message. (2) Missing dist/index.js causes exit(1) with the missing path. (3) npm stderr is surfaced on validation failure. (4) Declaration-only dist/ is not accepted. (5) Recovery message mentions rebuild/relink. (6) Existing behavior unchanged for valid installs.",
+      "evidence": [
+        "CHK-05 output: {valid:true} for intact global install",
+        "CHK-04 output: {valid:false, error:'Bin target missing: ...'} for missing index.js",
+        "index.ts line 84-85: result.stderr surfaced when available",
+        "index.ts line 87-91: recovery hint printed on failure"
+      ]
+    },
+    {
+      "answer": "One minor deviation: spawnSync calls use full command strings instead of separate command+args arrays to avoid Node.js DEP0190 deprecation warnings. This is functionally equivalent and more forward-compatible.",
+      "evidence": [
+        "Node 22+ emits DEP0190 when args array is passed with shell:true",
+        "perform.ts line 17: spawnSync(`npm install -g ${installSpec}`, ...) instead of spawnSync('npm', ['install', '-g', installSpec], ...)",
+        "validate.ts line 20, 59: same pattern for npm root -g and node --version calls"
+      ]
+    },
+    {
+      "answer": "No unresolved followups. All changes are confined to src/update/ as planned. All verification checks pass.",
+      "evidence": [
+        "CHK-01: typecheck passes",
+        "CHK-02: build produces dist/update/validate.js",
+        "CHK-03: validateInstall exports as function",
+        "CHK-04: validates missing bin target correctly",
+        "CHK-05: validates intact install correctly"
+      ]
+    }
+  ],
+  "statement": "Implementation complete. Three files changed in src/update/: perform.ts refactored from execSync to spawnSync with stderr capture, new validate.ts with validateInstall() for post-install integrity checks, and index.ts modified to gate metadata save and success messaging on validation in both manual and auto-update paths. All five verification checks pass. One minor deviation: spawnSync uses command strings instead of separate args to avoid DEP0190 deprecation.",
+  "followups": []
+}

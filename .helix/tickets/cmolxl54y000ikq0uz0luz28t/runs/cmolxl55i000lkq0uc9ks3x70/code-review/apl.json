@@ -1,0 +1,48 @@
+{
+  "questions": [
+    "Does the implementation correctly meet all six ticket acceptance criteria?",
+    "Are there regression risks from the performUpdate() API change?",
+    "Is the validateInstall() function correct and robust across failure modes?",
+    "Is the metadata save correctly gated on validation success in both update paths?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All six acceptance criteria are satisfied: (1) valid installs report success unchanged, (2) missing dist/index.js exits non-zero with the path named, (3) npm warnings are visible (inherited in manual mode, captured in auto mode), (4) declaration-only dist/ is not accepted, (5) recovery message mentions rebuild/relink, (6) existing behavior unchanged for valid installs.",
+      "evidence": [
+        "src/update/index.ts:81-93 — validation gate in runUpdate with error, recovery, and process.exit(1)",
+        "src/update/index.ts:155-161 — validation gate in checkAutoUpdate with warn-and-return",
+        "src/update/validate.ts:50-55 — existsSync check returns {valid:false, error:'Bin target missing: <path>'}",
+        "src/update/index.ts:96-103 — saveConfig only reached after validation passes"
+      ]
+    },
+    {
+      "answer": "No regression risk. The return type change is additive (stderr?: string added). Only two consumers exist — both in src/update/index.ts — and both correctly use the new stderr field. No other modules import performUpdate.",
+      "evidence": [
+        "grep for performUpdate across src/ — only src/update/index.ts lines 73 and 152",
+        "src/update/perform.ts:12 — return type {success: boolean; error?: string; stderr?: string}",
+        "src/update/index.ts:84 — checks result.stderr (works with undefined from non-quiet mode)",
+        "src/update/index.ts:158-159 — checks result.stderr (populated from quiet mode)"
+      ]
+    },
+    {
+      "answer": "Yes. validateInstall() handles all failure modes correctly: npm root -g failure, file missing, version check failure (non-zero exit, timeout/signal, spawn error). It never throws — all paths return structured results. Cross-platform handling uses path.join() and shell:true. The recursion guard (HLX_SKIP_UPDATE_CHECK=1) prevents the version check from triggering auto-update.",
+      "evidence": [
+        "src/update/validate.ts:20-36 — npm root -g with error/status/empty-output checks",
+        "src/update/validate.ts:50-56 — existsSync check with descriptive error",
+        "src/update/validate.ts:59-76 — version check with timeout, signal, error, and status checks",
+        "src/update/validate.ts:63 — HLX_SKIP_UPDATE_CHECK=1 set in env"
+      ]
+    },
+    {
+      "answer": "Yes. In both paths, saveConfig() is only reachable after validateInstall() returns {valid: true}. In runUpdate(), validation failure calls process.exit(1) before reaching saveConfig. In checkAutoUpdate(), validation failure returns early before reaching saveConfig. This preserves the retry path — metadata is not poisoned on broken installs.",
+      "evidence": [
+        "src/update/index.ts:92 — process.exit(1) prevents saveConfig at line 96",
+        "src/update/index.ts:161 — return prevents saveConfig at line 163",
+        "src/update/index.ts:96-103 — saveConfig only reachable in runUpdate after validation passes",
+        "src/update/index.ts:163-170 — saveConfig only reachable in checkAutoUpdate after validation passes"
+      ]
+    }
+  ],
+  "statement": "Code review complete. Three changed files reviewed: src/update/perform.ts (spawnSync refactor with stderr capture), src/update/validate.ts (new post-install validation), src/update/index.ts (validation gates in both update paths). All six ticket acceptance criteria are satisfied. No correctness issues, regression risks, or requirement gaps found. Quality gates pass (typecheck, build). No code changes made by review.",
+  "followups": []
+}

@@ -18,6 +18,7 @@ function ticketsUsage(exitCode: number = 1): never {
   hlx tickets latest [--status-not-in <s1,s2>] [--archived] [--sprint <id>]
   hlx tickets get <ticket-ref> [--json]
   hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
+<<<<<<< HEAD
   hlx tickets rerun <ticket-ref>
   hlx tickets continue <ticket-ref> "continuation context"
   hlx tickets artifacts <ticket-ref>
@@ -26,6 +27,14 @@ function ticketsUsage(exitCode: number = 1): never {
 
 Ticket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).`);
   process.exit(exitCode);
+=======
+  hlx tickets rerun <ticket-id>
+  hlx tickets continue <ticket-id> "continuation context"
+  hlx tickets artifacts <ticket-id> [--run <runId>]
+  hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey> [--run <runId>]
+  hlx tickets bundle <ticket-id> --out <dir>`);
+  process.exit(1);
+>>>>>>> origin/staging
 }
 
 export async function runTickets(config: HxConfig, args: string[]): Promise<void> {
@@ -95,6 +104,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
     }
 
     case "artifacts": {
+<<<<<<< HEAD
       if (isHelpRequested(rest)) {
         console.log("Usage: hlx tickets artifacts <ticket-ref>\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).");
         process.exit(0);
@@ -102,6 +112,10 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
       const rawRef = extractTicketRef(rest);
       const resolved = await resolveTicket(config, rawRef);
       await cmdTicketsArtifacts(config, resolved.id);
+=======
+      const ticketId = resolveTicketId(rest);
+      await cmdTicketsArtifacts(config, ticketId, rest);
+>>>>>>> origin/staging
       break;
     }
 

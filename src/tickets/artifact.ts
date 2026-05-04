@@ -39,10 +39,19 @@ export async function cmdTicketsArtifact(config: HxConfig, ticketId: string, arg
     }
   }
 
-  const data = (await hxFetch(config, `/tickets/${ticketId}/runs/${runId}/step-artifacts/${stepId}`, {
-    basePath: "/api",
-    queryParams: { repoKey },
-  })) as StepArtifactResponse;
+  let data: StepArtifactResponse;
+  try {
+    data = (await hxFetch(config, `/tickets/${ticketId}/runs/${runId}/step-artifacts/${stepId}`, {
+      basePath: "/api",
+      queryParams: { repoKey },
+    })) as StepArtifactResponse;
+  } catch (err) {
+    console.error(`Error: Could not fetch artifact for step "${stepId}" in repo "${repoKey}".`);
+    if (err instanceof Error) {
+      console.error(`  ${err.message}`);
+    }
+    process.exit(1);
+  }
 
   if (!data.files || data.files.length === 0) {
     console.log("No artifact files found for this step/repo.");

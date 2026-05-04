@@ -1,0 +1,75 @@
+{
+  "questions": [
+    "What is the correct approach to resolve the installed package path for validation across Windows and Unix?",
+    "Should performUpdate be refactored from execSync to spawnSync to capture stderr on the success path?",
+    "Should validation logic live in a new validate.ts file or be added to perform.ts?",
+    "How should the hlx --version execution check avoid recursion and PATH resolution issues?",
+    "What should the auto-update path do when validation fails — block or warn-and-continue?",
+    "How should stderr be handled differently in quiet (auto) vs non-quiet (manual) modes?",
+    "Should the metadata save be gated on validation success?"
+  ],
+  "answers": [
+    {
+      "answer": "Use `npm root -g` via spawnSync to get the global node_modules directory. Unlike `npm prefix -g`, which returns a prefix that differs between platforms (Unix needs `/lib/node_modules` appended, Windows needs just `/node_modules`), `npm root -g` returns the exact node_modules directory on all platforms. The installed package is then at `{npmRootG}/@projectxinnovation/helix-cli/dist/index.js`. This avoids platform-branching logic entirely.",
+      "evidence": [
+        "npm docs: npm root -g returns the global node_modules directory path directly",
+        "npm docs: Unix global packages at {prefix}/lib/node_modules, Windows at {prefix}/node_modules — npm root -g abstracts this difference",
+        "package.json line 2: package name is @projectxinnovation/helix-cli",
+        "package.json line 7: bin target is dist/index.js"
+      ]
+    },
+    {
+      "answer": "Yes, refactor performUpdate to use spawnSync instead of execSync. spawnSync returns {stdout, stderr, status, signal, error} as a structured result regardless of exit code, while execSync only returns stdout and only exposes stderr via the thrown error object on failure. spawnSync gives access to stderr on the success path, which is needed to surface npm tar warnings when validation later fails. The quiet vs non-quiet stdio configuration remains the same — spawnSync supports both 'inherit' and piped modes.",
+      "evidence": [
+        "Node.js docs: spawnSync returns {pid, output, stdout, stderr, status, signal, error} — stderr always accessible",
+        "Node.js docs: execSync returns Buffer|string of stdout only; stderr only available via error.stderr when thrown",
+        "src/update/perform.ts lines 14-20: current execSync approach loses stderr on success path",
+        "Ticket requirement AC3: npm tar warnings must be visible when validation fails"
+      ]
+    },
+    {
+      "answer": "Create a new src/update/validate.ts file. Validation is a distinct responsibility from installation execution, and both runUpdate() and checkAutoUpdate() need to call it. A separate module keeps perform.ts focused on npm execution and validate.ts focused on post-install integrity checks. This follows the existing modular pattern in src/update/ (check.ts, version.ts, perform.ts each have a single responsibility).",
+      "evidence": [
+        "src/update/ contains four single-responsibility files: check.ts (SHA fetching), version.ts (version reading), perform.ts (npm execution), index.ts (command handling)",
+        "Both runUpdate() and checkAutoUpdate() in index.ts need to call validation — shared function avoids duplication"
+      ]
+    },
+    {
+      "answer": "Run `node {fullPathToDistIndexJs} --version` via spawnSync rather than running `hlx --version`. This directly tests the installed artifact at the resolved global path, bypassing PATH resolution, shell caching, and symlink issues. Set HLX_SKIP_UPDATE_CHECK=1 in the subprocess environment to prevent the new CLI from triggering its own auto-update during the version check. The existing recursion guard pattern in performUpdate (src/update/perform.ts line 18) establishes this convention.",
+      "evidence": [
+        "src/update/perform.ts line 18: env: { ...process.env, HLX_SKIP_UPDATE_CHECK: '1' } — established recursion guard pattern",
+        "src/index.ts line 43: SKIP_AUTO_UPDATE set includes '--version' — but the newly installed CLI may not have this guard if it's an older version",
+        "src/index.ts lines 86-89: --version handler calls getPackageVersion() and prints version — lightweight operation",
+        "Running via full path avoids dependency on PATH resolution, which can be cached in the current shell session"
+      ]
+    },
+    {
+      "answer": "Auto-update validation failure should warn to stderr and continue without blocking the user's current command. This is consistent with the existing auto-update failure behavior (src/update/index.ts line 149: logs warning and continues). The key difference: do NOT save installSource metadata, so the next invocation will retry the update rather than seeing 'Already up to date' with a broken install.",
+      "evidence": [
+        "src/update/index.ts lines 95-96: comment 'never blocks command execution'",
+        "src/update/index.ts line 149: current failure path logs warning and continues",
+        "Product spec UC3: 'Validation warns the user but does not block the current command. Metadata is not saved, so the next invocation will retry.'"
+      ]
+    },
+    {
+      "answer": "In non-quiet mode (manual update), keep stdio as 'inherit' so npm output streams live to the terminal. stderr is not captured programmatically, but the user saw it. If validation fails, the error message should note that npm output was displayed above. In quiet mode (auto-update), use piped stdio and capture stderr from the spawnSync result. If validation fails, include the captured stderr in the warning message so the user can see what npm reported.",
+      "evidence": [
+        "src/update/perform.ts line 17: current non-quiet mode uses 'inherit' for live streaming UX",
+        "src/update/perform.ts line 17: current quiet mode uses ['pipe','pipe','pipe']",
+        "Ticket AC3: 'user sees enough install output to diagnose the package problem'",
+        "spawnSync with 'inherit' returns null for stdout/stderr; with pipes returns captured strings"
+      ]
+    },
+    {
+      "answer": "Yes, metadata save must be gated on validation success. If installSource is saved with the new commit SHA but the install is broken, future hlx update calls see matching SHAs and report 'Already up to date', permanently trapping the user on a broken install. Both runUpdate() and checkAutoUpdate() must move saveConfig() calls to after validation passes.",
+      "evidence": [
+        "src/update/index.ts lines 59-63: SHA comparison short-circuits with 'Already up to date' when local matches remote",
+        "src/update/index.ts lines 80-87: runUpdate saves metadata immediately after performUpdate success",
+        "src/update/index.ts lines 139-145: checkAutoUpdate saves metadata immediately after performUpdate success",
+        "Diagnosis statement: 'If metadata is saved with the new commit SHA but the install is broken, future hlx update would see Already up to date and not re-attempt'"
+      ]
+    }
+  ],
+  "statement": "The technical direction adds a post-install validation layer to the hlx update flow. A new src/update/validate.ts module provides two checks: (1) file existence of the bin target at the global install path resolved via `npm root -g`, and (2) execution of the installed CLI via `node {path} --version` with the HLX_SKIP_UPDATE_CHECK=1 recursion guard. performUpdate() in src/update/perform.ts is refactored from execSync to spawnSync to capture npm stderr on the success path. Both runUpdate() and checkAutoUpdate() in src/update/index.ts are modified to call validation after npm succeeds but before saving installSource metadata. Manual update validation failure exits non-zero with a detailed error and recovery hint. Auto-update validation failure warns to stderr and continues without saving metadata. No test framework is introduced; correctness relies on typecheck and manual acceptance testing.",
+  "followups": []
+}
