@@ -1,0 +1,55 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-375: Publish helix-cli to npm with Trusted Publishing via GitHub OIDC",
+  "description": "This tour walks through the changes made to enable helix-cli to be published to npm using GitHub OIDC Trusted Publishing. Four gaps were closed: (1) package.json repository metadata was added for OIDC identity verification, (2) a GitHub Actions publish workflow was created with tarball validation, (3) the update subsystem was migrated from GitHub-direct installs to npm registry lookups, and (4) test files were excluded from the published tarball. The tour follows data-flow order: types and config first, then the update subsystem, then the publish pipeline.",
+  "steps": [
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 1,
+      "description": "This file is created from scratch — no CI/CD infrastructure existed before. The workflow is the central artifact of BLD-375. It triggers on version tags (v*), builds and tests the package, validates the produced tarball contains dist/index.js, and publishes to npm using OIDC Trusted Publishing — no NPM_TOKEN required. All subsequent file changes exist to support this pipeline or the updated CLI update mechanism.",
+      "title": "Overview: The New Publish Pipeline"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 7,
+      "description": "The workflow only runs when a tag matching 'v*' is pushed. This is intentional: npm publishes must be deliberate, versioned releases. Pushes to branches do not trigger a publish. The tag version is later validated against package.json to prevent accidental version mismatches.",
+      "title": "Trigger: Tag-Push Only"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 9,
+      "description": "The 'id-token: write' permission is the key enabler for npm Trusted Publishing. It allows the GitHub Actions runner to request an OIDC token from GitHub's identity provider. The npm CLI detects this token automatically and uses it for authentication, eliminating the need for a long-lived NPM_TOKEN secret. 'contents: read' is the minimum needed to checkout the repository.",
+      "title": "OIDC Permissions for Trusted Publishing"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 19,
+      "description": "Specifying 'registry-url: https://registry.npmjs.org' in actions/setup-node configures the npm client to target the public registry and prepares it to receive OIDC credentials. Without this, the npm CLI would not know which registry to authenticate against. Node 22 is pinned for reproducibility.",
+      "title": "Setup Node with npm Registry URL"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 29,
+      "description": "This step extracts the semver from the Git tag (stripping the leading 'v') and compares it to the version field in package.json. If they differ, the workflow fails with a descriptive error before any publish attempt. This prevents a common mistake where the tag is bumped but package.json is not (or vice versa).",
+      "title": "Version Guard: Tag Must Match package.json"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 37,
+      "description": "Instead of publishing blindly from the working directory, the workflow runs 'npm pack' to produce the actual tarball, then uses 'tar -tzf' to list its contents. It greps for 'package/dist/index.js' (npm wraps all files under a 'package/' prefix in tarballs). A prior broken install that was missing dist/index.js motivated this step. It also checks that no *.test.js or *.test.d.ts files leaked in. If any check fails, the workflow exits non-zero before publishing.",
+      "title": "Tarball Validation: Inspect the Artifact, Not the Working Tree"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 55,
+      "description": "The workflow publishes the exact tarball that was validated in the previous step ('npm publish *.tgz') rather than re-packing from source. The '--provenance' flag attaches a signed SLSA provenance attestation to the release, linking the published artifact back to the specific GitHub Actions run and commit. This is the final step; all earlier steps are fail-closed gates.",
+      "title": "Publish the Validated Tarball with Provenance"
+    },
+    {
+      "file": ".env",
+      "line": 1,
+      "description": "The .env file provides HELIX_API_KEY and HELIX_URL for local development and the Helix agent runtime. These values point to the staging Helix server. This file should not be committed to public repositories — it is present here as part of the agent's working environment and is not part of the npm publish artifact (it is excluded by .npmignore and the package.json files field).",
+      "title": "Environment Configuration"
+    }
+  ]
+}

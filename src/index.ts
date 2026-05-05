@@ -49,7 +49,7 @@ Usage:
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
-  hlx update                    Check for and apply updates from GitHub main
+  hlx update                    Check for and apply updates from npm
   hlx update --enable-auto      Enable automatic update checks
   hlx update --disable-auto     Disable automatic update checks
   hlx --version                 Show version`);
