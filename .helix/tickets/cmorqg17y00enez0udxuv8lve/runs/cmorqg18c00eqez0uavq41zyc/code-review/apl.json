@@ -1,0 +1,57 @@
+{
+  "questions": [
+    "Q1: Does the implementation satisfy all 7 acceptance criteria from the ticket?",
+    "Q2: Is the publish workflow correctly structured for npm Trusted Publishing with OIDC?",
+    "Q3: Does the tarball validation in the workflow correctly inspect the actual artifact (not the working tree)?",
+    "Q4: Are there any regressions to existing CLI functionality?",
+    "Q5: Does the npm-based update mechanism correctly replace the GitHub-direct flow?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 7 acceptance criteria are satisfied: (1) publish.yml exists with OIDC permissions, (2) package.json has correct repository metadata, (3) workflow fails on missing dist/index.js in tarball, (4) no NPM_TOKEN required, (5) tag-push trigger documented, (6) hlx update targets npm registry, (7) no unrelated changes.",
+      "evidence": [
+        ".github/workflows/publish.yml: permissions.id-token: write, contents: read",
+        "package.json: repository.url matches https://github.com/Project-X-Innovation/helix-cli.git",
+        "publish.yml: grep -q 'package/dist/index.js' tarball-contents.txt || exit 1",
+        "No NPM_TOKEN or NODE_AUTH_TOKEN references in workflow (grep confirmed)",
+        "src/update/perform.ts: installSpec = NPM_PACKAGE@latest, no github: reference"
+      ]
+    },
+    {
+      "answer": "Yes. The workflow follows the documented npm Trusted Publishing pattern confirmed via Context7: tag push v* trigger, id-token: write permission, actions/setup-node with registry-url, no NODE_AUTH_TOKEN, npm publish --provenance. The npm CLI automatically detects OIDC environments and uses them for authentication.",
+      "evidence": [
+        "Context7 npm docs: 'The npm CLI automatically detects OIDC environments and uses them for authentication before falling back to traditional tokens'",
+        "publish.yml line 9: id-token: write",
+        "publish.yml line 21: registry-url: 'https://registry.npmjs.org'",
+        "publish.yml line 59: npm publish *.tgz --provenance"
+      ]
+    },
+    {
+      "answer": "Yes. The workflow creates a tarball via npm pack, lists its contents via tar -tzf, then greps for required files (package/dist/index.js, package/package.json) and absence of test files. The exact validated tarball is then published via npm publish *.tgz. This validates the artifact, not the working tree.",
+      "evidence": [
+        "publish.yml: npm pack creates tarball, tar -tzf lists contents, grep validates, npm publish *.tgz publishes same file",
+        "npm pack --dry-run verified: 73 files, dist/index.js present, zero .test.js or .test.d.ts files"
+      ]
+    },
+    {
+      "answer": "No regressions identified. All existing CLI commands (login, token, org, tickets, inspect, comments) are unchanged. The bin entrypoint (hlx -> dist/index.js), version resolution (version.ts), and post-install validation (validate.ts) are unaffected. Legacy GitHub-mode config is accepted by isCanonicalSource(). TypeScript typecheck passes, 30/30 tests pass.",
+      "evidence": [
+        "npm run typecheck: exit 0, no errors",
+        "npm test: 30/30 tests pass",
+        "src/update/index.ts: isCanonicalSource() returns true for mode === 'github' (legacy) and mode === 'npm'",
+        "Only files modified: package.json, .npmignore, config.ts, check.ts, perform.ts, update/index.ts, src/index.ts, publish.yml"
+      ]
+    },
+    {
+      "answer": "Yes. The update flow correctly migrates from GitHub-direct to npm-based: fetchLatestVersion() replaces fetchRemoteSha() using npm view, isNewerVersion() replaces SHA comparison with numeric semver, NPM_PACKAGE@latest replaces github: install spec, config saves mode:'npm' with version field. Both runUpdate() and checkAutoUpdate() use the new flow. The transition is backward-compatible for users with legacy github mode config.",
+      "evidence": [
+        "src/update/check.ts: NPM_PACKAGE = '@projectxinnovation/helix-cli', fetchLatestVersion uses npm view, isNewerVersion compares major.minor.patch",
+        "src/update/perform.ts: installSpec = NPM_PACKAGE@latest",
+        "src/update/index.ts: runUpdate uses fetchLatestVersion + isNewerVersion, saves mode:'npm' + version",
+        "src/lib/config.ts: InstallSource.mode includes 'npm', version?: string field added"
+      ]
+    }
+  ],
+  "statement": "Code review complete. All 8 changed files reviewed against ticket requirements, product spec, implementation plan, and npm Trusted Publishing documentation (Context7-verified). No issues requiring code fixes were found. Quality gates pass: TypeScript typecheck clean, 30/30 tests pass, npm pack produces correct tarball (73 files, dist/index.js present, no test files). The implementation correctly implements OIDC Trusted Publishing workflow, tarball validation, npm-based update mechanism, and package metadata. One documented deviation from plan: test exclusion uses files field negation patterns instead of .npmignore alone, which is correct for npm 11. All 12 verification checks remain valid.",
+  "followups": []
+}

@@ -1,0 +1,96 @@
+{
+  "title": "npm Trusted Publishing Implementation",
+  "description": "Walkthrough of changes to enable npm Trusted Publishing with OIDC and migrate the update mechanism from GitHub-direct to npm-based",
+  "steps": [
+    {
+      "file": "package.json",
+      "line": 18,
+      "title": "Test file exclusion via files field negation",
+      "description": "Added negation patterns !dist/**/*.test.js and !dist/**/*.test.d.ts to the files array. With npm 11, root .npmignore is ignored when files is present, so negation patterns in files are the effective exclusion mechanism."
+    },
+    {
+      "file": "package.json",
+      "line": 24,
+      "title": "Repository metadata for npm Trusted Publishing",
+      "description": "Added repository field with type:git and the exact GitHub URL. This is required by npm Trusted Publishing to match the OIDC identity from GitHub Actions."
+    },
+    {
+      "file": "package.json",
+      "line": 28,
+      "title": "Publish configuration",
+      "description": "Added publishConfig with access:public (required for scoped packages), provenance:true (enables supply chain attestation), and registry URL."
+    },
+    {
+      "file": "src/lib/config.ts",
+      "line": 6,
+      "title": "Extended InstallSource type with npm mode",
+      "description": "Added 'npm' to the mode union type and a version?: string field. This allows the config system to track npm-sourced installations alongside legacy GitHub installations."
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 9,
+      "title": "NPM_PACKAGE constant",
+      "description": "Central definition of the npm package name, used by both version checking and install commands."
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 15,
+      "title": "fetchLatestVersion - npm registry query",
+      "description": "Replaces fetchRemoteSha for the npm-based flow. Uses npm view to query the registry for the latest published version. Returns null on any failure (network, npm not found, package not published)."
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 36,
+      "title": "isNewerVersion - semver comparison",
+      "description": "Minimal numeric comparison of major.minor.patch. Returns false on parse failure (defensive). No external semver library needed."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 2,
+      "title": "Import changed to NPM_PACKAGE",
+      "description": "Now imports NPM_PACKAGE instead of CANONICAL_REPO/CANONICAL_BRANCH. The install spec on line 15 becomes @projectxinnovation/helix-cli@latest."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 20,
+      "title": "isCanonicalSource accepts npm mode",
+      "description": "Returns true for mode==='npm' unconditionally (any npm registry install is canonical). Still accepts legacy github mode with repo/branch check for backward compatibility during transition."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 55,
+      "title": "runUpdate uses npm version comparison",
+      "description": "Calls fetchLatestVersion() then compares with getPackageVersion() using isNewerVersion(). Saves config with mode:'npm' and version field on success."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 129,
+      "title": "checkAutoUpdate uses npm-based flow",
+      "description": "Same npm-based pattern as runUpdate but runs silently. Gets local version from getPackageVersion(), checks remote via fetchLatestVersion(), compares with isNewerVersion()."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 52,
+      "title": "Help text updated",
+      "description": "Changed from 'Check for and apply updates from GitHub main' to 'Check for and apply updates from npm'."
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 8,
+      "title": "OIDC permissions for Trusted Publishing",
+      "description": "id-token:write enables GitHub Actions to request an OIDC token. contents:read allows checkout. No NPM_TOKEN or NODE_AUTH_TOKEN needed."
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 39,
+      "title": "Tarball pack and validation",
+      "description": "npm pack creates the actual tarball, tar -tzf lists contents, then grep checks for dist/index.js presence and test file absence. This validates the artifact, not the working tree."
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 58,
+      "title": "Publish validated tarball with provenance",
+      "description": "npm publish *.tgz --provenance publishes the exact tarball that was validated, with supply chain attestation."
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "problem": "Implement npm Trusted Publishing via GitHub OIDC for @projectxinnovation/helix-cli. The repo currently has no CI/CD workflows, no repository metadata in package.json, and the update mechanism is entirely GitHub-direct (npm install -g github:...). A publish workflow, package.json metadata, pack validation, and update path migration are all needed.",
+  "files": [
+    {
+      "path": "package.json",
+      "why": "Missing 'repository' field required for npm Trusted Publishing. Contains bin mapping (hlx -> dist/index.js), files array (['dist']), prepare script, and version (1.2.0). No publishConfig or homepage fields. No runtime dependencies."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "Build configuration: ESM (ES2022/Node16), rootDir=src, outDir=dist, strict mode, declaration generation. Build command is 'tsc'."
+    },
+    {
+      "path": ".gitignore",
+      "why": "Excludes node_modules/ and dist/ from git. dist/ is generated at build time, which means the publish workflow must build before pack."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entrypoint with shebang. Routes commands including 'update'. Auto-update check runs before command dispatch. This compiles to dist/index.js which is the bin target."
+    },
+    {
+      "path": "src/update/check.ts",
+      "why": "Defines CANONICAL_REPO_URL, CANONICAL_BRANCH, CANONICAL_REPO constants. Uses 'git ls-remote' to fetch remote SHA for update checks. Must be migrated to use npm registry version checks for npm-based updates."
+    },
+    {
+      "path": "src/update/perform.ts",
+      "why": "Executes update via 'npm install -g github:Project-X-Innovation/helix-cli#main'. Must be migrated to 'npm install -g @projectxinnovation/helix-cli' for npm-based updates."
+    },
+    {
+      "path": "src/update/index.ts",
+      "why": "Orchestrates update flow: check remote SHA -> compare with local -> perform update -> validate install -> save metadata. References InstallSource mode='github'. Both runUpdate() and checkAutoUpdate() need migration."
+    },
+    {
+      "path": "src/update/validate.ts",
+      "why": "Post-install validation: resolves npm root -g, checks dist/index.js exists, runs 'node <binTarget> --version'. This validation logic is reusable for publish-time validation."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Reads version from ../../package.json relative to dist/update/version.js at runtime. Must work correctly when installed from npm registry (package.json is included in published tarball at root)."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines InstallSource type with mode: 'github' | 'unknown'. Needs 'npm' mode added. Config stored at ~/.hlx/config.json with installSource metadata."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Test file that compiles to dist/lib/flags.test.js. Currently included in published tarball via files:['dist']. Test files are unnecessary in published package."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Test file that compiles to dist/lib/resolve-ticket.test.js. Also included in published tarball. Same concern as flags.test.ts."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "Does not exist. Must be created as the main deliverable — GitHub Actions workflow for npm Trusted Publishing with OIDC."
+    },
+    {
+      "path": "package-lock.json",
+      "why": "lockfileVersion 3, only devDependencies: @types/node and typescript. No runtime deps simplifies the publish."
+    }
+  ],
+  "facts": [
+    "No .github directory exists — no CI/CD workflows of any kind",
+    "package.json has no 'repository' field — required for npm Trusted Publishing identity verification",
+    "package.json files field is ['dist'] which correctly limits published content to compiled output",
+    "bin field maps 'hlx' to 'dist/index.js' — the CLI entrypoint contract",
+    "dist/index.js has correct shebang: #!/usr/bin/env node",
+    "Build (npm run build / tsc) completes successfully with no errors",
+    "Tests (npm test) pass: 30/30, using node:test runner on compiled dist/**/*.test.js",
+    "npm pack --dry-run shows 77 files, 23.3kB packed — all under dist/ plus package.json",
+    "Test .d.ts and .test.js files are included in the tarball (dist/lib/flags.test.js, dist/lib/resolve-ticket.test.js) — unnecessary for installed CLI",
+    "No runtime dependencies — only devDependencies (@types/node, typescript)",
+    "No README file exists in the repo",
+    "prepare script runs 'npm run build' — triggers on npm install from GitHub but NOT on npm publish from registry",
+    "package.json version is 1.2.0",
+    "ESM module (type: 'module') with ES2022 target and Node16 module resolution",
+    "Node engine requirement: >=18",
+    "Update mechanism uses 'git ls-remote' for version checking and 'npm install -g github:...' for install",
+    "InstallSource.mode is typed as 'github' | 'unknown' — no 'npm' variant",
+    "Auto-update only runs for canonical GitHub installs (mode=github, repo matches, branch matches)",
+    "CANONICAL_REPO_URL = 'https://github.com/Project-X-Innovation/helix-cli.git'",
+    "CANONICAL_REPO = 'Project-X-Innovation/helix-cli'",
+    "CANONICAL_BRANCH = 'main'",
+    "version.ts reads package.json via relative path ../../package.json from dist/update/version.js — package.json IS included in tarball so this will work from npm install",
+    "package-lock.json lockfileVersion is 3 (npm v7+)",
+    "No .npmignore file — publish inclusion controlled entirely by files field"
+  ],
+  "unknowns": [
+    "Whether the npm scope @projectxinnovation exists on the npm registry and is controlled by the organization",
+    "Whether @projectxinnovation/helix-cli has ever been published to npm (version conflict risk)",
+    "The intended publish trigger: tag push, GitHub Release, manual dispatch, or other",
+    "Whether the npm org has Trusted Publishing already configured in the npm UI for this package/repo",
+    "Whether test files (*.test.js, *.test.d.ts) in dist/ should be excluded from the published tarball or if the current inclusion is acceptable",
+    "Whether the npm-based update path should use semver version comparison or a different versioning strategy",
+    "Whether the help text in src/index.ts line 52 ('Check for and apply updates from GitHub main') should be updated to reflect npm-based updates"
+  ],
+  "execution_signals": {
+    "package_manager": "npm (lockfileVersion 3)",
+    "build_command": "npm run build (tsc)",
+    "typecheck_command": "npm run typecheck (tsc --noEmit)",
+    "test_command": "npm test (tsc && node --test dist/**/*.test.js)",
+    "lint_command": null,
+    "ci_workflows": "none — no .github directory exists",
+    "orm_type": "none",
+    "migration_strategy": "not applicable"
+  }
+}

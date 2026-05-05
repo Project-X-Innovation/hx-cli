@@ -1,0 +1,55 @@
+{
+  "questions": [
+    "Q1: What is the correct ordering of implementation steps to avoid circular dependencies?",
+    "Q2: How should the publish workflow validate the tarball before publishing?",
+    "Q3: What files need to change for the update mechanism migration?",
+    "Q4: How should isCanonicalSource handle the transition from GitHub to npm mode?",
+    "Q5: Can the plan be verified without access to the npm registry or GitHub Actions?"
+  ],
+  "answers": [
+    {
+      "answer": "Steps must follow a dependency chain: (1) package.json metadata first (no code dependencies), (2) .npmignore (no code dependencies), (3) config.ts type extension (required by later steps), (4) check.ts new functions (required by index.ts), (5) perform.ts install spec change (depends on NPM_PACKAGE from check.ts), (6) index.ts orchestration rewrite (depends on all update module changes), (7) index.ts help text (cosmetic, no dependencies), (8) publish.yml (independent of source changes, but placed last so all source changes are complete for final verification).",
+      "evidence": [
+        "src/update/index.ts imports from check.ts and perform.ts — must be changed after its dependencies",
+        "src/update/perform.ts imports CANONICAL_REPO from check.ts — import changes when check.ts exports NPM_PACKAGE",
+        "src/lib/config.ts InstallSource type is used by index.ts — type must be extended before index.ts saves mode:'npm'",
+        "package.json and .npmignore have no TypeScript code dependencies — safe to change first"
+      ]
+    },
+    {
+      "answer": "The workflow runs npm pack to create the actual tarball, then uses tar -tzf to list contents and greps for package/dist/index.js (npm's standard tarball prefix is 'package/'). It also verifies no *.test.js or *.test.d.ts files leaked in. Finally it publishes the exact validated tarball via npm publish *.tgz --provenance. This validates the artifact, not the working tree.",
+      "evidence": [
+        "Ticket: 'inspect the artifact that would actually be published, not just the working tree'",
+        "Tech-research AD2: chose npm pack + tar -tzf approach over working-tree or JSON-based approaches",
+        "Ticket: 'Validation must run against the exact single tarball being published'",
+        "npm pack creates .tgz with 'package/' prefix structure"
+      ]
+    },
+    {
+      "answer": "Five source files change: (a) src/lib/config.ts adds 'npm' to mode union and version field, (b) src/update/check.ts adds fetchLatestVersion(), isNewerVersion(), NPM_PACKAGE, (c) src/update/perform.ts changes install spec to npm package, (d) src/update/index.ts rewrites runUpdate/checkAutoUpdate to use npm version checking, (e) src/index.ts updates help text. Two config files change: package.json adds metadata, .npmignore is created. One new file: .github/workflows/publish.yml.",
+      "evidence": [
+        "Diagnosis maps four gaps to specific files: config.ts, check.ts, perform.ts, index.ts (source code), package.json (metadata), .github/workflows/publish.yml (new)",
+        "Tech-research migration map table covers all five source files",
+        "Scout boundary files table lists the complete set"
+      ]
+    },
+    {
+      "answer": "isCanonicalSource() must accept both 'github' (legacy) and 'npm' modes as canonical. For github mode, the existing repo/branch check remains. For npm mode, return true unconditionally since any npm registry install is from the canonical source. This ensures auto-update works for both existing GitHub-sourced users (until their first npm update transitions them) and new npm-sourced users.",
+      "evidence": [
+        "src/update/index.ts:17-24: current isCanonicalSource requires mode==='github' && repo && branch",
+        "Tech-research AD3: 'isCanonicalSource() must be extended to also accept mode === \"npm\"'",
+        "Tech-research transition path: existing github users will transition to npm mode on first hlx update"
+      ]
+    },
+    {
+      "answer": "Yes. All verification checks can run locally without npm registry access or GitHub Actions. CHK-01 through CHK-06 use local build/test/pack commands. CHK-07 through CHK-12 are static file inspections. The actual OIDC publish flow requires npm UI configuration and a real GitHub Actions run, which are outside code scope. The plan verifies code correctness, not end-to-end publishing.",
+      "evidence": [
+        "Ticket acceptance criteria 1-4 are verifiable via local build, pack, and file inspection",
+        "Ticket acceptance criterion 5 (release flow documentation) is verifiable by inspecting publish.yml",
+        "npm Trusted Publishing UI configuration is explicitly outside code scope (tech-research dependencies section)"
+      ]
+    }
+  ],
+  "statement": "The implementation plan defines 8 atomic steps in dependency order: package.json metadata, .npmignore creation, InstallSource type extension, npm-based version check function, npm-based install spec, update orchestration rewrite, help text update, and publish workflow creation. Each step has concrete file changes, verification commands, and success criteria. The verification plan includes 12 required checks covering typecheck, test suite, metadata validation, tarball contents, CLI runtime behavior, workflow structure, type definitions, and source code inspection. All changes are contained within the helix-cli repo with no cross-repo impact.",
+  "followups": []
+}

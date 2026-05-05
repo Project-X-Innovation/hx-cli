@@ -16,9 +16,20 @@
     "node": ">=18"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Project-X-Innovation/helix-cli.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org"
+  },
   "devDependencies": {
     "@types/node": "^25.5.0",
     "typescript": "^6.0.2"

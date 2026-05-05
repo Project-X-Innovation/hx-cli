@@ -1,0 +1,63 @@
+{
+  "questions": [
+    "Q1: What package.json metadata is missing for npm Trusted Publishing to work?",
+    "Q2: Does any CI/CD workflow infrastructure exist that we can build on?",
+    "Q3: What is the current update mechanism and what exactly needs to change for npm-based updates?",
+    "Q4: What OIDC permissions and workflow structure does npm Trusted Publishing require?",
+    "Q5: Are there unnecessary files (test artifacts) being included in the published tarball?",
+    "Q6: Does the version.ts runtime path resolution work correctly when installed from npm?"
+  ],
+  "answers": [
+    {
+      "answer": "package.json is missing the 'repository' field entirely. npm Trusted Publishing requires a repository field matching the exact GitHub repo URL. The required value is {\"type\": \"git\", \"url\": \"https://github.com/Project-X-Innovation/helix-cli.git\"}. No publishConfig field exists either.",
+      "evidence": [
+        "package.json lines 1-26: no 'repository' key present",
+        "npm docs: repository field is normalized during publish and used for OIDC identity verification",
+        "Ticket requires: repository metadata must match https://github.com/Project-X-Innovation/helix-cli.git"
+      ]
+    },
+    {
+      "answer": "No CI/CD infrastructure exists at all. The .github directory is absent. The publish workflow must be created from scratch.",
+      "evidence": [
+        "Glob .github/**/* returned 'No files found'",
+        "Scout reference-map confirms: 'No .github directory exists — no CI/CD workflows of any kind'"
+      ]
+    },
+    {
+      "answer": "The update mechanism is entirely GitHub-direct. check.ts uses git ls-remote to compare commit SHAs; perform.ts runs npm install -g github:Project-X-Innovation/helix-cli#main; index.ts saves installSource with mode='github'. The InstallSource type only supports 'github'|'unknown'. Migration requires: (a) check.ts to query the npm registry for latest version instead of git ls-remote SHAs, (b) perform.ts to install from npm (@projectxinnovation/helix-cli) instead of GitHub, (c) config.ts to add 'npm' to the InstallSource.mode union, (d) index.ts to update orchestration to use semver comparison and save mode='npm', (e) src/index.ts help text to reference npm instead of GitHub main.",
+      "evidence": [
+        "src/update/check.ts lines 13-27: fetchRemoteSha() uses execSync('git ls-remote ...')",
+        "src/update/perform.ts line 15: installSpec = `github:${CANONICAL_REPO}#${CANONICAL_BRANCH}`",
+        "src/update/index.ts lines 96-103: saves installSource with mode:'github'",
+        "src/lib/config.ts line 6: InstallSource mode: 'github' | 'unknown'",
+        "src/index.ts line 52: help text says 'Check for and apply updates from GitHub main'"
+      ]
+    },
+    {
+      "answer": "npm Trusted Publishing requires: (1) permissions.id-token: write for OIDC token generation, (2) permissions.contents: read, (3) actions/setup-node with registry-url: 'https://registry.npmjs.org', (4) npm publish --provenance (or publishConfig.provenance: true in package.json). The workflow should run on ubuntu-latest (GitHub-hosted runner). The npm UI must be configured separately to trust the repo/workflow.",
+      "evidence": [
+        "Context7 npm docs: workflow needs id-token:write permission, setup-node with registry-url, npm publish",
+        "npm docs: publishConfig.provenance:true or --provenance flag enables signed provenance",
+        "Ticket: must run on GitHub-hosted runners, not self-hosted"
+      ]
+    },
+    {
+      "answer": "Yes. dist/lib/flags.test.js, dist/lib/flags.test.d.ts, dist/lib/resolve-ticket.test.js, and dist/lib/resolve-ticket.test.d.ts are compiled into dist/ and would be included in the published tarball via files:['dist']. These are unnecessary for CLI runtime. They can be excluded without affecting runtime behavior.",
+      "evidence": [
+        "Glob **/*.test.* found 6 files: 2 .ts source files + 4 compiled .js/.d.ts files under dist/lib/",
+        "ls dist/lib/ confirmed: flags.test.js, flags.test.d.ts, resolve-ticket.test.js, resolve-ticket.test.d.ts",
+        "Scout reference-map: 'Test .d.ts and .test.js files are included in the tarball — unnecessary for installed CLI'"
+      ]
+    },
+    {
+      "answer": "Yes. version.ts uses import.meta.url to resolve ../../package.json from dist/update/version.js. When installed from npm, package.json is always included at the package root (npm auto-includes it regardless of the files field). The relative path ../../ from dist/update/ correctly reaches the package root. This works identically whether installed from GitHub or npm.",
+      "evidence": [
+        "src/update/version.ts lines 10-18: join(thisDir, '..', '..', 'package.json') from dist/update/",
+        "npm always includes package.json in published tarballs regardless of files field",
+        "Scout: 'package.json IS included in tarball so this will work from npm install'"
+      ]
+    }
+  ],
+  "statement": "This is a greenfield infrastructure task with a well-defined scope. The helix-cli repo has zero CI/CD infrastructure and is missing the repository metadata required for npm Trusted Publishing. The update mechanism is entirely GitHub-direct and must be migrated to npm-based version checking and installation. Implementation requires four coordinated changes: (1) add repository metadata and publishConfig to package.json, (2) create .github/workflows/publish.yml with OIDC permissions, build/test/pack-validation pipeline, and npm publish --provenance, (3) migrate the update subsystem (check.ts, perform.ts, index.ts, config.ts) from git-SHA-based GitHub checking to semver-based npm registry checking, and (4) optionally exclude test artifacts from the published tarball. All required files are identified and the scope is bounded — no cross-repo impact.",
+  "followups": []
+}

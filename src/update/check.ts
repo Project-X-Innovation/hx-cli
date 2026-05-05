@@ -5,6 +5,47 @@ export const CANONICAL_REPO_URL =
 export const CANONICAL_BRANCH = "main";
 export const CANONICAL_REPO = "Project-X-Innovation/helix-cli";
 
+/** npm package name for registry queries. */
+export const NPM_PACKAGE = "@projectxinnovation/helix-cli";
+
+/**
+ * Fetch the latest published version from the npm registry.
+ * Returns null on any failure (package not published, network error, npm not found).
+ */
+export function fetchLatestVersion(): string | null {
+  try {
+    const output = execSync(
+      `npm view ${NPM_PACKAGE} version`,
+      { timeout: 10_000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    );
+    const version = output.trim();
+    if (version && /^\d+\.\d+\.\d+/.test(version)) {
+      return version;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compare two semver version strings (major.minor.patch).
+ * Returns true only if remote is strictly newer than local.
+ * Returns false on parse failure (defensive).
+ */
+export function isNewerVersion(remote: string, local: string): boolean {
+  const rParts = remote.split(".").map(Number);
+  const lParts = local.split(".").map(Number);
+  if (rParts.length < 3 || lParts.length < 3) return false;
+  if (rParts.some(isNaN) || lParts.some(isNaN)) return false;
+
+  for (let i = 0; i < 3; i++) {
+    if (rParts[i] > lParts[i]) return true;
+    if (rParts[i] < lParts[i]) return false;
+  }
+  return false;
+}
+
 /**
  * Fetch the latest commit SHA from the canonical GitHub repo main branch.
  * Uses `git ls-remote` — no rate limit, lightweight, requires git binary.

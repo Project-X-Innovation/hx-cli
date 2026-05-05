@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 export type InstallSource = {
-  mode: "github" | "unknown";
+  mode: "github" | "npm" | "unknown";
   repo?: string;
   branch?: string;
   commit?: string;
+  version?: string;
 };
 
 export type HxConfig = {

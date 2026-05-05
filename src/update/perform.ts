@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { CANONICAL_REPO, CANONICAL_BRANCH } from "./check.js";
+import { NPM_PACKAGE } from "./check.js";
 
 /**
- * Execute the self-update via npm install -g from the canonical GitHub repo.
+ * Execute the self-update via npm install -g from the npm registry.
  * Returns a structured result — never throws.
  *
  * When `quiet` is true, stderr is captured and returned for downstream
@@ -12,7 +12,7 @@ export function performUpdate(options?: {
   quiet?: boolean;
 }): { success: boolean; error?: string; stderr?: string } {
   const quiet = options?.quiet ?? false;
-  const installSpec = `github:${CANONICAL_REPO}#${CANONICAL_BRANCH}`;
+  const installSpec = `${NPM_PACKAGE}@latest`;
 
   const result = spawnSync(`npm install -g ${installSpec}`, {
     timeout: 120_000,
