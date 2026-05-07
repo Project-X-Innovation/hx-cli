@@ -1,0 +1,15 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "All three defects are in the CLI codebase. src/tickets/create.ts bypasses existing resolveRepo() for --repos, lacks file-handling for --description, and src/tickets/index.ts has no update-description subcommand. The server endpoints needed (POST /api/tickets, PATCH /api/tickets/:ticketId, GET /api/inspect/repositories) already exist and work correctly."
+    },
+    {
+      "repoKey": "helix-global-server",
+      "intent": "context",
+      "rationale": "Server already supports all required API endpoints: PATCH /api/tickets/:ticketId with optional description (ticket-controller.ts:235-254), repositoryId validation on create (ticket-service.ts:159-166), and GET /api/inspect/repositories for repo resolution. No server changes needed."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
