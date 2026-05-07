@@ -1,0 +1,47 @@
+{
+  "questions": [
+    "What field names does the server use for run timestamps?",
+    "How does the existing formatDate function handle null/undefined values?",
+    "What flag parsing patterns does the CLI use?",
+    "Does the --query-file approach follow established patterns in the codebase?",
+    "Does the search query parameter compose correctly with existing Prisma filters?"
+  ],
+  "answers": [
+    {
+      "answer": "The server returns `startedAt` and `finishedAt` via `mapRunHistoryItem` in ticket-service.ts:457-473. The CLI incorrectly declared these as `createdAt` and `completedAt`.",
+      "evidence": [
+        "src/tickets/get.ts:14-19 — TicketDetail type had createdAt/completedAt",
+        "JSON output from `tickets get HLX-11 --json` confirms server sends startedAt/finishedAt with valid ISO dates"
+      ]
+    },
+    {
+      "answer": "formatDate(undefined) returns 'in progress' for non-terminal statuses and 'N/A' for terminal statuses. It handles null/undefined gracefully without throwing.",
+      "evidence": [
+        "src/tickets/get.ts:32-44 — formatDate function with null/undefined/NaN guards"
+      ]
+    },
+    {
+      "answer": "CLI uses getFlag() for value flags, hasFlag() for boolean flags, and getPositionalArgs() for positional arguments, all from src/lib/flags.ts.",
+      "evidence": [
+        "src/lib/flags.ts — getFlag, hasFlag, getPositionalArgs exported",
+        "src/tickets/list.ts — uses getFlag for --status-not-in, --sprint, --user; hasFlag for --archived, --json"
+      ]
+    },
+    {
+      "answer": "Yes, readFileSync is already used in config.ts, version.ts, and bundle.ts for file reading. The --query-file implementation follows the same pattern.",
+      "evidence": [
+        "src/inspect/index.ts:1 — import { readFileSync } from 'node:fs' added",
+        "Diagnosis confirmed readFileSync usage in multiple existing modules"
+      ]
+    },
+    {
+      "answer": "Yes, the search filter uses the same Prisma where-clause object spread pattern as sprintFilter and reporterUserId. It ANDs with all existing conditions.",
+      "evidence": [
+        "ticket-service.ts:1531 — ...(options?.search ? { title: { contains: options.search, mode: 'insensitive' } } : {})",
+        "Local server test: search=Delivery returned exactly 1 ticket (HLX-11) while all tickets totaled 66+"
+      ]
+    }
+  ],
+  "statement": "All four CLI ergonomics improvements implemented and verified: (1) run display field names corrected from createdAt/completedAt to startedAt/finishedAt, (2) --dry-run flag added to tickets continue with zero side effects, (3) --search flag added to tickets list passing server-side query param, (4) --query-file added to inspect db with PowerShell-safe help text. All quality gates pass (typecheck, build, 30/30 tests). All 10 verification checks pass.",
+  "followups": []
+}

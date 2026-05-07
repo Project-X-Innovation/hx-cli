@@ -1,0 +1,60 @@
+{
+  "title": "CLI Ergonomics Polish: Four Targeted Improvements",
+  "description": "Tour of the four independent CLI changes: run display fix, dry-run flag, search flag, and query-file with PowerShell help.",
+  "steps": [
+    {
+      "file": "src/tickets/get.ts",
+      "line": 17,
+      "title": "S1: Fix run display field names",
+      "description": "Changed TicketDetail.runs type from `createdAt`/`completedAt` to `startedAt`/`finishedAt` to match the server API response. This was the root cause of broken timestamps showing 'in progress' instead of real dates."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 71,
+      "title": "S1: Use corrected field names in printTicketDetail",
+      "description": "Updated formatDate calls to use `run.startedAt` and `run.finishedAt` instead of the wrong field names. The formatDate function itself was already correct — it handles null/undefined gracefully."
+    },
+    {
+      "file": "src/tickets/continue.ts",
+      "line": 3,
+      "title": "S2: Import hasFlag for dry-run check",
+      "description": "Added `hasFlag` to the import from flags.ts. This is used to detect the `--dry-run` boolean flag."
+    },
+    {
+      "file": "src/tickets/continue.ts",
+      "line": 30,
+      "title": "S2: Dry-run gate before API call",
+      "description": "The --dry-run check is placed after context validation (so we know the payload is valid) but before the API call (so no POST is made). Prints ticket ID, endpoint, and body then exits 0."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 66,
+      "title": "S3: Add --search flag to tickets list",
+      "description": "Parses --search using the existing getFlag utility and adds it to the queryParams object. The server handles the actual filtering via Prisma ILIKE."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 17,
+      "title": "S2/S3: Updated usage strings",
+      "description": "Top-level usage includes `[--search <text>]` for list and `[--dry-run]` for continue. Per-command help text at lines 42 and 87-89 also updated."
+    },
+    {
+      "file": "src/inspect/index.ts",
+      "line": 1,
+      "title": "S4: Import readFileSync for --query-file",
+      "description": "Added import from node:fs. This is the same pattern used in config.ts, version.ts, and bundle.ts."
+    },
+    {
+      "file": "src/inspect/index.ts",
+      "line": 70,
+      "title": "S4: --query-file handling with priority",
+      "description": "Priority order: --query-file > --query > positional. File is read with readFileSync and trimmed. Missing file and empty file both produce clear error messages."
+    },
+    {
+      "file": "src/inspect/index.ts",
+      "line": 22,
+      "title": "S4: PowerShell-safe help examples",
+      "description": "Help text now includes PS 7 single-quote example, PS 5.1 backtick-escape example, and file-based example — all with quoted Postgres identifiers like \"Ticket\".\"ticketNumber\"."
+    }
+  ]
+}
