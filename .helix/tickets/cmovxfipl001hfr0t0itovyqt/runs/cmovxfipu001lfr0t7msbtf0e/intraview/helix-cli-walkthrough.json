@@ -1,60 +1,61 @@
 {
-  "title": "CLI Ergonomics Polish: Four Targeted Improvements",
-  "description": "Tour of the four independent CLI changes: run display fix, dry-run flag, search flag, and query-file with PowerShell help.",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "helix-cli: Four CLI Ergonomics Improvements",
+  "description": "This tour walks through four independent CLI improvements made to helix-cli: (1) fixing a field name mismatch in `tickets get` run display (createdAt/completedAt → startedAt/finishedAt), (2) adding a `--dry-run` flag to `tickets continue`, (3) adding a `--search` flag to `tickets list` for server-side filtering, and (4) adding `--query-file` support and corrected PowerShell help examples to `inspect db`. Each change is isolated and follows existing flag-parsing patterns. Two correctness issues were also caught and fixed during code review: a nullable `startedAt` type and broken PowerShell single-quote escaping.",
   "steps": [
     {
-      "file": "src/tickets/get.ts",
-      "line": 17,
-      "title": "S1: Fix run display field names",
-      "description": "Changed TicketDetail.runs type from `createdAt`/`completedAt` to `startedAt`/`finishedAt` to match the server API response. This was the root cause of broken timestamps showing 'in progress' instead of real dates."
-    },
-    {
-      "file": "src/tickets/get.ts",
-      "line": 71,
-      "title": "S1: Use corrected field names in printTicketDetail",
-      "description": "Updated formatDate calls to use `run.startedAt` and `run.finishedAt` instead of the wrong field names. The formatDate function itself was already correct — it handles null/undefined gracefully."
-    },
-    {
-      "file": "src/tickets/continue.ts",
-      "line": 3,
-      "title": "S2: Import hasFlag for dry-run check",
-      "description": "Added `hasFlag` to the import from flags.ts. This is used to detect the `--dry-run` boolean flag."
-    },
-    {
-      "file": "src/tickets/continue.ts",
-      "line": 30,
-      "title": "S2: Dry-run gate before API call",
-      "description": "The --dry-run check is placed after context validation (so we know the payload is valid) but before the API call (so no POST is made). Prints ticket ID, endpoint, and body then exits 0."
-    },
-    {
-      "file": "src/tickets/list.ts",
-      "line": 66,
-      "title": "S3: Add --search flag to tickets list",
-      "description": "Parses --search using the existing getFlag utility and adds it to the queryParams object. The server handles the actual filtering via Prisma ILIKE."
-    },
-    {
-      "file": "src/tickets/index.ts",
-      "line": 17,
-      "title": "S2/S3: Updated usage strings",
-      "description": "Top-level usage includes `[--search <text>]` for list and `[--dry-run]` for continue. Per-command help text at lines 42 and 87-89 also updated."
-    },
-    {
-      "file": "src/inspect/index.ts",
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/diagnosis/diagnosis-statement.md",
       "line": 1,
-      "title": "S4: Import readFileSync for --query-file",
-      "description": "Added import from node:fs. This is the same pattern used in config.ts, version.ts, and bundle.ts."
+      "description": "Start here to understand WHY all four changes were needed. The diagnosis identified four independent ergonomics gaps: (1) `tickets list` had no server-side search, forcing full fetches and local filtering; (2) `tickets get` showed 'in progress' placeholder text for all run timestamps because the CLI type declared `createdAt`/`completedAt` but the server returns `startedAt`/`finishedAt` — undefined fields silently fell through `formatDate`; (3) `tickets continue` had no preview mode before firing a POST; (4) `inspect db` had no file-based query escape hatch and its PowerShell help examples used single-quoted strings with backtick escapes, which PowerShell 5.1 does not process in single-quoted context.",
+      "title": "Overview: Four Root Causes Identified"
     },
     {
-      "file": "src/inspect/index.ts",
-      "line": 70,
-      "title": "S4: --query-file handling with priority",
-      "description": "Priority order: --query-file > --query > positional. File is read with readFileSync and trimmed. Missing file and empty file both produce clear error messages."
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The implementation plan establishes the sequencing rationale: S1 (field name fix) is simplest and standalone; S2 (dry-run gate) is a single conditional before an existing API call; S3 (search flag) adds a query param requiring a server-side endpoint; S4 (query-file) adds file I/O with priority logic over --query and positional args; S5 runs quality gates. All four features are independent — the order optimizes for verifying the simplest standalone changes first and deferring server-dependent end-to-end testing to S3. No new runtime dependencies are introduced; only the Node.js built-in `node:fs` is used.",
+      "title": "Implementation Plan: Five Steps in Logical Order"
     },
     {
-      "file": "src/inspect/index.ts",
-      "line": 22,
-      "title": "S4: PowerShell-safe help examples",
-      "description": "Help text now includes PS 7 single-quote example, PS 5.1 backtick-escape example, and file-based example — all with quoted Postgres identifiers like \"Ticket\".\"ticketNumber\"."
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/diagnosis/diagnosis-statement.md",
+      "line": 31,
+      "description": "The CLI's `TicketDetail` type (src/tickets/get.ts:14-19) declared run fields as `createdAt: string` and `completedAt: string | null`. The server's `mapRunHistoryItem` (ticket-service.ts:457-473) returns `startedAt` and `finishedAt`. At runtime both fields were `undefined`. The `formatDate` function treated `undefined` as 'in progress' regardless of actual run state, so every run — including SUCCEEDED ones — showed placeholder text. The fix renames both fields in the type declaration and all downstream references.",
+      "title": "S1 Root Cause: Field Name Mismatch in tickets get"
+    },
+    {
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "Code review caught two issues requiring fixes beyond the original plan. First: `TicketDetail.runs[].startedAt` was typed as `string` but the server returns `null` for QUEUED runs (confirmed by testing `tickets get HLX-65`). The type was corrected to `string | null`. Second: the PowerShell 5.1 help examples in `inspect/index.ts` used single-quoted strings wrapping backtick-escaped content. Per the PowerShell language spec, backtick is only an escape character inside double-quoted strings; single-quoted strings have no escape processing. The outer quotes were corrected from single to double. Both fixes are low-risk and purely additive to correctness.",
+      "title": "Code Review: Correctness Issues Caught and Fixed"
+    },
+    {
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/implementation-plan/implementation-plan.md",
+      "line": 50,
+      "description": "In `src/tickets/get.ts`, the `TicketDetail` type's runs array element type is updated: `createdAt: string` → `startedAt: string | null` (null added after code review) and `completedAt: string | null` → `finishedAt: string | null`. All downstream references in `printTicketDetail` that read `run.createdAt` and `run.completedAt` are renamed to match. Data flow: server JSON → `TicketDetail` type → `printTicketDetail` → `formatDate(run.startedAt)` / `formatDate(run.finishedAt, run.status)`. With correct field names, `formatDate` now receives real ISO date strings instead of `undefined`, and SUCCEEDED runs display actual timestamps.",
+      "title": "S1 Implementation: get.ts Type and Reference Rename"
+    },
+    {
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/implementation-plan/implementation-plan.md",
+      "line": 100,
+      "description": "In `src/tickets/continue.ts`, `hasFlag` is imported from `src/lib/flags.ts` and a dry-run check is inserted before the POST API call (line 30). If `--dry-run` is present, the resolved continuation payload is printed to stdout and the process exits without making any API call — no side effects. Data flow: args → `hasFlag(args, '--dry-run')` → if true, `console.log(JSON.stringify(payload, null, 2))` + `process.exit(0)`; if false, existing POST call proceeds unchanged. Help text in `src/tickets/index.ts` is updated to document the new flag. This is the minimal correct change: one import, one conditional, one help line.",
+      "title": "S2 Implementation: --dry-run Gate in tickets continue"
+    },
+    {
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/implementation-plan/implementation-plan.md",
+      "line": 150,
+      "description": "In `src/tickets/list.ts`, `getFlag` (already imported) is used to parse `--search` from args. If present, `search` is added to the `queryParams` object that is serialized into the GET `/api/tickets` request URL. Data flow: `getFlag(args, '--search')` → `queryParams.search = value` → server receives `?search=<value>` → server's `listTicketsForOrganization` applies `title: { contains: search, mode: 'insensitive' }` Prisma filter (PostgreSQL ILIKE, no migration needed). If `--search` is absent, `queryParams` is unchanged and existing behavior is preserved. Help text in `src/tickets/index.ts` documents the new flag.",
+      "title": "S3 Implementation: --search Flag in tickets list"
+    },
+    {
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/implementation-plan/implementation-plan.md",
+      "line": 210,
+      "description": "In `src/inspect/index.ts`, `readFileSync` is imported from `node:fs` (zero new runtime dependencies). In the `db` command case, `--query-file` is parsed via `getFlag`. Priority logic: if `--query-file` is provided, its contents are read with `readFileSync` (UTF-8) and used as the query; errors (file not found, permission denied) are caught and printed with a clear message before `process.exit(1)`. If `--query-file` is absent, `--query` and positional args are used as before. PowerShell 5.1 help examples are corrected to use double-quoted outer strings so that backtick escape sequences are processed. Data flow: `--query-file <path>` → `readFileSync(path, 'utf8')` → query string → existing DB execution path.",
+      "title": "S4 Implementation: --query-file and PS Help in inspect db"
+    },
+    {
+      "file": ".helix/tickets/cmovxfipl001hfr0t0itovyqt/runs/cmovxfipu001lfr0t7msbtf0e/code-review/apl.json",
+      "line": 1,
+      "description": "The APL confirms all four features meet ticket requirements. The code review verified: (1) run display uses correct field names `startedAt`/`finishedAt` with nullable type for QUEUED runs; (2) `--dry-run` prints payload and exits before any API call; (3) `--search` correctly passes a server-side query param; (4) `--query-file` reads SQL from a file with proper error handling and corrected PowerShell double-quoted help examples. No regressions: all existing command invocations are unchanged, no new runtime dependencies are introduced, and the codebase passes typecheck, build, and tests (S5 quality gates). The two fixes caught in review (nullable `startedAt` type and PS quoting) are low-risk and improve long-term maintainability.",
+      "title": "Summary: All Requirements Met, Two Correctness Fixes Applied"
     }
   ]
 }
