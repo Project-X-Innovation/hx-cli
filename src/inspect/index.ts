@@ -22,8 +22,8 @@ Use --query-file to read SQL from a file — this avoids all shell quoting issue
   # PowerShell 7 — use single quotes around --query value:
   hlx inspect db --repo my-app --query 'SELECT "Ticket"."ticketNumber" FROM "Ticket" LIMIT 5'
 
-  # PowerShell 5.1 — escape inner double quotes with backtick:
-  hlx inspect db --repo my-app --query 'SELECT \`"Ticket\`".\`"ticketNumber\`" FROM \`"Ticket\`" LIMIT 5'
+  # PowerShell 5.1 — use double quotes with backtick-escaped inner quotes:
+  hlx inspect db --repo my-app --query "SELECT \`"Ticket\`".\`"ticketNumber\`" FROM \`"Ticket\`" LIMIT 5"
 
   # Any shell — read SQL from a file (recommended for complex queries):
   hlx inspect db --repo my-app --query-file query.sql`);
@@ -59,8 +59,8 @@ Use --query-file to read SQL from a file — this avoids all shell quoting issue
   # PowerShell 7 — use single quotes around --query value:
   hlx inspect db --repo my-app --query 'SELECT "Ticket"."ticketNumber" FROM "Ticket" LIMIT 5'
 
-  # PowerShell 5.1 — escape inner double quotes with backtick:
-  hlx inspect db --repo my-app --query 'SELECT \`"Ticket\`".\`"ticketNumber\`" FROM \`"Ticket\`" LIMIT 5'
+  # PowerShell 5.1 — use double quotes with backtick-escaped inner quotes:
+  hlx inspect db --repo my-app --query "SELECT \`"Ticket\`".\`"ticketNumber\`" FROM \`"Ticket\`" LIMIT 5"
 
   # Any shell — read SQL from a file (recommended for complex queries):
   hlx inspect db --repo my-app --query-file query.sql`);

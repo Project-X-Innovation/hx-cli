@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Does the TicketDetail type accurately reflect the server API response for all run states?",
+    "Does the PowerShell 5.1 help example use correct quoting for backtick escape sequences?",
+    "Do all four features (search, run display, dry-run, query-file) meet ticket requirements?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The TicketDetail type declared startedAt as string, but the server returns null for QUEUED runs. Fixed to string | null.",
+      "evidence": [
+        "src/tickets/get.ts:17 — startedAt typed as string; server's mapRunHistoryItem (ticket-service.ts:462) passes nullable startedAt",
+        "Implementation report: 'tickets get HLX-65 (QUEUED run) Shows QUEUED in progress in progress' confirms null startedAt at runtime"
+      ]
+    },
+    {
+      "answer": "No. The PS 5.1 example used single quotes with backtick escaping, but backtick is only an escape character inside double-quoted strings in PowerShell. Fixed outer quotes from single to double.",
+      "evidence": [
+        "src/inspect/index.ts:26,63 — PS 5.1 examples used single quotes wrapping backtick-escaped content",
+        "PowerShell language spec: single-quoted strings have no escape processing; backtick escaping requires double-quoted strings"
+      ]
+    },
+    {
+      "answer": "Yes. All four features are correctly implemented: (1) run display uses correct field names startedAt/finishedAt, (2) --dry-run prints payload and exits without API call, (3) --search passes server-side query param, (4) --query-file reads SQL from file with proper error handling and PS examples in help.",
+      "evidence": [
+        "src/tickets/get.ts:17-18,71-72 — field names match server API",
+        "src/tickets/continue.ts:30-36 — dry-run gate before POST call",
+        "src/tickets/list.ts:66-70 — search query param passed to server",
+        "src/inspect/index.ts:70-88 — query-file with readFileSync and error handling"
+      ]
+    }
+  ],
+  "statement": "Code review found and fixed two issues in helix-cli: (1) TicketDetail.startedAt type corrected to string | null to match server nullable field for QUEUED runs, (2) PS 5.1 help examples corrected from single-quoted to double-quoted strings so backtick escaping works correctly. All quality gates pass after fixes (typecheck, build, 30/30 tests). No issues found in helix-global-server server-side search implementation.",
+  "followups": []
+}

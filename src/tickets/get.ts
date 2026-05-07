@@ -14,7 +14,7 @@ type TicketDetail = {
   runs: Array<{
     id: string;
     status: string;
-    startedAt: string;
+    startedAt: string | null;
     finishedAt: string | null;
   }>;
   mergeQueueStatus: string | null;
