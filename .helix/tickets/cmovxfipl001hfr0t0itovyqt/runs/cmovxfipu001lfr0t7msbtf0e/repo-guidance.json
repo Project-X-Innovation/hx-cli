@@ -1,0 +1,15 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Primary target for all four issues. Issues 2, 3, and 4 are CLI-only changes (get.ts field name fix, continue.ts dry-run, inspect/index.ts help + query-file). Issue 1 requires CLI-side --search flag addition in list.ts and help text updates in index.ts."
+    },
+    {
+      "repoKey": "helix-global-server",
+      "intent": "target",
+      "rationale": "Required for Issue 1 (server-side search). The getTickets controller must parse a search query param, and listTicketsForOrganization must add a Prisma title filter. Small, isolated change — no schema migration needed. No server changes for Issues 2, 3, or 4."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

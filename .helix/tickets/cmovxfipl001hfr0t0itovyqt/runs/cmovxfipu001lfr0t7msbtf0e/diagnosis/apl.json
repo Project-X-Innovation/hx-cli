@@ -1,0 +1,47 @@
+{
+  "questions": [
+    "Q1: Why does `hlx tickets get` show wrong timestamps and status for runs?",
+    "Q2: What server-side changes are needed to support `--search` on `tickets list`?",
+    "Q3: What is the minimal change to add `--dry-run` to `tickets continue`?",
+    "Q4: What is the PowerShell quoting problem with `inspect db` and what is the best fix?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI TicketDetail type (get.ts:14-19) declares run fields as `createdAt` and `completedAt`. The server's mapRunHistoryItem (ticket-service.ts:457-473) returns `startedAt` and `finishedAt`. At runtime, `run.createdAt` and `run.completedAt` are both `undefined`. formatDate(undefined) returns 'in progress' (line 37); formatDate(undefined, 'SUCCEEDED') returns 'N/A' (line 35). No real timestamp is ever displayed. Production data confirms SandboxRun has valid startedAt/finishedAt ISO dates.",
+      "evidence": [
+        "get.ts:14-19 — TicketDetail type: runs Array<{ createdAt: string; completedAt: string | null }>",
+        "ticket-service.ts:462-463 — mapRunHistoryItem returns: startedAt: runRecord.startedAt, finishedAt: runRecord.finishedAt",
+        "Production DB query: SUCCEEDED run has startedAt='2026-05-07T22:07:53.219Z', finishedAt='2026-05-07T22:13:27.951Z'",
+        "get.ts:32-44 — formatDate(undefined) -> 'in progress'; formatDate(undefined, 'SUCCEEDED') -> 'N/A'"
+      ]
+    },
+    {
+      "answer": "Two changes needed. (1) Server: ticket-controller.ts getTickets (line 190) must parse a `search` query param and pass it to listTicketsForOrganization. ticket-service.ts listTicketsForOrganization (line 1477) must add `title: { contains: search, mode: 'insensitive' }` to the Prisma where clause. No schema migration needed — Prisma `contains` with insensitive mode uses PostgreSQL ILIKE. At 468 tickets, no index is needed. (2) CLI: list.ts must parse `--search` flag and include it in queryParams.",
+      "evidence": [
+        "ticket-controller.ts:190-213 — getTickets parses archived, statusNotIn, sprintId, reporterUserId; no search param",
+        "ticket-service.ts:1522-1531 — Prisma findMany where clause; no title filter",
+        "Production DB: 468 total tickets — ILIKE is safe without index",
+        "list.ts:38-72 — queryParams built from flags; no --search flag"
+      ]
+    },
+    {
+      "answer": "continue.ts (line 30) immediately POSTs to /tickets/{id}/rerun. Insert a hasFlag(args, '--dry-run') check before the API call. If true, print the resolved payload { ticketId, continuationContext } as JSON and exit 0 without calling the API. The ticket resolution (extractTicketRef + resolveTicket in index.ts:91-92) already runs before cmdTicketsContinue, so the dry-run path can show the resolved ticket ID.",
+      "evidence": [
+        "continue.ts:30-34 — unconditional POST to /tickets/{ticketId}/rerun",
+        "index.ts:91-93 — ticket resolution happens before cmdTicketsContinue is called",
+        "continue.ts:17-22 — continuation context is already assembled before the API call"
+      ]
+    },
+    {
+      "answer": "The --query flag already exists (inspect/index.ts:57) and single-quote examples work in PS 7.x for external commands. The gap is: (1) no --query-file option for complex SQL or edge cases, (2) help text doesn't explicitly address PS 5.1 vs 7.x differences, (3) the example doesn't demonstrate a query with quoted Postgres identifiers like '\"Ticket\".\"ticketNumber\"'. Fix: add --query-file <path> option (fs.readFileSync is already used elsewhere in the CLI), improve help with PS 5.1/7 examples showing quoted identifiers, and make --query the documented canonical form.",
+      "evidence": [
+        "inspect/index.ts:57 — queryFlag = getFlag(rest, '--query') already exists",
+        "inspect/index.ts:45-53 — help text has single-quote PS example but only for simple query",
+        "grep for readFileSync — used in config.ts, version.ts, bundle.ts; fs import pattern established",
+        "inspect/db.ts:5-12 — simple passthrough; query string passed directly to API"
+      ]
+    }
+  ],
+  "statement": "Four independent ergonomics gaps in the hlx CLI. Issue 2 (run display) is a confirmed field-name mismatch bug: CLI expects createdAt/completedAt but the API returns startedAt/finishedAt, causing all run timestamps to render as placeholders. Issues 1, 3, and 4 are missing features. Issue 1 (search) requires a coordinated CLI + server change; the server needs to accept and apply a title search parameter using Prisma's case-insensitive contains. Issue 3 (dry-run) requires a single flag check gate in continue.ts before the API call. Issue 4 (PowerShell) requires a --query-file option and improved help text. All four changes are low-risk, isolated, and independent of each other.",
+  "followups": []
+}
