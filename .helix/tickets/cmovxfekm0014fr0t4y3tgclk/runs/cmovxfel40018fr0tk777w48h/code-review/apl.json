@@ -1,0 +1,42 @@
+{
+  "questions": [
+    "Q1: Does the implementation correctly address all three usability defects (--repos resolution, --description-file, update-description)?",
+    "Q2: Are there any regressions or shared-code risks from the changes?",
+    "Q3: Does the implementation meet all 5 acceptance criteria and 2 non-negotiables from the ticket?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All three defects are correctly fixed: (1) resolveAllRepos in resolve-repo.ts:44-80 resolves names/keys before any API call, (2) create.ts:22-57 adds --description-file with mutual exclusivity and file-path detection on --description, (3) update-description.ts is a new subcommand wired into index.ts:79-88 following the extractTicketRef + resolveTicket + handler pattern.",
+      "evidence": [
+        "resolve-repo.ts:44-80 — resolveAllRepos makes one listRepos call, collects all unknown entries, throws Error with list",
+        "create.ts:26-34 — mutual exclusivity and at-least-one-required checks",
+        "create.ts:38-57 — file reading and file-path detection with clear error messages",
+        "create.ts:60-76 — resolveAllRepos called before POST, error references hlx inspect repos",
+        "update-description.ts:6-40 — complete handler with --file/--text mutual exclusivity and PATCH call",
+        "index.ts:79-88 — update-description case registered correctly"
+      ]
+    },
+    {
+      "answer": "No regressions. The existing resolveRepo() function is completely untouched (resolve-repo.ts:11-37). The new resolveAllRepos is additive. The create.ts behavioral changes are intentional per ticket requirements. No other subcommands are affected. All 30 existing tests pass across 6 suites.",
+      "evidence": [
+        "npm run typecheck — tsc --noEmit exit code 0",
+        "npm run build — tsc exit code 0",
+        "npm run test — 30/30 tests pass, 0 fail",
+        "resolve-repo.ts:11-37 — resolveRepo function unchanged",
+        "flags.ts:5-8 — getFlag uses indexOf (exact match), so --description and --description-file do not collide"
+      ]
+    },
+    {
+      "answer": "Yes. AC1: create.ts:38-45 reads file via readFileSync for --description-file. AC2: create.ts:47-56 detects readable file paths on --description and exits with error. AC3: create.ts:69-76 catches resolveAllRepos error with hlx inspect repos reference. AC4: update-description.ts:33-39 PATCHes description. AC5: index.ts:21,29,73 show names/keys/IDs accepted. Non-negotiables: unknown repo fails before creation (validation at line 70-71 before POST at line 89); unreadable file fails with process.exit(1) (lines 42-45).",
+      "evidence": [
+        "create.ts:38-45 — readFileSync for --description-file",
+        "create.ts:47-56 — accessSync + statSync file-path detection",
+        "create.ts:69-76 — resolveAllRepos error handling with hlx inspect repos reference",
+        "update-description.ts:33-39 — PATCH /api/tickets/:ticketId with description",
+        "index.ts:21,29,73 — help text shows --repos accepts names/keys/IDs"
+      ]
+    }
+  ],
+  "statement": "Code review of BLD-401 complete. All 4 changed files in helix-cli reviewed against ticket requirements, product spec, and implementation plan. No issues found requiring code fixes. Implementation correctly addresses all three usability defects and meets all 5 acceptance criteria and 2 non-negotiables. Quality gates verified passing (typecheck, build, 30/30 tests). No changes to helix-global-server. Zero code-review edits.",
+  "followups": []
+}
