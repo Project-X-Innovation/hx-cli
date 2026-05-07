@@ -1,0 +1,36 @@
+{
+  "title": "BLD-401: Improve hlx tickets create ergonomics",
+  "description": "Walkthrough of changes to fix --repos resolution, add --description-file, and add update-description subcommand",
+  "steps": [
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 44,
+      "title": "New resolveAllRepos() batch function",
+      "description": "Added resolveAllRepos() that resolves multiple repo names/keys/IDs in a single listRepos() API call. Uses the same matching logic as resolveRepo (exact ID > exact name > partial name). Collects all unresolved entries and throws a single Error with all unknowns listed, letting the caller format the final user-facing message."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 22,
+      "title": "Description flag handling: mutual exclusivity and file-path detection",
+      "description": "Replaced requireFlag('--description') with dual-flag logic. getFlag reads both --description and --description-file. Mutual exclusivity is enforced: both present -> error, neither present -> error. When --description-file is given, readFileSync loads the file. When --description is given, accessSync+statSync check if the value is a readable file path — if so, exits with a clear error directing the user to --description-file."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 60,
+      "title": "Repo resolution via resolveAllRepos",
+      "description": "Replaced the raw repositoryIds pass-through with resolveAllRepos(config, repoEntries). On failure, prints the error message (listing unknown repos and available repos) plus a reference to 'hlx inspect repos'. This provides client-side validation before any ticket is created."
+    },
+    {
+      "file": "src/tickets/update-description.ts",
+      "line": 6,
+      "title": "New update-description subcommand handler",
+      "description": "New file implementing cmdTicketsUpdateDescription. Accepts --file <path> or --text <string> (mutually exclusive). Reads file content via readFileSync when --file is used. Calls hxFetch with PATCH method and basePath '/api' to update the ticket description. Follows the established one-file-per-subcommand pattern."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 79,
+      "title": "Registered update-description in switch block",
+      "description": "Added 'update-description' case following the extractTicketRef + resolveTicket + handler pattern used by get, rerun, continue, etc. Also updated ticketsUsage() at line 15 to include the new subcommand and --description-file in the create usage, plus documentation that --repos accepts names/keys/IDs."
+    }
+  ]
+}
