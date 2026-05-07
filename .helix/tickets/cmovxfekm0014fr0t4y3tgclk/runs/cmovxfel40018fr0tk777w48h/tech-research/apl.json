@@ -1,0 +1,54 @@
+{
+  "questions": [
+    "Q1: What is the best pattern for resolving multiple repo names/keys to IDs without making N identical listRepos API calls?",
+    "Q2: How should file-path detection on --description work without false positives, and what Node.js APIs are appropriate?",
+    "Q3: Should the new batch repo resolver throw or call process.exit(1), and how does that affect the error contract?",
+    "Q4: What is the correct mutual-exclusivity pattern for --description / --description-file given the current flag infrastructure?",
+    "Q5: Does the existing resolveRepo use the inspect auth endpoint, and could that fail for some token types?"
+  ],
+  "answers": [
+    {
+      "answer": "Add a resolveAllRepos(config, namesOrIds[]) function in resolve-repo.ts that calls listRepos() once and resolves all entries against the cached list. This avoids N identical GET /api/inspect/repositories calls. The function collects all unresolved entries and reports them in a single error, which is better UX than failing on the first unknown repo.",
+      "evidence": [
+        "src/lib/resolve-repo.ts:6-9 — listRepos fetches from GET /api/inspect/repositories (default basePath)",
+        "src/lib/resolve-repo.ts:11-37 — resolveRepo calls listRepos on every invocation, no caching",
+        "src/tickets/create.ts:21 — repositoryIds from --repos can be 1+ entries after split"
+      ]
+    },
+    {
+      "answer": "Use fs.accessSync(value, fs.constants.R_OK) in a try-catch, then fs.statSync(value).isFile() to confirm it is a regular file (not a directory). If both checks pass, fail with an error directing the user to --description-file. This avoids false positives for directories and is the correct behavior per the ticket requirement. The edge case of a description string that happens to match a file name is acceptable — the user can work around it with --description-file.",
+      "evidence": [
+        "Ticket requirement: 'If --description is given a value that is a readable local file path, the CLI must NOT silently use the path string.'",
+        "product/product.md OQ2: 'Product preference is fail-with-error directing to --description-file for explicitness.'",
+        "src/lib/config.ts:1 — CLI already imports from 'node:fs' (readFileSync, etc.) confirming Node.js fs module is in use"
+      ]
+    },
+    {
+      "answer": "The new resolveAllRepos should throw an Error (not call process.exit). This lets create.ts catch it, format the message with the 'Run hlx inspect repos' reference, and exit with code 1. The existing single-item resolveRepo calls process.exit(1) directly — changing it would be a breaking change to the three callers (inspect logs, db, api). The batch function is a new API and can use throw from the start.",
+      "evidence": [
+        "src/lib/resolve-repo.ts:32-36 — resolveRepo calls process.exit(1) on failure",
+        "src/inspect/logs.ts:6, db.ts:6, api.ts:6 — three callers rely on resolveRepo's exit behavior",
+        "Ticket requirement: 'Unknown repo key/name in --repos must fail before any ticket is created.'"
+      ]
+    },
+    {
+      "answer": "Replace the single requireFlag('--description') call with inline logic: (1) getFlag for --description, (2) getFlag for --description-file, (3) if both present → error and exit, (4) if neither present → error and exit, (5) if --description-file → readFileSync the path, (6) if --description → check if it's a readable file path, error if so. No generic mutual-exclusion helper is needed — there are only two call sites (create and update-description), and the validation logic differs between them.",
+      "evidence": [
+        "src/lib/flags.ts:5-9 — getFlag returns string|undefined; no mutual-exclusion helper exists",
+        "src/lib/flags.ts:28-35 — requireFlag exits on missing; cannot express 'one of two required'",
+        "src/tickets/create.ts:19 — currently uses requireFlag for --description"
+      ]
+    },
+    {
+      "answer": "resolveRepo (and the new batch variant) use listRepos which hits GET /api/inspect/repositories via the default basePath '/api/inspect'. This uses inspect auth. A separate GET /api/settings/repositories endpoint exists behind standard auth. If a token lacks inspect access, resolveRepo will fail. This is a pre-existing limitation shared by inspect logs, db, and api commands. The risk is low because tickets create is typically used by the same users who also use inspect commands. The CLI should surface the listRepos error clearly if it occurs.",
+      "evidence": [
+        "src/lib/resolve-repo.ts:7 — listRepos calls hxFetch(config, '/repositories') with default basePath '/api/inspect'",
+        "helix-global-server/src/routes/api.ts:207 — GET /api/inspect/repositories uses inspectAuth middleware",
+        "helix-global-server/src/routes/api.ts:314 — GET /api/settings/repositories uses standard requireAuth",
+        "product/product.md OQ1 — noted as open question; impact is low per existing pattern"
+      ]
+    }
+  ],
+  "statement": "All changes are CLI-only in helix-cli. The technical direction adds a batch resolveAllRepos() function (one API call for multi-repo resolution), inline mutual-exclusivity checks for --description/--description-file, synchronous file I/O via fs.readFileSync/accessSync/statSync for description file handling, and a new update-description.ts subcommand following the existing extractTicketRef + resolveTicket + handler pattern. No new dependencies are needed. No server changes are needed.",
+  "followups": []
+}
