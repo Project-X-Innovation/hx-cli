@@ -17,12 +17,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # Node 24 bundles npm 11.x, which supports Trusted Publishing OIDC.
+          # Node 22 ships with npm 10.x and falls back to anonymous publish (404).
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-
-      # npm Trusted Publishing (OIDC) requires npm >= 11.5.1.
-      # Node 22 ships with npm 10.x, which falls back to anonymous publish and fails with 404.
-      - run: npm install -g npm@latest
 
       - run: npm ci
         # prepare script runs build automatically after npm ci
