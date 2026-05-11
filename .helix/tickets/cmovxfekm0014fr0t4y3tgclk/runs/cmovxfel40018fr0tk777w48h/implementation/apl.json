@@ -1,0 +1,38 @@
+{
+  "questions": [
+    "Q1: Were all three defects (--repos resolution, --description-file, update-description) implemented successfully?",
+    "Q2: Do all quality gates (typecheck, build, test) pass without regressions?",
+    "Q3: Do all 10 verification checks pass against the staging server?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All three defects are fixed: (1) --repos now resolves names/keys via resolveAllRepos before API call, (2) --description-file reads file contents as description with mutual exclusivity and file-path detection on --description, (3) update-description subcommand is registered and functional.",
+      "evidence": [
+        "src/lib/resolve-repo.ts:44-80 — resolveAllRepos added with batch resolution and error reporting",
+        "src/tickets/create.ts:22-57 — dual-flag logic with mutual exclusivity, file-path detection, and file reading",
+        "src/tickets/create.ts:60-76 — resolveAllRepos integration with hlx inspect repos error reference",
+        "src/tickets/update-description.ts — new subcommand handler with --file and --text support",
+        "src/tickets/index.ts:79-88 — update-description case registered in switch block"
+      ]
+    },
+    {
+      "answer": "Yes. npm run typecheck, npm run build, and npm run test all exit with code 0. All 30 existing tests pass without regressions.",
+      "evidence": [
+        "npm run typecheck — tsc --noEmit completed with exit code 0",
+        "npm run build — tsc completed with exit code 0; dist/tickets/update-description.js exists",
+        "npm run test — 30 tests pass, 0 fail across 6 suites"
+      ]
+    },
+    {
+      "answer": "Yes. All 10 verification checks pass: CHK-01 through CHK-03 (quality gates), CHK-04 (--description-file creates ticket with file contents), CHK-05 (--description with file path fails with clear error), CHK-06 (mutual exclusivity), CHK-07 (repo name resolution), CHK-08 (unknown repo fails with hlx inspect repos reference), CHK-09 (update-description updates and reflects via get), CHK-10 (help text accurate).",
+      "evidence": [
+        "CHK-04: Ticket cmow27e3x0001hb0ufhrmw2mm created with description 'Test description from file for BLD-401 verification'",
+        "CHK-05: Exit code 1 with message 'Use --description-file <path> to load from a file'",
+        "CHK-08: Exit code 1 listing available repos and 'Run hlx inspect repos'",
+        "CHK-09: Description updated to 'Updated description for BLD-401' confirmed via tickets get"
+      ]
+    }
+  ],
+  "statement": "All three usability defects in hlx tickets create are fixed within helix-cli only. 3 files modified (resolve-repo.ts, create.ts, index.ts) and 1 file created (update-description.ts). Zero new dependencies. All 10 verification checks pass including staging server integration tests. No changes to helix-global-server.",
+  "followups": []
+}
