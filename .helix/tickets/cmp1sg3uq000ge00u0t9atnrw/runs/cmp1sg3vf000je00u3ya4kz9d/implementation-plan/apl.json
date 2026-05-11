@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Q1: What is the correct implementation sequence to ensure each step can be independently verified?",
+    "Q2: How should the plan handle the fact that skill content must be authored from scratch (no canonical source exists)?",
+    "Q3: What verification checks are needed to cover all 8 ticket acceptance criteria?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation follows a bottom-up dependency order: (1) author skill content first since all other steps depend on it existing, (2) update package.json to bundle it, (3) implement path resolution utility (shared dependency for show and install), (4) show handler, (5) install handler, (6) router that wires show+install together, (7) CLI entry point integration, (8) CI validation, (9) tests, (10) full verification. Each step's verification can run incrementally (e.g., typecheck after each source file).",
+      "evidence": [
+        "src/inspect/index.ts router imports and calls subcommand handlers — router depends on handlers",
+        "src/index.ts switch dispatches to command routers — entry point depends on router",
+        "src/update/version.ts provides path resolution pattern — paths.ts is a shared dependency for show.ts and install.ts"
+      ]
+    },
+    {
+      "answer": "Skill content authoring is Step 1 — it must come first because all subsequent steps (show, install, tests, tarball validation) depend on the files existing at skill-content/. The content format follows the workspace skill convention observed in .claude/skills/runtime-inspection/SKILL.md: YAML frontmatter with name+description, then markdown sections covering guardrails, environment, and command usage. The content documents the hlx CLI's actual command surface derived from src/index.ts usage text and command modules.",
+      "evidence": [
+        "scout/reference-map.json unknowns[0]: 'No SKILL.md or references/ directory currently exists anywhere in the helix-cli repository'",
+        "Workspace .claude/skills/runtime-inspection/SKILL.md: YAML frontmatter pattern with --- delimiters, name, description fields",
+        "src/index.ts lines 33-58: global usage() function documents all CLI commands"
+      ]
+    },
+    {
+      "answer": "9 Required Checks (CHK-01 through CHK-09) map to the acceptance criteria: CHK-09 covers AC1 (tarball contains skill files), CHK-03 covers AC2 (show prints content), CHK-05 covers AC3 (install to target), CHK-06 covers AC4+AC5 (no-overwrite behavior), CHK-07 covers force overwrite, CHK-08 covers AC7 (corrupt detection). AC4 (both-agents ambiguity) is covered by unit tests in CHK-02 since it requires filesystem mocking. AC8 (atomic install/partial cleanup) is also covered by unit tests in CHK-02 since simulating mid-copy failure requires controlled error injection.",
+      "evidence": [
+        "ticket.md Acceptance Criteria 1-8: tarball contents, show output, auto-detect install, ambiguity error, no-overwrite, target override, corrupt detection, atomic cleanup",
+        "product/product.md Success Criteria table: 8 criteria matching ticket acceptance criteria"
+      ]
+    }
+  ],
+  "statement": "Implementation plan is complete with 10 sequenced steps covering: skill content authoring, npm tarball bundling, path resolution, show handler, install handler, command router, CLI entry point wiring, CI validation, unit tests, and end-to-end verification. The plan follows established codebase patterns (inspect router, token no-auth dispatch, version.ts path resolution, flags.ts utilities) and introduces zero runtime dependencies. All 8 ticket acceptance criteria are mapped to 9 Required Checks in the Verification Plan. The plan is actionable for direct execution by the implementation agent.",
+  "followups": []
+}
