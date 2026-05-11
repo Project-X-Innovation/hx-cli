@@ -1,0 +1,56 @@
+{
+  "questions": [
+    "Q1: Where does the canonical hlx-cli skill content (SKILL.md + references/) live today, and does any authoritative source exist in the repository or workspace?",
+    "Q2: What is the correct strategy for bundling non-TypeScript static files (markdown) in the npm package, given tsc does not copy non-TS files?",
+    "Q3: How should the new skill command module resolve the path to bundled skill files at runtime?",
+    "Q4: What is the correct no-auth command dispatch pattern, and should `skill` skip auto-update checks?",
+    "Q5: How should atomic install with rollback be implemented using only Node.js built-in modules?",
+    "Q6: Does the CI publish pipeline need changes to validate bundled skill files in the tarball?"
+  ],
+  "answers": [
+    {
+      "answer": "No canonical hlx-cli skill content exists anywhere in the repository or workspace. Glob searches for **/SKILL.md within the helix-cli repo returned zero results. The workspace .claude/skills/ contains 8 other skills (runtime-inspection, ns-gm, etc.) but no hlx-cli skill. The ticket's 'verbatim copies' language describes the future invariant: once authored, the bundled files must match the source files exactly. The skill content must be authored as part of this implementation.",
+      "evidence": [
+        "scout/reference-map.json unknowns[0]: 'No SKILL.md or references/ directory currently exists anywhere in the helix-cli repository.'",
+        "Workspace .claude/skills/ contains: agent-browser, frontend-design, netsuite-objects, ns-gm, processing-office-files, runtime-inspection, tailwind-design-system, vercel-react-best-practices — no hlx-cli"
+      ]
+    },
+    {
+      "answer": "Place skill content in a top-level `skill-content/` directory at package root, and add `skill-content` to the package.json `files[]` array. This is the simplest approach: no build script changes needed. tsc compiles src/ to dist/ but ignores non-TS files (tsconfig.json: rootDir=src, outDir=dist). The `files` field currently only includes `dist` (package.json lines 18-22). Adding `skill-content` alongside `dist` ensures the markdown files are included in the npm tarball without modifying the build pipeline.",
+      "evidence": [
+        "package.json lines 18-22: files: [\"dist\", \"!dist/**/*.test.js\", \"!dist/**/*.test.d.ts\"]",
+        "tsconfig.json: rootDir=src, outDir=dist — tsc only emits .js and .d.ts",
+        ".npmignore only excludes test files — no conflict with skill-content/"
+      ]
+    },
+    {
+      "answer": "Use the established pattern from src/update/version.ts: `dirname(fileURLToPath(import.meta.url))` navigating up to the package root. From `dist/skill/index.js` at runtime, the package root is `join(thisDir, '..', '..')`, making the skill content at `join(pkgRoot, 'skill-content')`. This is the same pattern used to resolve package.json for version reading.",
+      "evidence": [
+        "src/update/version.ts lines 10-14: const thisDir = dirname(fileURLToPath(import.meta.url)); const pkgPath = join(thisDir, '..', '..', 'package.json')"
+      ]
+    },
+    {
+      "answer": "The `skill` command does not need authentication — it operates entirely on local bundled files. It should follow the no-auth pattern used by `login`, `token`, and `update`: dispatch directly from the switch without configOrHelp(). Additionally, `skill` should be added to the SKIP_AUTO_UPDATE set — it is a purely local operation that reads bundled files or copies to disk, so adding network latency for an update check provides no value.",
+      "evidence": [
+        "src/index.ts lines 70-76: login and token dispatch without configOrHelp()",
+        "src/index.ts line 61: SKIP_AUTO_UPDATE = new Set([\"--version\", \"-v\", \"update\", \"--help\", \"-h\"])",
+        "src/token/index.ts: runToken(args) takes only args, no config"
+      ]
+    },
+    {
+      "answer": "Use node:fs (mkdirSync, copyFileSync, readdirSync, rmSync) with a try-catch wrapper around the entire copy operation. Strategy: (1) check destination doesn't exist (or --force), (2) mkdirSync the target, (3) copy all files in a try block, (4) on any error in the catch block, rmSync the target directory with { recursive: true, force: true } before re-throwing/exiting. This ensures no half-populated state. The codebase already uses these patterns: config.ts uses mkdirSync with { recursive: true }.",
+      "evidence": [
+        "src/lib/config.ts line 131: mkdirSync(CONFIG_DIR, { recursive: true })",
+        "Ticket failure behavior: 'it must not leave the destination in a half-populated state. Either the install completes fully or the partial destination is removed before exit.'"
+      ]
+    },
+    {
+      "answer": "Yes. The publish workflow (.github/workflows/publish.yml lines 44-56) validates tarball contents before publishing. A check for `package/skill-content/SKILL.md` should be added alongside the existing checks for `package/dist/index.js` and `package/package.json`. This prevents publishing a package with missing skill content.",
+      "evidence": [
+        ".github/workflows/publish.yml lines 50-51: grep -q checks for dist/index.js and package.json in tarball"
+      ]
+    }
+  ],
+  "statement": "This is a new feature ticket — no bug or regression. The helix-cli repository needs: (1) skill content authored from scratch (SKILL.md + references/) placed in a top-level skill-content/ directory, (2) package.json files[] updated to include skill-content, (3) a new src/skill/ command module with show and install subcommands following established CLI patterns, (4) src/index.ts updated with skill command routing and SKIP_AUTO_UPDATE entry, (5) CI tarball validation updated. The implementation scope is well-bounded: 3-5 new source files, 2 config changes, and authored skill content. No existing behavior is modified.",
+  "followups": []
+}
