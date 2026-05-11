@@ -1,0 +1,38 @@
+{
+  "questions": [
+    "Q1: What is the exact canonical content structure needed in helix-cli?",
+    "Q2: What package.json changes are required to make the content importable?",
+    "Q3: What CLI commands and flags must be documented based on source code?"
+  ],
+  "answers": [
+    {
+      "answer": "Create `src/docs/cli-content.ts` that exports a structured object containing the documentation content as markdown. The export should include fields that map to the front-end's DocSection shape: id, title, content (markdown string), order, and keywords. The `audience` field is omitted since that is a front-end concern. The content covers: install (`npm install -g @projectxinnovation/helix-cli@latest`), setup/auth (`hlx login`, `hlx token add`), command groups (tickets, inspect, comments, update), worked examples, and troubleshooting.",
+      "evidence": [
+        "helix-cli has no existing documentation files — repo root contains only: package.json, tsconfig.json, src/, node_modules/",
+        "helix-cli tsconfig.json: rootDir is src/, outDir is dist/, declaration: true — any .ts file in src/ compiles to dist/ with type declarations",
+        "Ticket requires 'a single file or directory clearly named for this purpose'"
+      ]
+    },
+    {
+      "answer": "Add an `exports` field to package.json mapping `\"./docs\"` to the compiled output. This requires: `\"exports\": { \"./docs\": { \"import\": \"./dist/docs/cli-content.js\", \"types\": \"./dist/docs/cli-content.d.ts\" } }`. No changes to `files` needed since `dist/` is already published. The existing `bin` field remains unchanged.",
+      "evidence": [
+        "package.json files: `[\"dist\", \"!dist/**/*.test.js\", \"!dist/**/*.test.d.ts\"]` — dist/ contents are published",
+        "package.json has no `exports` field currently — only `bin` for the CLI binary",
+        "tsconfig.json: `declaration: true` ensures .d.ts files are generated"
+      ]
+    },
+    {
+      "answer": "Source code analysis confirms all required commands and flags. Required worked examples: (1) `hlx tickets list` — flags: --search, --user, --status, --status-not-in, --archived, --sprint, --json (src/tickets/list.ts). (2) `hlx tickets get <ref>` — flag: --json; accepts internal ID, short ID (BLD-339), or number (339) (src/tickets/get.ts). (3) `hlx tickets create` — flags: --title, --description/--description-file, --repos, --mode AUTO|BUILD|FIX|RESEARCH|EXECUTE (src/tickets/create.ts). (4) `hlx tickets artifacts <ref>` — flag: --run (src/tickets/artifacts.ts). (5) `hlx inspect repos` — no flags (src/inspect/repos.ts). (6) `hlx comments post [--ticket <ref>] <message>` (src/comments/post.ts). Additional documented: `hlx tickets continue <ref> \"context\" --dry-run`, `hlx tickets update-description <ref> --file/--text`, `hlx update --enable-auto/--disable-auto`. Auth: `hlx login <url>` (OAuth), `hlx login --manual`, `hlx token add`. Config at `~/.hlx/config.json`.",
+      "evidence": [
+        "src/index.ts lines 35-55: usage string with complete command tree",
+        "src/tickets/create.ts line 12: VALID_MODES = ['AUTO', 'BUILD', 'FIX', 'RESEARCH', 'EXECUTE']",
+        "src/tickets/continue.ts line 11: help string documents --dry-run flag",
+        "src/lib/config.ts line 37: CONFIG_DIR = join(homedir(), '.hlx')",
+        "src/login.ts lines 27-109: OAuth flow + manual login",
+        "src/update/index.ts lines 38-101: update command with --enable-auto/--disable-auto"
+      ]
+    }
+  ],
+  "statement": "helix-cli must provide a canonical documentation content source that does not currently exist. The repo has zero documentation artifacts. The fix is to create src/docs/cli-content.ts exporting structured documentation data covering install, auth, commands, examples, and troubleshooting, and to add a package.json exports map entry so the compiled output is importable by helix-global-client. All command flags and behaviors are verified against source code.",
+  "followups": []
+}
