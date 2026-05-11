@@ -1,0 +1,44 @@
+{
+  "questions": [
+    "Q1: What is the correct implementation sequence for the four CLI changes?",
+    "Q2: What are the exact file changes needed for each feature?",
+    "Q3: How should the dry-run output be formatted?",
+    "Q4: What is the query-file priority relative to --query and positional args?"
+  ],
+  "answers": [
+    {
+      "answer": "Five steps in order: S1 fixes run display (get.ts type rename -- simplest, standalone), S2 adds --dry-run (continue.ts flag gate + help text), S3 adds --search (list.ts query param + help text -- depends on server search endpoint), S4 adds --query-file (inspect/index.ts file read + help text), S5 runs quality gates. All four features are independent; the order optimizes for verifying standalone changes first.",
+      "evidence": [
+        "tech-research/tech-research.md summary: 'All four features are independent and can be implemented in any order'",
+        "S3 depends on helix-global-server search endpoint being available for end-to-end testing",
+        "S1 is simplest (type rename in one file); S2 is one flag gate; S4 is one flag + file read"
+      ]
+    },
+    {
+      "answer": "S1: get.ts -- rename createdAt->startedAt and completedAt->finishedAt in TicketDetail type and printTicketDetail references. S2: continue.ts -- import hasFlag, add dry-run check before API call; index.ts -- update help text. S3: list.ts -- parse --search via getFlag, add to queryParams; index.ts -- update help text. S4: inspect/index.ts -- import readFileSync, add --query-file parsing with priority over --query and positional, enhance help text with PS examples.",
+      "evidence": [
+        "get.ts:14-19 -- TicketDetail type with wrong field names (createdAt/completedAt)",
+        "continue.ts:30 -- API call insertion point for dry-run check",
+        "list.ts:39-72 -- queryParams pattern; getFlag already imported",
+        "inspect/index.ts:43-62 -- db case with --query flag parsing"
+      ]
+    },
+    {
+      "answer": "Human-readable structured text showing: ticket ID, target endpoint (POST /api/tickets/{id}/rerun), and request body (JSON-formatted { continuationContext }). This gives full 'what would happen' visibility. Matches the ticket's 'prints the resolved continuation payload' phrasing and the interactive use case. JSON output via --json flag can be added as a future enhancement.",
+      "evidence": [
+        "tech-research AD-3: human-readable text chosen for dry-run output",
+        "Ticket AC-7: 'prints the resolved continuation payload and exits 0'",
+        "Product open question resolved: 'Consider JSON with --json flag, human-readable by default'"
+      ]
+    },
+    {
+      "answer": "Priority order: --query-file > --query > positional. If --query-file is provided, read the file and use its contents, ignoring --query and positional. This ensures the file-based escape hatch always wins when explicitly requested. Missing or empty file produces a clear error and exits 1.",
+      "evidence": [
+        "tech-research AD-4: 'Priority order for SQL source: --query-file > --query > positional'",
+        "inspect/index.ts:57-59 -- current priority is --query > positional; --query-file inserts above both"
+      ]
+    }
+  ],
+  "statement": "The helix-cli implementation plan covers four independent CLI changes in five ordered steps: S1 fixes the run display field name mismatch (get.ts type rename), S2 adds --dry-run to tickets continue (flag gate before API call), S3 adds --search to tickets list (server-side query param), S4 adds --query-file to inspect db (readFileSync + PS help), S5 runs quality gates. Each change uses established patterns (getFlag/hasFlag from flags.ts, readFileSync from node:fs). Ten required verification checks cover quality gates, run display correctness, search end-to-end, dry-run safety, and query-file functionality.",
+  "followups": []
+}

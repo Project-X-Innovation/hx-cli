@@ -1,0 +1,73 @@
+{
+  "problem": "Four CLI ergonomics improvements needed: (1) add server-side ticket search via --search flag on `tickets list`, (2) fix run display in `tickets get` where timestamps show wrong values and status misreports terminal runs, (3) add --dry-run preview mode to `tickets continue`, (4) improve PowerShell ergonomics for `inspect db` quoted-identifier queries.",
+  "files": [
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Entry point for `hlx tickets list`. Lines 38-101. Currently supports --archived, --status-not-in, --sprint, --user, --status, --json flags. No --search flag exists. API call at line 69-72 uses GET /api/tickets with queryParams. Must add --search flag and pass search query param to server."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Entry point for `hlx tickets get`. Lines 1-94. Contains run display bug. TicketDetail type (lines 14-19) declares runs with `createdAt`/`completedAt` fields, but server API returns `startedAt`/`finishedAt`. formatDate() at lines 32-44 handles null/undefined values. TERMINAL_STATUSES set at line 26."
+    },
+    {
+      "path": "src/tickets/continue.ts",
+      "why": "Entry point for `hlx tickets continue`. Lines 1-37. Resolves ticket ref, builds continuationContext from positional args, POSTs to /api/tickets/{id}/rerun. No --dry-run flag exists. Must add flag check before API call."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Router for inspect subcommands. Lines 43-63 handle `db` subcommand. Already supports --query flag (line 57) and positional SQL (line 59). Help text at lines 45-53 already has a PowerShell-safe example using single quotes. No --query-file option exists."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Implementation of `inspect db`. Lines 1-12. Simple passthrough: resolves repo then POSTs query to /{repoId}/database. No changes needed for core SQL execution path."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Router for all ticket subcommands. Lines 1-134. Contains help text for all commands and subcommand dispatch. Help text at lines 16-28 needs updating to include --search and --dry-run. Lines 40-45 dispatch to list, lines 86-94 dispatch to continue."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Shared flag-parsing utilities. Lines 1-35. Provides getFlag(), hasFlag(), getPositionalArgs(), isHelpRequested(), requireFlag(). Used by all commands for argument parsing."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client for API calls. Lines 37-134. hxFetch() builds URLs with queryParams (lines 46-50), supports GET/POST with retry logic. All commands use this for server communication."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket reference resolution. Lines 1-127. extractTicketRef() gets ref from --ticket/env/positional. resolveTicket() fetches ticket list and matches. Used by get, continue, rerun commands."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Tests for flag parsing. 69 lines. Tests isHelpRequested, hasFlag, getFlag, getPositionalArgs. New flags should follow existing patterns."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Tests for ticket resolution. 120 lines. Tests matchTicket and extractTicketRef with various input formats."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point. Lines 1-122. Routes top-level commands including 'tickets' and 'inspect'. No changes expected."
+    }
+  ],
+  "facts": [
+    "helix-cli is a zero-dependency TypeScript CLI (only devDependencies: @types/node, typescript). Compiled via tsc to dist/. Entry: dist/index.js.",
+    "Build: `npm run build` (tsc). Typecheck: `npm run typecheck` (tsc --noEmit). Test: `npm test` (tsc && node --test dist/**/*.test.js). CI publishes to npm on tag push after running tests.",
+    "CLI GET /api/tickets sends queryParams: archived, statusNotIn, sprintId, reporterUserId. No search/title filter param exists.",
+    "Run display bug: CLI TicketDetail type (get.ts:14-19) expects `createdAt` and `completedAt` on run objects. Server mapRunHistoryItem (ticket-service.ts:457-473) returns `startedAt` and `finishedAt`. Field name mismatch causes undefined access at runtime.",
+    "formatDate(undefined) returns 'in progress' (get.ts:33-37) when no runStatus arg or non-terminal status. formatDate(undefined, 'SUCCEEDED') returns 'N/A' (get.ts:34-36) because SUCCEEDED is in TERMINAL_STATUSES.",
+    "SandboxRun Prisma model has: createdAt (DateTime, default now()), startedAt (DateTime?), finishedAt (DateTime?). mapRunHistoryItem maps startedAt and finishedAt but NOT createdAt.",
+    "tickets continue (continue.ts) immediately POSTs to /api/tickets/{ticketId}/rerun with {continuationContext}. No --dry-run check exists.",
+    "inspect db already supports --query flag (inspect/index.ts:57) as alternative to positional SQL. Help text (lines 45-53) already mentions PowerShell-safe example. No --query-file option exists.",
+    "The inspect db help PowerShell example uses single quotes: `--query 'SELECT * FROM \"Tickets\" LIMIT 5'`. Single quotes work in PowerShell 7 for external commands but behavior differs in PS 5.1.",
+    "Server rerun endpoint is POST /api/tickets/:ticketId/rerun (api.ts:294). Body schema: { continuationContext?, stepsToRun?, refreshFromStaging?, inferenceEndpointId? }.",
+    "helix-global-server uses Prisma ORM with file-based migrations. Build script runs `prisma migrate deploy` (scripts/prisma-migrate-all.mjs). Migration dir: prisma/migrations/ with 51+ migration files."
+  ],
+  "unknowns": [
+    "Whether Prisma `contains` with `mode: 'insensitive'` on the title field is sufficient for search performance at current dataset scale, or if a database index (GIN/trigram) is needed.",
+    "Whether the server should return `createdAt` from SandboxRun in addition to `startedAt`/`finishedAt`, or if the CLI should use startedAt as the display timestamp for 'created'.",
+    "Whether --query-file is needed for inspect db PowerShell ergonomics, or if improved documentation of --query with proper escaping patterns is sufficient.",
+    "The exact 'Invalid Date' scenario described in the ticket. Based on code, undefined fields would produce 'in progress' not 'Invalid Date'. Possible if an older CLI version or edge case sends a non-null non-date-parseable value.",
+    "Whether the --dry-run output should be JSON or human-readable formatted text."
+  ]
+}

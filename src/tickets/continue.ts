@@ -1,6 +1,6 @@
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
-import { getPositionalArgs, isHelpRequested } from "../lib/flags.js";
+import { getPositionalArgs, hasFlag, isHelpRequested } from "../lib/flags.js";
 
 type RerunResponse = {
   run: { id: string };
@@ -8,7 +8,7 @@ type RerunResponse = {
 
 export async function cmdTicketsContinue(config: HxConfig, ticketId: string, args: string[], rawRef?: string): Promise<void> {
   if (isHelpRequested(args)) {
-    console.log('Usage: hlx tickets continue <ticket-ref> "continuation context"\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).');
+    console.log('Usage: hlx tickets continue <ticket-ref> "continuation context" [--dry-run]\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).\n\n  --dry-run   Preview the continuation payload without starting a run.');
     process.exit(0);
   }
 
@@ -25,6 +25,14 @@ export async function cmdTicketsContinue(config: HxConfig, ticketId: string, arg
     console.error("Error: Continuation context is required.");
     console.error('Usage: hlx tickets continue <ticket-ref> "your continuation context"');
     process.exit(1);
+  }
+
+  if (hasFlag(args, "--dry-run")) {
+    console.log("Dry run — no run will be started.\n");
+    console.log(`Ticket ID:  ${ticketId}`);
+    console.log(`Endpoint:   POST /api/tickets/${ticketId}/rerun`);
+    console.log(`Body:       ${JSON.stringify({ continuationContext }, null, 2)}`);
+    process.exit(0);
   }
 
   const data = (await hxFetch(config, `/tickets/${ticketId}/rerun`, {
