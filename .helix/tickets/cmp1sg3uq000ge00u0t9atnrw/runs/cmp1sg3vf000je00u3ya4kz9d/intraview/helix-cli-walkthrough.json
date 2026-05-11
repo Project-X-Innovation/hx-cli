@@ -1,0 +1,72 @@
+{
+  "title": "BLD-429: Bundle hlx-cli agent skill",
+  "description": "Walkthrough of the new `hlx skill` command — bundled skill content, path resolution, show/install handlers, command router, CLI entry point wiring, CI validation, and tests.",
+  "steps": [
+    {
+      "file": "skill-content/SKILL.md",
+      "line": 1,
+      "title": "Bundled skill content",
+      "description": "The canonical SKILL.md with YAML frontmatter. This file ships inside the npm tarball as a static asset. It contains operational guidance for AI agents: guardrails, environment setup, available commands, common workflows, and flag conventions."
+    },
+    {
+      "file": "skill-content/references/commands.md",
+      "line": 1,
+      "title": "Reference: detailed command docs",
+      "description": "A per-command reference file covering all hlx CLI commands with flags, usage patterns, and tips. Bundled alongside SKILL.md in the tarball."
+    },
+    {
+      "file": "package.json",
+      "line": 22,
+      "title": "Tarball bundling — files[] updated",
+      "description": "Added 'skill-content' to the files[] array so npm includes the skill-content/ directory in the published tarball. No build script changes needed."
+    },
+    {
+      "file": "src/skill/paths.ts",
+      "line": 17,
+      "title": "Path resolution utility",
+      "description": "getSkillContentDir() resolves the bundled skill-content/ directory at runtime using import.meta.url (same pattern as src/update/version.ts). If the directory is missing (corrupt install), exits non-zero with a reinstall instruction."
+    },
+    {
+      "file": "src/skill/show.ts",
+      "line": 9,
+      "title": "Show handler — clean stdout output",
+      "description": "cmdShow() reads SKILL.md with readFileSync and writes to process.stdout.write. No banners, no log noise, no console.log — pipe-friendly output."
+    },
+    {
+      "file": "src/skill/install.ts",
+      "line": 25,
+      "title": "Install handler — core logic",
+      "description": "cmdInstall() implements three-tier target resolution (--target > --for > auto-detect), no-overwrite safety, --force mode, and atomic install with rollback. Uses only node:fs, node:path, node:os built-ins."
+    },
+    {
+      "file": "src/skill/install.ts",
+      "line": 78,
+      "title": "Target resolution — auto-detection",
+      "description": "resolveDestination() checks ~/.claude/skills/ and ~/.codex/skills/ existence. If exactly one exists, uses it. Both -> error with --for hint. Neither -> error with --target hint."
+    },
+    {
+      "file": "src/skill/index.ts",
+      "line": 16,
+      "title": "Skill command router",
+      "description": "runSkill() follows the inspect/index.ts pattern: calls getSkillContentDir() first (corrupt-install gate), then dispatches to show or install based on subcommand. No auth required."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 103,
+      "title": "CLI entry point — skill case added",
+      "description": "The 'skill' case in the main switch dispatches to runSkill(args.slice(1)). Also added to SKIP_AUTO_UPDATE set (line 64) and usage text (lines 53-54)."
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 52,
+      "title": "CI tarball validation",
+      "description": "New grep check ensures skill-content/SKILL.md is present in the tarball before publishing. Prevents accidental publish without bundled skill content."
+    },
+    {
+      "file": "src/skill/skill.test.ts",
+      "line": 1,
+      "title": "Unit tests — 20 test cases",
+      "description": "Tests cover: path resolution, SKILL.md content output, --target install, byte-for-byte match, no-overwrite safety, --force overwrite, auto-detection failure, --for validation, and atomic rollback on copy failure."
+    }
+  ]
+}
