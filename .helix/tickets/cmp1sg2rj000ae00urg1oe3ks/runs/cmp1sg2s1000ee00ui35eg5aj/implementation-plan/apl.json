@@ -1,0 +1,36 @@
+{
+  "questions": [
+    "Q1: What is the exact file structure and export shape needed for the content module?",
+    "Q2: What package.json changes are required and what must remain unchanged?",
+    "Q3: What cross-repo coordination is needed for the implementation sequence?"
+  ],
+  "answers": [
+    {
+      "answer": "Create src/docs/cli-content.ts exporting a single const cliDocsContent with shape { id: string, title: string, content: string, order: number, keywords: string[] }. The content field is a markdown string covering install, setup/auth, command groups, worked examples (6 required), update, and troubleshooting. The audience field is intentionally omitted — assigned by the consumer. The module must contain zero import statements (pure data) to be compatible with Vite browser bundling.",
+      "evidence": [
+        "tech-research/tech-research.md (helix-cli): TypeScript module in src/docs/ chosen; export shape defined with id, title, content, order, keywords",
+        "diagnosis/diagnosis-statement.md (helix-cli): pure data module requirement confirmed; no Node imports allowed",
+        "tsconfig.json: rootDir 'src', outDir 'dist', declaration true — src/docs/ compiles to dist/docs/ automatically",
+        "package.json files: ['dist', ...] — dist/ contents already published to npm"
+      ]
+    },
+    {
+      "answer": "Add only an exports field to package.json: { \"./docs\": { \"types\": \"./dist/docs/cli-content.d.ts\", \"import\": \"./dist/docs/cli-content.js\" } }. No changes to files, scripts, tsconfig.json, or any other field. The types condition comes first per TypeScript convention. Only import condition needed (ESM-only package). No '.' entry needed — bin field works independently.",
+      "evidence": [
+        "tech-research/tech-research.md (helix-cli): exports map with types+import; no changes to files/scripts/tsconfig",
+        "package.json: type 'module' — ESM only, no require condition needed",
+        "package.json: files ['dist'] already covers dist/docs/"
+      ]
+    },
+    {
+      "answer": "helix-cli must be built and linked locally (npm link) before helix-global-client can consume the content module. The implementation sequence is: (1) create content module in helix-cli, (2) add exports to package.json, (3) npm run build, (4) npm link, (5) in helix-global-client, npm link @projectxinnovation/helix-cli. For production, helix-cli must be published to npm before helix-global-client CI build.",
+      "evidence": [
+        "helix-global-client package.json: no existing dependency on @projectxinnovation/helix-cli",
+        "@projectxinnovation/helix-cli@1.3.2 does not have the ./docs export yet — npm link provides it locally",
+        "tech-research/tech-research.md: npm dependency approach requires package to be published first for CI"
+      ]
+    }
+  ],
+  "statement": "The helix-cli implementation plan creates src/docs/cli-content.ts as a pure-data TypeScript module exporting structured CLI documentation content, and adds a package.json exports map at './docs'. The existing tsc build compiles it to dist/docs/ automatically with no changes to files, scripts, or tsconfig. The content covers install, auth/setup, command groups with worked examples, update, and troubleshooting — all verified against source code. Cross-repo coordination requires npm link for local development and publish-first ordering for production.",
+  "followups": []
+}
