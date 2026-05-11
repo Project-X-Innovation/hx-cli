@@ -1,0 +1,117 @@
+{
+  "problem": "hlx tickets create has three usability defects: (1) --repos accepts raw repository IDs but help text implies names/keys work, causing HTTP 400 from the server; (2) --description is literal-only with no file-based input or file-path detection; (3) no CLI command exists to update a ticket description after creation, despite the server already supporting PATCH /api/tickets/:ticketId with an optional description field.",
+  "files": [
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Primary change target. Implements cmdTicketsCreate. Lines 20-21: --repos values are split and sent as repositoryIds with no name-to-ID resolution. Line 19: --description is a required literal string with no file reading or file-path detection. No --description-file flag exists."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Tickets subcommand router (switch-based dispatch). Lines 14-29: usage text. Lines 31-134: route dispatch. No update-description subcommand exists. New subcommand must be registered here following the existing pattern (extractTicketRef + resolveTicket + handler)."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Already implements resolveRepo(config, nameOrId) that converts name/key/partial to repository ID via GET /api/inspect/repositories. Lines 11-37: resolution order is exact ID > exact name (case-insensitive) > partial name match. Returns resolved ID or exits with available repos listed. This function can be reused by tickets create for --repos resolution."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Flag parsing utilities used by all commands. getFlag, hasFlag, requireFlag, isHelpRequested. May need extension for mutually-exclusive flag validation (--description vs --description-file)."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket resolution utilities. extractTicketRef (args/env/positional) and resolveTicket (API-based). Used by get, rerun, continue, artifacts, artifact, bundle commands. The new update-description command will reuse this pattern."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "hxFetch API client. Supports GET/POST and PATCH via method option. basePath defaults to /api/inspect; tickets use basePath: '/api'. The new update-description command will use PATCH method with basePath: '/api'."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "HxConfig type definition and config loading. Used by all commands. No changes expected but defines the config interface passed to all handlers."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Implements cmdTicketsGet. Lines 9: TicketDetail type includes description field. Lines 77-79: description is printed (truncated to 500 chars). Confirms description is returned by the API and verifiable via hlx tickets get."
+    },
+    {
+      "path": "src/inspect/repos.ts",
+      "why": "Implements hlx inspect repos. Lines 4-13: calls listRepos and prints displayName, id, types. This is the reference command mentioned in the ticket for repo discovery."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point. Lines 94-98: routes to runTickets. No changes expected — new subcommands are registered within the tickets module."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Existing tests for flag utilities. Pattern reference for any new flag-related tests."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Existing tests for ticket resolution. Pattern reference for testing conventions."
+    },
+    {
+      "path": "package.json",
+      "why": "Build/test scripts: build=tsc, test=tsc && node --test dist/**/*.test.js, typecheck=tsc --noEmit. No external test framework — uses Node.js built-in test runner."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config: strict mode, ES2022 target, Node16 module resolution, outDir=dist, rootDir=src."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Server PATCH /api/tickets/:ticketId already accepts optional description field",
+      "evidence": "helix-global-server/src/controllers/ticket-controller.ts lines 47-52: updateTicketSchema has description: z.string().trim().min(1).max(10_000).optional(). Lines 235-254: patchTicket handler calls updateQueuedTicketForOrganization with description from parsed input."
+    },
+    {
+      "claim": "Server restricts ticket edits to DRAFT or QUEUED status (except director-only updates)",
+      "evidence": "helix-global-server/src/services/ticket-service.ts lines 1084-1092: isDraft OR isQueuedEditable OR isDirectorOnlyUpdate. Throws HttpError(409) otherwise."
+    },
+    {
+      "claim": "resolveRepo already converts name/key to repository ID via the inspect API",
+      "evidence": "src/lib/resolve-repo.ts lines 11-37: calls listRepos (GET /api/inspect/repositories), then matches by exact ID, exact displayName (case-insensitive), or partial displayName."
+    },
+    {
+      "claim": "listRepos uses basePath /api/inspect (default) while tickets create uses basePath /api",
+      "evidence": "src/lib/resolve-repo.ts line 7: hxFetch(config, '/repositories') with default basePath '/api/inspect'. src/tickets/create.ts line 42: basePath: '/api'."
+    },
+    {
+      "claim": "Server validates repositoryIds by database lookup and throws HTTP 400 for unknown IDs",
+      "evidence": "helix-global-server/src/services/ticket-service.ts lines 159-166: iterates repositoryIds, throws HttpError(400, 'Unknown repositoryId: ...') if not found in org's non-archived repos."
+    },
+    {
+      "claim": "CLI uses Node.js built-in test runner with no external test framework",
+      "evidence": "package.json scripts.test: 'tsc && node --test dist/**/*.test.js'. Only devDependencies are @types/node and typescript."
+    },
+    {
+      "claim": "CLI uses a simple switch-based command dispatch pattern, not a CLI framework",
+      "evidence": "src/tickets/index.ts: switch(subcommand) with manual help checks via isHelpRequested()."
+    },
+    {
+      "claim": "hxFetch supports PATCH method via the method option",
+      "evidence": "src/lib/http.ts line 42: method = options.method ?? 'GET'. The client already supports arbitrary HTTP methods."
+    },
+    {
+      "claim": "GET /api/settings/repositories endpoint exists behind standard auth (not inspect auth)",
+      "evidence": "helix-global-server/src/routes/api.ts line 314: apiRouter.get('/settings/repositories', getSettingsRepositories) — registered after requireAuth at line ~258."
+    },
+    {
+      "claim": "No ORM or database in helix-cli — it is a pure CLI client",
+      "evidence": "package.json has no ORM dependencies (no prisma, drizzle, typeorm, sequelize, knex). Only devDependencies are @types/node and typescript."
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "Does the CLI auth token always have access to GET /api/inspect/repositories, or could some tokens only access the standard auth /api/settings/repositories endpoint?",
+      "impact": "Determines whether resolveRepo (which uses inspect basePath) works reliably for all users calling tickets create, or whether a fallback/alternative listing endpoint is needed."
+    },
+    {
+      "question": "Should file-path detection on --description warn and exit, or silently load the file?",
+      "impact": "Ticket says 'Either load the file or fail closed with a clear error' — either approach satisfies AC2, but the choice affects UX."
+    },
+    {
+      "question": "Should the new update-description command accept both DRAFT and QUEUED tickets, matching the server's restrictions, or should it attempt the update and surface the server's 409 error?",
+      "impact": "Determines whether the CLI pre-validates ticket status or relies on the server for enforcement."
+    }
+  ]
+}

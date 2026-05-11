@@ -14,8 +14,8 @@ type TicketDetail = {
   runs: Array<{
     id: string;
     status: string;
-    createdAt: string;
-    completedAt: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
   }>;
   mergeQueueStatus: string | null;
   isArchived: boolean;
@@ -68,8 +68,8 @@ export async function printTicketDetail(config: HxConfig, ticketId: string): Pro
   if (ticket.runs.length > 0) {
     console.log(`\nRuns:`);
     for (const run of ticket.runs) {
-      const created = formatDate(run.createdAt);
-      const completed = formatDate(run.completedAt, run.status);
+      const created = formatDate(run.startedAt);
+      const completed = formatDate(run.finishedAt, run.status);
       console.log(`  ${run.id}  ${run.status.padEnd(12)}  ${created}  ${completed}`);
     }
   }

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-401: Fix hlx tickets create usability defects",
+  "description": "This tour walks through the three usability defect fixes in helix-cli for BLD-401: (1) resolving repo names/keys to IDs before API calls instead of sending raw values, (2) adding --description-file support with file-path detection on --description, and (3) adding a new update-description subcommand that PATCHes an existing ticket's description. All changes are CLI-only — the server already supported all required endpoints. Data flows from flag parsing → validation → repo resolution → API call in each path.",
+  "steps": [
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 1,
+      "description": "This file previously contained only the single-repo resolveRepo() function (lines 11–37) used by inspect subcommands. The existing function is completely untouched. The new resolveAllRepos() function added below it is purely additive. Root cause of defect 1: tickets/create.ts was splitting --repos values and sending them raw to the server, which does an exact database ID lookup and throws HTTP 400 for names or keys. The fix batch-resolves all entries in one listRepos call here before any ticket API call.",
+      "title": "Overview: resolve-repo.ts — additive batch resolution"
+    },
+    {
+      "file": "src/lib/resolve-repo.ts",
+      "line": 44,
+      "description": "resolveAllRepos(config, namesOrIds) makes exactly one GET /api/inspect/repositories call, then iterates every input entry through the same name/key/partial matching logic as resolveRepo. Unknown entries are collected into an array and a single Error is thrown listing all failures and referencing 'hlx inspect repos' — so users see all problems at once instead of one per invocation. Resolved IDs are returned as string[]. This function is called by create.ts before building the POST body, ensuring validation happens client-side before any write API call.",
+      "title": "resolveAllRepos — single listRepos call, all-at-once error reporting"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 1,
+      "description": "This file implements the hlx tickets create subcommand. Before BLD-401, it had three problems: --repos values were sent raw (defect 1), only --description existed with no file reading (defect 2), and no update path existed (defect 3, handled separately). The entire validation block was rewritten to fail fast and fail clearly — all flag conflicts, file existence checks, and repo resolution run before the POST /api/tickets call is made.",
+      "title": "create.ts — reworked for description handling and repo resolution"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 22,
+      "description": "Lines 22–34 enforce the dual-flag contract: exactly one of --description or --description-file must be provided, and providing both is an error. requireFlag/getFlag use indexOf for exact matching so '--description' and '--description-file' never collide in flag parsing. The at-least-one check runs before any file I/O or network call, giving the user immediate feedback on flag misuse.",
+      "title": "Mutual exclusivity: --description vs --description-file"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 38,
+      "description": "Lines 38–57 handle two cases: (a) if --description-file was given, read the file with fs.readFileSync and use its contents as the description body; (b) if --description was given but its value looks like a file path (contains '/' or '\\' or ends in a known extension), emit a clear warning suggesting --description-file. This addresses defect 2 — previously a user passing '--description ./brief.txt' would silently create a ticket with the literal string './brief.txt' as the body.",
+      "title": "File reading and file-path detection on --description"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 60,
+      "description": "Lines 60–76 parse the --repos flag, split by comma, then call resolveAllRepos(config, repoNames) to convert every name/key/partial to an internal repository ID. If any entry is unknown, resolveAllRepos throws an Error (caught by src/index.ts top-level handler) listing all bad values and referencing 'hlx inspect repos'. Only after successful resolution does the code build the POST body and call hxFetch. This is the fix for defect 1 — previously the raw strings went directly into repositoryIds causing HTTP 400 from the server.",
+      "title": "resolveAllRepos called before POST"
+    },
+    {
+      "file": "src/tickets/update-description.ts",
+      "line": 1,
+      "description": "This is a brand-new file implementing the update-description subcommand, fixing defect 3. The server already had PATCH /api/tickets/:ticketId accepting an optional description field, but no CLI surface existed. The file follows the established one-file-per-subcommand convention seen in get.ts and other handlers. It receives parsed args and a config, then validates flags, reads the description, and issues the PATCH call.",
+      "title": "New file: update-description subcommand handler"
+    },
+    {
+      "file": "src/tickets/update-description.ts",
+      "line": 10,
+      "description": "Lines 10–28 mirror the create.ts pattern: --file and --text are mutually exclusive and at least one is required. If --file is given, fs.readFileSync reads the content in a try-catch that surfaces a clear error message. Validation is complete before the PATCH call is issued. This consistency with create.ts means developers have one mental model for description input across both subcommands.",
+      "title": "Mutual exclusivity and file reading in update-description"
+    },
+    {
+      "file": "src/tickets/update-description.ts",
+      "line": 33,
+      "description": "Lines 33–39 call hxFetch with method PATCH and the resolved ticketId and description. hxFetch already supports PATCH (confirmed in http.ts review). Non-OK responses propagate as thrown Errors to the top-level handler in src/index.ts:118-121. The 409 case (ticket not in DRAFT/QUEUED state) is surfaced as a server error message. On success, a confirmation line is printed. The subcommand has no return value beyond the side-effect print — consistent with other handlers.",
+      "title": "PATCH call and success message"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 13,
+      "description": "Line 13 adds the import for the new updateDescriptionHandler. This is the only change needed to make the module available in the dispatch switch. The import follows the same pattern as all other subcommand imports in this file.",
+      "title": "index.ts — import and registration of update-description"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 17,
+      "description": "Lines 17–31 update the help/usage text to list update-description as an available subcommand and note that --repos in create accepts names, keys, or IDs. This is the user-visible documentation change that accompanies the behavioral fix — users reading help output will now know the resolution is done client-side and that update-description exists.",
+      "title": "Updated usage text"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 79,
+      "description": "Lines 79–88 register the 'update-description' case in the switch block. The pattern is identical to all other ticket subcommands: extractTicketRef pulls the ticket ID from positional args, resolveTicket validates it exists and the user has access, then the handler is called with (args, config, ticket). This means auth checks, 404 handling, and org-scoping are all inherited for free from the shared resolveTicket utility — no special-casing needed in the new handler.",
+      "title": "update-description case in dispatch switch"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 73,
+      "description": "Line 73 updates the inline help text for the create subcommand to reflect that --repos now accepts names, keys, or IDs. Previously it implied raw IDs only. This change is paired with the resolveAllRepos fix in create.ts — both the behavior and the documentation now match what users expect.",
+      "title": "create help text updated for --repos semantics"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 1,
+      "description": "All 30 existing tests pass across 6 suites. The resolveRepo() function in resolve-repo.ts is untouched — three existing commands (inspect logs, inspect db, inspect api) that use it are unaffected. The new resolveAllRepos is additive. The create.ts changes are intentional behavioral fixes per ticket requirements. The update-description handler is a new file with no shared mutable state. TypeScript typechecks clean (tsc --noEmit exit 0) and the build succeeds (tsc exit 0). The only changed code paths are the three defect areas targeted by BLD-401.",
+      "title": "Summary: all changes are additive, no regressions"
+    }
+  ]
+}

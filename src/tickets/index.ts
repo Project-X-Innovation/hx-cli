@@ -10,19 +10,23 @@ import { cmdTicketsContinue } from "./continue.js";
 import { cmdTicketsArtifacts } from "./artifacts.js";
 import { cmdTicketsArtifact } from "./artifact.js";
 import { cmdTicketsBundle } from "./bundle.js";
+import { cmdTicketsUpdateDescription } from "./update-description.js";
 
 function ticketsUsage(exitCode: number = 1): never {
   const output = exitCode === 0 ? console.log : console.error;
   output(`Usage:
-  hlx tickets list [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>] [--json]
+  hlx tickets list [--search <text>] [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>] [--json]
   hlx tickets latest [--status-not-in <s1,s2>] [--archived] [--sprint <id>]
   hlx tickets get <ticket-ref> [--json]
-  hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
+  hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
+  hlx tickets update-description <ticket-ref> --file <path> | --text <string>
   hlx tickets rerun <ticket-ref>
-  hlx tickets continue <ticket-ref> "continuation context"
+  hlx tickets continue <ticket-ref> "continuation context" [--dry-run]
   hlx tickets artifacts <ticket-ref> [--run <runId>]
   hlx tickets artifact <ticket-ref> --step <stepId> --repo <repoKey> [--run <runId>]
   hlx tickets bundle <ticket-ref> --out <dir>
+
+--repos accepts repository display names, keys, or internal IDs. Run "hlx inspect repos" to see available repositories.
 
 Ticket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).`);
   process.exit(exitCode);
@@ -39,7 +43,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
   switch (subcommand) {
     case "list":
       if (isHelpRequested(rest)) {
-        console.log("Usage: hlx tickets list [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>] [--json]");
+        console.log("Usage: hlx tickets list [--search <text>] [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>] [--json]");
         process.exit(0);
       }
       await cmdTicketsList(config, rest);
@@ -66,11 +70,22 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
 
     case "create":
       if (isHelpRequested(rest)) {
-        console.log("Usage: hlx tickets create --title <title> --description <desc> --repos <repo1,repo2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]");
+        console.log("Usage: hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]");
         process.exit(0);
       }
       await cmdTicketsCreate(config, rest);
       break;
+
+    case "update-description": {
+      if (isHelpRequested(rest)) {
+        console.log("Usage: hlx tickets update-description <ticket-ref> --file <path> | --text <string>\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).");
+        process.exit(0);
+      }
+      const rawRef = extractTicketRef(rest);
+      const resolved = await resolveTicket(config, rawRef);
+      await cmdTicketsUpdateDescription(config, resolved.id, rest);
+      break;
+    }
 
     case "rerun": {
       if (isHelpRequested(rest)) {
@@ -85,7 +100,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
 
     case "continue": {
       if (isHelpRequested(rest)) {
-        console.log('Usage: hlx tickets continue <ticket-ref> "continuation context"\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).');
+        console.log('Usage: hlx tickets continue <ticket-ref> "continuation context" [--dry-run]\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).\n\n  --dry-run   Preview the continuation payload without starting a run.');
         process.exit(0);
       }
       const rawRef = extractTicketRef(rest);

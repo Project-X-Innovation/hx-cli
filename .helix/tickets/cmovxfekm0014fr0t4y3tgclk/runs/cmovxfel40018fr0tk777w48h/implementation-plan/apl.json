@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Q1: What is the correct implementation sequence for the three defect fixes to avoid build breakage between steps?",
+    "Q2: Should the plan include unit tests for the new resolveAllRepos function, or rely on CLI integration tests?",
+    "Q3: Does the update-description subcommand need any special error handling beyond surfacing server HTTP errors?"
+  ],
+  "answers": [
+    {
+      "answer": "The sequence is: (1) Add resolveAllRepos to resolve-repo.ts (dependency-free), (2) Rework create.ts to use resolveAllRepos and add description handling (depends on Step 1), (3) Create update-description.ts (independent of Steps 1-2), (4) Register in index.ts and update help text (depends on Step 3). Each step leaves the codebase in a buildable state.",
+      "evidence": [
+        "src/tickets/create.ts:21 — must import resolveAllRepos before using it",
+        "src/tickets/index.ts:39-133 — switch block where update-description case must be added after the handler file exists",
+        "tech-research/tech-research.md — TD1: resolveAllRepos is a new function, not modifying existing resolveRepo"
+      ]
+    },
+    {
+      "answer": "The plan relies on CLI integration tests (running the built CLI against the staging server) for verification. The resolveAllRepos function uses the same matching logic as the existing resolveRepo, which is already a proven pattern used by three other commands. Unit tests for the pure matching logic are deferred since the function delegates to listRepos (an HTTP call), making unit tests require mocking. The existing test infrastructure uses Node.js built-in test runner with no mocking library.",
+      "evidence": [
+        "package.json — only devDependencies are @types/node and typescript; no mocking library available",
+        "src/lib/flags.test.ts — existing tests are pure-function tests with no mocking",
+        "src/lib/resolve-repo.ts:11-37 — resolveRepo matching logic is already battle-tested by inspect logs/db/api callers"
+      ]
+    },
+    {
+      "answer": "No special error handling is needed. The hxFetch client already formats HTTP errors clearly (e.g., 'HTTP 409 ...' for non-DRAFT/QUEUED tickets). The update-description handler should let hxFetch throw and let the top-level CLI error handler display it. This matches the pattern used by all other subcommands (create, rerun, continue, etc.).",
+      "evidence": [
+        "src/lib/http.ts:101-103 — buildErrorMessage formats 'HTTP <status> <statusText> — <body>'",
+        "src/tickets/create.ts:39-43 — create command lets hxFetch throw without wrapping",
+        "helix-global-server ticket-service.ts:1084-1092 — server returns HTTP 409 with clear message for status violations"
+      ]
+    }
+  ],
+  "statement": "The implementation plan covers all three defects in 5 ordered steps within helix-cli only. Step 1 adds resolveAllRepos (batch resolution, 1 API call). Step 2 reworks create.ts for --description-file, file-path detection, mutual exclusivity, and resolveAllRepos integration. Step 3 creates the new update-description.ts subcommand. Step 4 registers it in index.ts and updates all help text. Step 5 runs quality gates. Verification uses 10 required checks covering typecheck, build, tests, and CLI integration against the staging server.",
+  "followups": []
+}

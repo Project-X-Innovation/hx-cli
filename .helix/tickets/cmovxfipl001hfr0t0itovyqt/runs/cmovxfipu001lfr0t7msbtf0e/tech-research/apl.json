@@ -1,0 +1,58 @@
+{
+  "questions": [
+    "Q1: What is the best approach for server-side ticket title search given the current data model and scale?",
+    "Q2: Should the CLI use `startedAt`/`finishedAt` or request the server add `createdAt`/`completedAt` aliases?",
+    "Q3: What output format should `--dry-run` use for the continuation preview?",
+    "Q4: Is `--query-file` needed for PowerShell ergonomics, or is improved documentation sufficient?",
+    "Q5: Are there any new dependencies or migration requirements for any of the four features?"
+  ],
+  "answers": [
+    {
+      "answer": "Use Prisma `contains` with `mode: 'insensitive'` on the `Ticket.title` field. This translates to PostgreSQL `ILIKE '%search%'` and requires no schema migration, no new index, and no new Prisma migration file. At 468 total tickets in production, ILIKE on an unindexed String column is performant. The search param composes naturally with existing where-clause filters (archived, statusNotIn, sprintId, reporterUserId) via Prisma's object spread pattern already used in listTicketsForOrganization.",
+      "evidence": [
+        "prisma/schema.prisma:330 -- Ticket.title is String, no full-text index",
+        "ticket-service.ts:1522-1531 -- Prisma findMany where clause uses object spread for composable filters",
+        "Diagnosis confirmed via runtime DB query: 468 total tickets -- ILIKE safe without index",
+        "Ticket non-negotiable: 'tickets list --search must filter on the server'"
+      ]
+    },
+    {
+      "answer": "The CLI must update to use `startedAt`/`finishedAt` from the server response. Changing the server API response is explicitly out of scope per the ticket ('Changing the API response format for runs'). The server's mapRunHistoryItem deliberately returns `startedAt` (when execution began) and `finishedAt` (when execution completed), not the DB record `createdAt`. Production data confirms these fields contain valid ISO dates for completed runs.",
+      "evidence": [
+        "ticket-service.ts:462-463 -- mapRunHistoryItem returns startedAt and finishedAt",
+        "get.ts:14-19 -- CLI TicketDetail type expects createdAt/completedAt (wrong field names)",
+        "Diagnosis runtime evidence: SUCCEEDED run has startedAt='2026-05-07T22:07:53.219Z', finishedAt='2026-05-07T22:13:27.951Z'",
+        "Ticket out-of-scope: 'Changing the API response format for runs'"
+      ]
+    },
+    {
+      "answer": "Human-readable structured text showing the resolved ticket ID, target endpoint, and request body. The ticket says 'prints the resolved continuation payload that would be sent' -- this means showing what the API call would look like. Human-readable is the default for interactive CLI commands in this codebase. A future enhancement could add `--json` support to dry-run output for agent contexts, but is not needed for MVP.",
+      "evidence": [
+        "continue.ts:30-34 -- The API call sends POST /tickets/{ticketId}/rerun with body { continuationContext }",
+        "Ticket AC-7: 'prints the resolved continuation payload and exits 0'",
+        "Product open question: 'Consider JSON with --json flag, human-readable by default'",
+        "Codebase pattern: formatted output is default; --json flag gives JSON (see list.ts, get.ts)"
+      ]
+    },
+    {
+      "answer": "Both are needed. Improved documentation alone is insufficient because PowerShell 5.1's handling of nested double quotes in single-quoted strings for external commands has genuine edge cases. The `--query-file` option provides an unambiguous escape hatch that bypasses all shell quoting. The CLI already uses `readFileSync` from `node:fs` in config.ts and version.ts, so this follows established patterns. Help text should also be improved with explicit PS 5.1/7 examples showing quoted Postgres identifiers.",
+      "evidence": [
+        "inspect/index.ts:45-53 -- Current help example only shows simple query, not quoted identifiers",
+        "Grep for readFileSync: used in config.ts (6 occurrences), version.ts (1 occurrence) -- pattern established",
+        "Ticket AC-10: 'documented PowerShell example runs successfully against a quoted-identifier query'",
+        "Ticket AC-11: 'SQL referencing \"Ticket\".\"ticketNumber\" succeeds via documented invocation on PS 5.1 and 7.x'"
+      ]
+    },
+    {
+      "answer": "No new dependencies or migrations are required for any of the four features. helix-cli remains zero-dependency (only devDependencies). helix-global-server needs no schema change -- Prisma `contains` with insensitive mode is a query-time operator. The only Node.js built-in needed is `node:fs` for readFileSync (already imported in existing modules). All new flags use existing flags.ts utilities.",
+      "evidence": [
+        "helix-cli package.json: zero runtime dependencies (only @types/node and typescript as devDependencies)",
+        "Prisma contains+insensitive is a query-time operator, not a schema feature -- no migration file needed",
+        "readFileSync already imported in config.ts and version.ts from node:fs",
+        "flags.ts: getFlag and hasFlag already exist and are used by all commands"
+      ]
+    }
+  ],
+  "statement": "Four independent, low-risk CLI ergonomics improvements with clear technical paths. F1 (search): Add Prisma `contains` + `insensitive` title filter on the server, pass `--search` as query param from CLI -- no migration needed, ILIKE safe at 468 tickets. F2 (run display): Update CLI `TicketDetail.runs` type from `createdAt`/`completedAt` to `startedAt`/`finishedAt` to match server response -- single-file fix. F3 (dry-run): Add `hasFlag(args, '--dry-run')` check before API call in `continue.ts`, print resolved payload and exit -- no side effects. F4 (PowerShell): Add `--query-file <path>` using established `readFileSync` pattern + improve help text with PS-safe examples showing quoted identifiers. No new runtime dependencies, no database migrations, no breaking changes.",
+  "followups": []
+}

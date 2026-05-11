@@ -63,6 +63,12 @@ export async function cmdTicketsList(config: HxConfig, args: string[]): Promise<
     queryParams.reporterUserId = reporterUserId;
   }
 
+  // --search <text> (server-side title filter)
+  const search = getFlag(args, "--search");
+  if (search) {
+    queryParams.search = search;
+  }
+
   // --status <status> (client-side filter since API doesn't have direct status param)
   const statusFilter = getFlag(args, "--status");
 
