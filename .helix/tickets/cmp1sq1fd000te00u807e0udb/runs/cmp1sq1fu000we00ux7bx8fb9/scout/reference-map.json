@@ -1,0 +1,85 @@
+{
+  "problem": "hlx tickets bundle produces 0 artifact files for PREVIEW_READY (and other non-active status) tickets because its artifact summary fetch omits the runId query parameter, while the working artifacts/artifact commands include it.",
+  "files": [
+    {
+      "path": "src/tickets/bundle.ts",
+      "why": "Primary command implementation. Line 43 fetches /tickets/:id/artifacts without runId. Line 36 resolves runId from ticket detail but only uses it at line 55 for individual step-artifact fetches. The artifacts summary call (line 43) returns empty stepArtifactSummary for non-active tickets, so the loop at line 53 iterates zero times."
+    },
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Working comparison command. Lines 20-23 accept --run flag via getFlag and conditionally pass runId as queryParams to the same /tickets/:id/artifacts endpoint. This is why 'hlx tickets artifacts --run <id>' works for PREVIEW_READY tickets."
+    },
+    {
+      "path": "src/tickets/artifact.ts",
+      "why": "Working comparison command. Lines 29-39 accept --run flag, and when absent, resolve runId from ticket.currentRun?.id ?? ticket.runs[0]?.id (same fallback logic as bundle). Uses runId in the step-artifact fetch URL at line 44."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Subcommand router. Line 27 shows bundle usage has no --run flag. Lines 134-143 dispatch to cmdTicketsBundle. Lines 112-119 and 123-131 show artifacts/artifact commands accept --run."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Flag parsing utilities. getFlag (line 5) and requireFlag (line 28) are used by bundle and sibling commands. No --run flag is parsed in bundle.ts."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP transport layer. hxFetch (line 37) accepts queryParams option at line 40. Bundle already uses queryParams for repoKey (line 58 of bundle.ts) but not for the artifact summary call."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config/auth boundary. HxConfig type definition (line 13). Not directly related to bug but shared dependency."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket ref resolution used by all ticket commands. Not directly impacted."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Shows richer TicketDetail type (lines 6-22) including status field. TicketDetail in bundle.ts (lines 7-11) is a minimal subset without status."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point. Dispatches to runTickets at line 96."
+    },
+    {
+      "path": "package.json",
+      "why": "Build/test/quality gates. Scripts: build=tsc, typecheck=tsc --noEmit, test=tsc && node --test dist/**/*.test.js. Version 1.3.2."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. strict mode enabled, target ES2022, module Node16."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "CI pipeline: npm ci, npm test, version validation, tarball validation, npm publish."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Existing test file for flags module. No bundle-specific tests exist."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Existing test file for ticket resolution. No bundle-specific tests exist."
+    }
+  ],
+  "facts": [
+    "bundle.ts line 43: fetches GET /api/tickets/:id/artifacts with no queryParams — this is the artifact summary call that returns empty stepArtifactSummary for non-active statuses.",
+    "bundle.ts line 36: resolves runId as ticket.currentRun?.id ?? ticket.runs[0]?.id — the runId IS available before the artifacts call but is not passed to it.",
+    "bundle.ts line 55: uses the resolved runId for individual step-artifact fetches /tickets/:id/runs/:runId/step-artifacts/:stepId, but this code is never reached when stepArtifactSummary is empty.",
+    "artifacts.ts lines 20-23: passes optional runId as queryParams to the same /api/tickets/:id/artifacts endpoint, making it work for non-active tickets.",
+    "artifact.ts lines 29-39: accepts --run flag and falls back to currentRun/runs[0] resolution — same pattern as bundle but also supports explicit run override.",
+    "tickets/index.ts line 27: bundle usage string shows no --run flag: 'hlx tickets bundle <ticket-ref> --out <dir>'.",
+    "tickets/index.ts line 25: artifacts usage shows --run flag: 'hlx tickets artifacts <ticket-ref> [--run <runId>]'.",
+    "tickets/index.ts line 26: artifact usage shows --run flag: 'hlx tickets artifact <ticket-ref> --step <stepId> --repo <repoKey> [--run <runId>]'.",
+    "bundle.ts TicketDetail type (lines 7-11) does not include status field; get.ts TicketDetail (lines 6-22) includes status.",
+    "No test files exist for bundle.ts. Only flags.test.ts and resolve-ticket.test.ts exist in src/lib/.",
+    "Quality gates: tsc (build), tsc --noEmit (typecheck), node --test (test runner). All in package.json scripts.",
+    "No ORM, migrations, or database dependencies — pure CLI tool with zero runtime dependencies."
+  ],
+  "unknowns": [
+    "Server-side behavior: the exact API contract for GET /api/tickets/:id/artifacts — specifically whether passing runId as a query param fully resolves the empty response for non-active statuses, or whether there are additional status-specific behaviors.",
+    "Whether currentRun is null/undefined for PREVIEW_READY tickets or whether it is populated but the artifacts endpoint ignores it without an explicit runId parameter.",
+    "Whether ticket.runs[0] is the latest or earliest run — the ordering convention of the runs array is not documented in the CLI codebase.",
+    "Whether other non-active statuses beyond PREVIEW_READY, DEPLOYED, UNVERIFIED, FAILED also exhibit this behavior."
+  ]
+}
