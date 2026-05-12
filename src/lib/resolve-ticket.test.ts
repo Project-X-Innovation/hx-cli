@@ -1,6 +1,7 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import { strict as assert } from "node:assert";
-import { matchTicket, extractTicketRef } from "./resolve-ticket.js";
+import { matchTicket, extractTicketRef, resolveTicket } from "./resolve-ticket.js";
+import type { HxConfig } from "./config.js";
 
 describe("matchTicket", () => {
   const items = [
@@ -116,5 +117,165 @@ describe("extractTicketRef", () => {
   it("--ticket flag takes priority over positional", () => {
     const result = extractTicketRef(["BLD-339", "--ticket", "flag-ticket-id"]);
     assert.strictEqual(result, "flag-ticket-id");
+  });
+});
+
+describe("resolveTicket", () => {
+  const fakeConfig: HxConfig = {
+    apiKey: "hxi_test",
+    url: "https://example.com",
+    orgName: "test-org",
+  };
+
+  const activeTickets = [
+    { id: "cm1active001", shortId: "BLD-100" },
+    { id: "cm1active002", shortId: "BLD-200" },
+  ];
+
+  const archivedTickets = [
+    { id: "cm2archived001", shortId: "ARC-300" },
+    { id: "cm2archived002", shortId: "ARC-400" },
+  ];
+
+  /**
+   * Create a mock fetchFn that returns different item arrays for
+   * active (no queryParams.archived) vs archived (queryParams.archived === "true") calls.
+   */
+  function createMockFetch(
+    activeItems: Array<{ id: string; shortId: string }>,
+    archivedItems: Array<{ id: string; shortId: string }>,
+  ) {
+    const fn = mock.fn(
+      async (
+        _config: HxConfig,
+        _path: string,
+        options?: { queryParams?: Record<string, string> },
+      ) => {
+        if (options?.queryParams?.archived === "true") {
+          return { items: archivedItems };
+        }
+        return { items: activeItems };
+      },
+    );
+    return fn;
+  }
+
+  it("resolves archived ticket by internal ID", async () => {
+    const mockFetch = createMockFetch([], archivedTickets);
+    const result = await resolveTicket(fakeConfig, "cm2archived001", {
+      fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+    });
+    assert.deepStrictEqual(result, { id: "cm2archived001", shortId: "ARC-300" });
+  });
+
+  it("resolves archived ticket by short ID", async () => {
+    const mockFetch = createMockFetch([], archivedTickets);
+    const result = await resolveTicket(fakeConfig, "ARC-300", {
+      fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+    });
+    assert.deepStrictEqual(result, { id: "cm2archived001", shortId: "ARC-300" });
+  });
+
+  it("resolves archived ticket by numeric ticket number", async () => {
+    const mockFetch = createMockFetch([], archivedTickets);
+    const result = await resolveTicket(fakeConfig, "300", {
+      fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+    });
+    assert.deepStrictEqual(result, { id: "cm2archived001", shortId: "ARC-300" });
+  });
+
+  it("active match takes priority over archived (no archived fetch)", async () => {
+    const mockFetch = createMockFetch(activeTickets, archivedTickets);
+    const result = await resolveTicket(fakeConfig, "BLD-100", {
+      fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+    });
+    assert.deepStrictEqual(result, { id: "cm1active001", shortId: "BLD-100" });
+    // Mock was called only once (active fetch); no archived fetch occurred
+    assert.strictEqual(mockFetch.mock.callCount(), 1);
+  });
+
+  it("returns not-found error for missing ticket", async () => {
+    const mockFetch = createMockFetch(activeTickets, archivedTickets);
+    await assert.rejects(
+      () =>
+        resolveTicket(fakeConfig, "NONEXISTENT-999", {
+          fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+        }),
+      (err: Error) => {
+        assert.ok(err.message.includes("not found"));
+        return true;
+      },
+    );
+  });
+
+  it("detects cross-set numeric ambiguity", async () => {
+    // Active has BLD-42, archived has ARC-42 — numeric ref "42" is ambiguous across sets
+    const activeWithNum = [{ id: "cm1active003", shortId: "BLD-42" }];
+    const archivedWithNum = [{ id: "cm2archived003", shortId: "ARC-42" }];
+    const mockFetch = createMockFetch(activeWithNum, archivedWithNum);
+    await assert.rejects(
+      () =>
+        resolveTicket(fakeConfig, "42", {
+          fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+        }),
+      (err: Error) => {
+        assert.ok(err.message.includes("Ambiguous"));
+        return true;
+      },
+    );
+  });
+
+  it("resolves archived-only ticket (regression test)", async () => {
+    // Active is empty; only the archived set has a ticket
+    const mockFetch = createMockFetch([], [{ id: "cm2onlyarchived", shortId: "ONLY-1" }]);
+    const result = await resolveTicket(fakeConfig, "ONLY-1", {
+      fetchFn: mockFetch as typeof import("./http.js").hxFetch,
+    });
+    assert.deepStrictEqual(result, { id: "cm2onlyarchived", shortId: "ONLY-1" });
+  });
+
+  it("archived fetch failure produces resolution-stage error", async () => {
+    // Active fetch succeeds (no match), archived fetch throws
+    const fn = mock.fn(
+      async (
+        _config: HxConfig,
+        _path: string,
+        options?: { queryParams?: Record<string, string> },
+      ) => {
+        if (options?.queryParams?.archived === "true") {
+          throw new Error("Network timeout");
+        }
+        return { items: [] };
+      },
+    );
+    await assert.rejects(
+      () =>
+        resolveTicket(fakeConfig, "ARC-300", {
+          fetchFn: fn as typeof import("./http.js").hxFetch,
+        }),
+      (err: Error) => {
+        assert.ok(err.message.includes("Failed to fetch archived ticket list for resolution"));
+        assert.ok(!err.message.includes("not found"));
+        return true;
+      },
+    );
+  });
+
+  it("active fetch failure propagates error", async () => {
+    const fn = mock.fn(async () => {
+      throw new Error("Server unavailable");
+    });
+    await assert.rejects(
+      () =>
+        resolveTicket(fakeConfig, "BLD-100", {
+          fetchFn: fn as typeof import("./http.js").hxFetch,
+        }),
+      (err: Error) => {
+        assert.ok(err.message.includes("Failed to fetch ticket list for resolution"));
+        // Ensure it's not the archived variant
+        assert.ok(!err.message.includes("archived"));
+        return true;
+      },
+    );
   });
 });

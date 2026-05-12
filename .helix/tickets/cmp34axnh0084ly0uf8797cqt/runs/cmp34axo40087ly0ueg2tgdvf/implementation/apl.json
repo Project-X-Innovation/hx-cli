@@ -1,0 +1,33 @@
+{
+  "questions": [
+    "Were all code changes completed as specified in the implementation plan?",
+    "Do all tests pass including the new resolveTicket test suite?",
+    "Were any files modified beyond the expected scope?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. resolveTicket() in src/lib/resolve-ticket.ts was updated with: (1) an optional fetchFn parameter for DI testability, (2) archived ticket fetch fallback with active-first priority for exact ID/short ID matches, (3) combined numeric ambiguity detection across both active and archived sets. One deviation from the plan: the active-first return was refined to only apply to exact ID/short ID matches, not numeric matches, to properly support cross-set numeric ambiguity detection (AC #9). For numeric refs, both sets are always fetched before deciding.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts:86-167 — Updated resolveTicket() with optional fetchFn param, archived fallback, and combined numeric check",
+        "npm test output — 51 tests pass (42 existing + 9 new), zero failures",
+        "npx tsc --noEmit — zero typecheck errors"
+      ]
+    },
+    {
+      "answer": "Yes. All 51 tests pass: 42 pre-existing tests (matchTicket, extractTicketRef, flags, skill install) plus 9 new resolveTicket tests covering archived resolution by ID/shortId/number, active priority, missing ticket, cross-set ambiguity, archived-only regression, archived fetch error, and active fetch error.",
+      "evidence": [
+        "npm test output — 'tests 51, pass 51, fail 0'",
+        "resolveTicket test suite — all 9 test cases reported as passing"
+      ]
+    },
+    {
+      "answer": "No. Only the 2 expected files were modified: src/lib/resolve-ticket.ts and src/lib/resolve-ticket.test.ts. Boundary files (list.ts, latest.ts) and caller files (tickets/index.ts, comments/index.ts) were confirmed unmodified by direct inspection.",
+      "evidence": [
+        "Direct file inspection confirmed src/tickets/index.ts, src/comments/index.ts, src/tickets/list.ts, src/tickets/latest.ts are unchanged",
+        "npm run build — successful compilation with no errors"
+      ]
+    }
+  ],
+  "statement": "Implementation complete. resolveTicket() in src/lib/resolve-ticket.ts now searches both active and archived tickets. Active exact ID/short ID matches return immediately without an archived fetch. Numeric refs always check both sets for cross-set ambiguity. 9 new tests cover all acceptance criteria. All 51 tests pass, typecheck and build succeed, and only the 2 expected files were modified.",
+  "followups": []
+}

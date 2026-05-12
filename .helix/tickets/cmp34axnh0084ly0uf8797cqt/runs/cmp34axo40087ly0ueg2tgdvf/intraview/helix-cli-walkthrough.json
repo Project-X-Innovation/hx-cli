@@ -1,0 +1,48 @@
+{
+  "title": "Fix archived ticket resolution in resolveTicket()",
+  "description": "Walk through the changes to resolveTicket() that enable resolving archived ticket references, with cross-set numeric ambiguity detection and comprehensive tests.",
+  "steps": [
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 89,
+      "title": "Optional fetchFn parameter for DI testability",
+      "description": "Added an optional third parameter `options?: { fetchFn?: typeof hxFetch }` to the resolveTicket() signature. Defaults to the real hxFetch when not provided, so all 9 existing callers continue to work with 2 args. Tests inject a mock via this parameter."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 106,
+      "title": "Active match with exact ID/short ID early return",
+      "description": "After fetching active tickets, matchTicket is called. If the match is by exact internal ID or exact short ID (case-insensitive), we return immediately without fetching archived. This preserves the active-first priority for unambiguous matches and avoids the extra API call in the common case."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 115,
+      "title": "Archived ticket fetch fallback",
+      "description": "When no exact active match exists (or the active match was numeric), fetch archived tickets via `queryParams: { archived: 'true' }`. On fetch failure, throw a distinct 'Failed to fetch archived ticket list for resolution' error rather than falling through to 'not found'."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 131,
+      "title": "Archived exact ID/short ID matching",
+      "description": "If there was no active match at all, try matchTicket against archived items. Return immediately for exact ID/short ID matches. Numeric matches from archived fall through to the combined check below."
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 138,
+      "title": "Combined numeric ambiguity check across both sets",
+      "description": "For numeric refs, scan the combined active + archived array for all shortId suffix matches. If exactly 1 match: return it. If 2+: throw the existing ambiguity error with all matches listed. This catches cross-set ambiguity (e.g., BLD-42 active + ARC-42 archived for ref '42')."
+    },
+    {
+      "file": "src/lib/resolve-ticket.test.ts",
+      "line": 123,
+      "title": "New resolveTicket test suite",
+      "description": "Added 9 test cases using node:test mock.fn() injected via the fetchFn DI parameter. The mock inspects queryParams.archived to distinguish active vs archived API calls and return appropriate test data."
+    },
+    {
+      "file": "src/lib/resolve-ticket.test.ts",
+      "line": 211,
+      "title": "Cross-set numeric ambiguity test (AC #9)",
+      "description": "Key regression test: active has BLD-42, archived has ARC-42. Numeric ref '42' should be detected as ambiguous across both sets, not silently resolved to the active match."
+    }
+  ]
+}
