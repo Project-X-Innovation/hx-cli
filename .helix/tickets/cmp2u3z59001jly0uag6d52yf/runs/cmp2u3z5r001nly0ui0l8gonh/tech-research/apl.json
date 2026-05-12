@@ -1,0 +1,33 @@
+{
+  "questions": [
+    "Does helix-cli/.gitignore already contain the node_modules/ ignore rule?",
+    "What is the correct Git command to remove node_modules from the index without deleting disk files?",
+    "Is Git history rewriting required or in scope?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. helix-cli/.gitignore line 1 contains `node_modules/`. The ignore rule is present and correct. No .gitignore changes are needed.",
+      "evidence": [
+        "helix-cli/.gitignore line 1: `node_modules/`",
+        "Direct file read confirms 4 lines: node_modules/, dist/, .env, .env.*"
+      ]
+    },
+    {
+      "answer": "`git rm -r --cached node_modules` removes node_modules from the Git index without touching files on disk. This must be followed by a commit on each affected branch. Since .gitignore already has the rule, future `npm install` will not re-track the directory.",
+      "evidence": [
+        "Standard Git behavior: `--cached` flag operates on the index only",
+        "Scout reference-map confirms: 'The cleanup requires git rm -r --cached node_modules followed by a commit on each affected branch'",
+        ".gitignore rule at line 1 prevents future re-tracking"
+      ]
+    },
+    {
+      "answer": "No. The ticket explicitly states 'Broad Git history rewriting across unrelated branches unless strictly required' is out of scope. Index removal on active branches via `git rm --cached` is sufficient. The server-side fix provides generic protection against any future tracked-ignored paths.",
+      "evidence": [
+        "ticket.md Out of Scope section: 'Broad Git history rewriting across unrelated branches unless strictly required'",
+        "The server-side filter in helix-global-server makes history rewriting unnecessary for correctness"
+      ]
+    }
+  ],
+  "statement": "helix-cli cleanup requires `git rm -r --cached node_modules` and a commit on each Helix-relevant base branch. No code changes or .gitignore modifications are needed — the ignore rule is already present as line 1. The affected branch list must be determined at implementation time via orchestrator-managed git commands. This cleanup resolves the immediate trigger while the server-side fix in helix-global-server provides generic protection.",
+  "followups": []
+}
