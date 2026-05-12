@@ -1,0 +1,49 @@
+{
+  "questions": [
+    "Where does the empty-result branch live in the code, and what does it currently output?",
+    "How is run ID resolution done elsewhere in the codebase, and can that pattern be reused?",
+    "Does the ArtifactsResponse include a runId field that could avoid an extra API request?",
+    "Does the function signature need to change (e.g. to accept rawRef) for the follow-up suggestion?",
+    "What error handling is needed for the run-ID resolution fetch?"
+  ],
+  "answers": [
+    {
+      "answer": "The empty-result branch is in src/tickets/artifacts.ts. Lines 34-35 handle items-empty ('No artifacts found.\\n') and lines 44-45 handle stepArtifactSummary-empty ('No step artifacts found.'). These are independent blocks -- when both are empty, both messages print sequentially with no run ID or follow-up suggestion.",
+      "evidence": [
+        "src/tickets/artifacts.ts:25-36 — items check and empty branch",
+        "src/tickets/artifacts.ts:38-46 — stepArtifactSummary check and empty branch"
+      ]
+    },
+    {
+      "answer": "Two sibling commands already resolve run IDs via the same pattern: fetch GET /api/tickets/${ticketId}, then read ticket.currentRun?.id ?? ticket.runs[0]?.id. Both define local TicketDetail and TicketResponse types. This pattern can be directly reused in artifacts.ts.",
+      "evidence": [
+        "src/tickets/artifact.ts:5-10 — TicketDetail/TicketResponse type definitions",
+        "src/tickets/artifact.ts:29-40 — run ID resolution: getFlag then ticket-detail fallback",
+        "src/tickets/bundle.ts:7-13 — duplicate TicketDetail/TicketResponse types",
+        "src/tickets/bundle.ts:33-39 — duplicate run ID resolution logic"
+      ]
+    },
+    {
+      "answer": "No. The ArtifactsResponse type (lines 5-16) only declares items[] and stepArtifactSummary[]. There is no runId field. When --run is not supplied, an extra GET /api/tickets/${ticketId} request is needed to resolve the run ID.",
+      "evidence": [
+        "src/tickets/artifacts.ts:5-16 — ArtifactsResponse type has only items and stepArtifactSummary"
+      ]
+    },
+    {
+      "answer": "No signature change is needed. The follow-up suggestion uses placeholder tokens for <ticket-ref>, <stepId>, and <repoKey> -- only the runId is a concrete resolved value. This is consistent with the existing follow-up suggestion on line 43 which uses <ticket-id> as a placeholder. The function's ticketId parameter (internal ID) is not needed in the suggestion template.",
+      "evidence": [
+        "src/tickets/artifacts.ts:43 — existing suggestion: 'hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey>'",
+        "src/tickets/index.ts:117-119 — rawRef is extracted but only resolved.id is passed to cmdTicketsArtifacts"
+      ]
+    },
+    {
+      "answer": "hxFetch throws on network/server errors after retrying (3 attempts with exponential backoff). The ticket requires that run-ID resolution failure still exits 0 with 'No artifacts found.' plus a note. This means a try/catch around the ticket-detail fetch is required. The catch block should print the fallback message and return (not throw or exit non-zero).",
+      "evidence": [
+        "src/lib/http.ts:70-133 — hxFetch retry loop, throws Error on failure",
+        "src/lib/http.ts:103 — throw new Error(message) on non-retryable or last-attempt failure"
+      ]
+    }
+  ],
+  "statement": "The root cause is a missing code path in src/tickets/artifacts.ts. When both items and stepArtifactSummary are empty, the function prints generic 'not found' messages but never resolves or displays the run ID. The fix is a single-file change to artifacts.ts: add a combined empty-result check after the existing output blocks, add run-ID resolution reusing the established pattern from artifact.ts/bundle.ts, wrap the resolution fetch in try/catch for graceful error handling, and print the run ID plus a follow-up command suggestion with the actual run ID value.",
+  "followups": []
+}
