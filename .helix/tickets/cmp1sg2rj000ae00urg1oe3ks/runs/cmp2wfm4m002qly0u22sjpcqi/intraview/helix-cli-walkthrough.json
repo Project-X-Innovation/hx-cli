@@ -1,0 +1,24 @@
+{
+  "title": "Helix CLI Documentation Content Module",
+  "description": "Tour of the canonical CLI documentation content module and its package.json exports configuration",
+  "steps": [
+    {
+      "file": "src/docs/cli-content.ts",
+      "line": 1,
+      "title": "Content module export",
+      "description": "The cliDocsContent export is a pure-data object (zero imports) containing structured documentation. The shape {id, title, content, order, keywords} matches what helix-global-client's DocSection type expects (minus the audience field, which the consumer assigns)."
+    },
+    {
+      "file": "src/docs/cli-content.ts",
+      "line": 4,
+      "title": "Markdown content string",
+      "description": "The content field is a complete markdown document covering: Installation, Setup & Authentication, Common Commands (with flag tables), Worked Examples (8 examples for all required commands), Updating, and Troubleshooting. All flags were verified against the actual CLI source code."
+    },
+    {
+      "file": "package.json",
+      "line": 9,
+      "title": "Exports map for subpath import",
+      "description": "The exports field exposes './docs' so consumers can import { cliDocsContent } from '@projectxinnovation/helix-cli/docs'. The types condition comes first per TypeScript convention, and only the import condition is used since this is an ESM-only package."
+    }
+  ]
+}
