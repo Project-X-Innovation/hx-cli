@@ -1,0 +1,67 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "helix-cli: Untrack node_modules from Git Index",
+  "description": "This tour walks through the diagnosis, planning, and resolution of a persistent failure in Helix ticket runs against helix-cli. The root cause: node_modules was historically committed to the Git index on remote branches, even though .gitignore correctly lists node_modules/ as line 1. Because Git ignore rules only prevent new untracked files from being staged — not files already in the index — the helix-global-server staging logic would pick up node_modules entries via git ls-files -m, include them in the git add pathspec, and fail. The fix is a pure Git index cleanup using git rm -r --cached node_modules, with no code or .gitignore changes required.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/product/product.md",
+      "line": 1,
+      "description": "Start here for the full problem statement. Helix ticket runs against helix-cli fail consistently at the implementation commit phase with 'git add changes for implementation failed'. Two compounding causes exist: (1) helix-cli has node_modules tracked in the Git index on remote branches despite a correct .gitignore rule, and (2) the server-side staging logic is brittle — it collects all tracked modified files including those matching .gitignore, then passes them to git add, which rejects ignored paths. This product doc defines both the immediate fix (clean helix-cli's index) and the systemic fix (harden the server staging logic).",
+      "title": "Overview: What Problem Are We Solving?"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/scout/reference-map.json",
+      "line": 1,
+      "description": "The scout phase confirmed the key facts before any code was touched: (1) .gitignore already contains 'node_modules/' as line 1 — no .gitignore change is needed; (2) the node_modules directory does NOT exist in the current working tree; (3) node_modules IS tracked in the Git index on remote branches, which is why git ls-files -m reports those paths as modified tracked files; (4) helix-cli has zero runtime dependencies, so node_modules should never have been committed. This reference map is the evidentiary foundation for the diagnosis and implementation plan.",
+      "title": "Scout: Evidence Gathering"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/scout/reference-map.json",
+      "line": 23,
+      "description": "Lines 23-27 list the critical facts: the ignore rule is present, the directory does not exist on disk, but the index on remote branches still carries those paths. This distinction — ignore rules vs. index state — is the crux of the bug. Git's .gitignore only prevents untracked files from being staged. Once a file is in the index, .gitignore has no effect on it until it is explicitly removed with git rm --cached.",
+      "title": "Scout: Key Facts About .gitignore and Index State"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The diagnosis statement consolidates the scout evidence into a precise root cause. node_modules was committed to the Git index at some point in the repository's history and was never removed, even after .gitignore was updated. The effect: when helix-global-server runs 'git ls-files -m -d -- .' against helix-cli, it sees node_modules entries as tracked modified files, includes them in the staging pathspec, and git add fails because those paths match .gitignore. The fix is git rm -r --cached node_modules on each relevant branch.",
+      "title": "Diagnosis: Root Cause Confirmed"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/diagnosis/diagnosis-statement.md",
+      "line": 17,
+      "description": "The note at this line is important: cleaning helix-cli's index is necessary but not sufficient. The server-side staging logic in helix-global-server must also be hardened to handle any future repository that has legacy tracked-ignored paths. This two-part fix prevents the same failure from recurring on any other repository that ends up in the same state.",
+      "title": "Diagnosis: Why Index Cleanup Alone Is Not Sufficient"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/diagnosis/apl.json",
+      "line": 1,
+      "description": "The APL (Answer-Plan-Log) for the diagnosis phase records the three key questions and their answers with evidence. Q1: Is the ignore rule already present? Yes — .gitignore line 1 is 'node_modules/'. Q2: Is node_modules tracked in the index? Yes on remote branches, confirmed by scout. Q3: What cleanup is required? 'git rm -r --cached node_modules' followed by a commit on each affected branch. This structured Q&A ensures the implementation plan is grounded in verified facts, not assumptions.",
+      "title": "Diagnosis APL: Three Questions Answered"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The implementation plan specifies a pure Git index cleanup — no code changes, no dependency changes, no .gitignore modifications. The three guiding principles are: use --cached to avoid touching disk files, do not rewrite history, and verify before acting. The plan calls for checking 'git ls-files --cached node_modules' first; if output is non-empty, proceed with 'git rm -r --cached node_modules'; if empty, the branch is already clean and no action is needed.",
+      "title": "Implementation Plan: Overview"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/implementation-plan/implementation-plan.md",
+      "line": 36,
+      "description": "Step 1 details the exact commands. First, 'git ls-files --cached node_modules' checks whether node_modules is in the index on the current run branch. If tracked, 'git rm -r --cached node_modules' removes all node_modules entries from the index without deleting anything from disk. Since the directory does not exist in the working tree (confirmed by scout), this records the deletion in the index. The normal workflow commit then persists this cleanup. Because .gitignore already has the rule, future npm install will not re-track node_modules.",
+      "title": "Implementation Plan: Step 1 — Remove from Index"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/implementation-plan/apl.json",
+      "line": 1,
+      "description": "The APL for the implementation phase re-examines the same three questions from the implementation's perspective. Critically, the answer to Q1 acknowledges uncertainty: the current run branch state must be verified at implementation time with 'git ls-files --cached node_modules', because the run branch may or may not have been created from a branch with node_modules tracked. This conditional approach prevents errors if the branch is already clean. Q2 confirms .gitignore needs no changes. Q3 confirms the --cached flag is the correct tool.",
+      "title": "Implementation APL: Verifying the Plan Is Sound"
+    },
+    {
+      "file": ".helix/tickets/cmp2u3z59001jly0uag6d52yf/runs/cmp2u3z5r001nly0ui0l8gonh/diagnosis/diagnosis-statement.md",
+      "line": 29,
+      "description": "The success criteria section (line 29 onward) defines what 'done' looks like: node_modules is removed from the Git index, 'git ls-files --cached node_modules' returns empty output, and the .gitignore rule remains unchanged. After this cleanup, the data flow through helix-global-server's staging logic changes: 'git ls-files -m -d -- .' no longer reports node_modules entries, the staging pathspec contains only valid committable files, and 'git add' succeeds. Combined with the server-side hardening to filter tracked-ignored paths generically, ticket runs against helix-cli and any other repo with legacy index state will complete successfully.",
+      "title": "Summary: Success Criteria and Data Flow"
+    }
+  ]
+}
