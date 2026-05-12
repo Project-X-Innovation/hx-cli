@@ -1,0 +1,45 @@
+{
+  "questions": [
+    "Why does `hlx tickets bundle` produce 0 artifact files for PREVIEW_READY tickets when sibling commands succeed?",
+    "Is the root cause in the CLI client (bundle.ts) or in the server API?",
+    "What is the minimal code change that resolves the issue for all non-active statuses?",
+    "Could there be an alternative cause — e.g., incorrect response parsing, auth differences, or a different API endpoint?"
+  ],
+  "answers": [
+    {
+      "answer": "bundle.ts line 43 calls GET /api/tickets/:id/artifacts without passing runId as a query parameter. For non-active ticket statuses (PREVIEW_READY, DEPLOYED, etc.), the server returns an empty stepArtifactSummary without an explicit runId. The loop at line 53 iterates over this empty array, so zero step-artifact fetches occur and 0 files are written.",
+      "evidence": [
+        "bundle.ts:43 — `hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: \"/api\" })` — no queryParams passed",
+        "bundle.ts:36 — `const runId = ticket.currentRun?.id ?? ticket.runs[0]?.id` — runId IS resolved before the artifacts call but not passed to it",
+        "bundle.ts:53 — `for (const entry of artifacts.stepArtifactSummary)` — when stepArtifactSummary is empty, zero iterations",
+        "artifacts.ts:20-22 — `hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: \"/api\", ...(runId ? { queryParams: { runId } } : {}) })` — same endpoint, correctly passes runId"
+      ]
+    },
+    {
+      "answer": "The root cause is purely in the CLI client (bundle.ts). The server API works correctly — it returns artifact data when runId is supplied (proven by artifacts and artifact commands succeeding with --run). The bundle command simply omits the runId query parameter that the server needs for non-active tickets.",
+      "evidence": [
+        "Ticket repro: `hlx tickets artifacts <id> --run <runId>` returns full step summary for the same PREVIEW_READY ticket",
+        "Ticket repro: `hlx tickets artifact <id> --run <runId> --step implementation --repo helix-global-server` returns ~15 KB of content",
+        "Grep confirms only artifacts.ts (line 22) passes runId as queryParams to the summary endpoint; bundle.ts does not"
+      ]
+    },
+    {
+      "answer": "The minimal fix is to pass the already-resolved runId as queryParams to the artifacts summary fetch at bundle.ts line 43 — changing it from `{ basePath: \"/api\" }` to `{ basePath: \"/api\", queryParams: { runId } }`. This is a single-expression change. An optional enhancement is to add a --run flag for explicit override, matching sibling command patterns.",
+      "evidence": [
+        "bundle.ts:36 — runId is resolved before line 43 and is a valid non-null string (guarded by exit at line 38-40)",
+        "artifacts.ts:20-22 — demonstrates the exact pattern needed: `...(runId ? { queryParams: { runId } } : {})`",
+        "http.ts:46-49 — hxFetch already supports queryParams option, appending them to the URL"
+      ]
+    },
+    {
+      "answer": "Alternative causes are disconfirmed. (1) Response parsing: bundle.ts and artifacts.ts use the same ArtifactsResponse type with stepArtifactSummary — the shape is identical. (2) Auth: both commands use the same hxFetch transport with the same config. (3) Endpoint: both hit the exact same /api/tickets/:id/artifacts URL — the only difference is the runId query parameter. (4) The individual step-artifact fetches at bundle.ts line 55 already use runId correctly; they are never reached because the empty summary prevents iteration.",
+      "evidence": [
+        "bundle.ts:15-20 and artifacts.ts:5-16 — same stepArtifactSummary type structure",
+        "Both files import and call hxFetch from the same http.ts module",
+        "bundle.ts:55 uses runId in the step-artifact URL, confirming it is available and valid"
+      ]
+    }
+  ],
+  "statement": "The bundle command omits the runId query parameter when fetching the artifact summary from the server API. For non-active ticket statuses (PREVIEW_READY and others), the server requires this parameter to return populated stepArtifactSummary data. The runId is already resolved in bundle.ts at line 36 but is not passed to the summary call at line 43. The fix is to pass runId as queryParams to this call, matching the pattern used by the working artifacts command. An optional enhancement adds a --run flag for explicit run override, bringing feature parity with sibling commands.",
+  "followups": []
+}
