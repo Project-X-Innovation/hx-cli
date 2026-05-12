@@ -1,0 +1,24 @@
+{
+  "title": "BLD-435: Version bump to 1.3.3",
+  "description": "Walkthrough of the version bump from 1.3.2 to 1.3.3 in helix-cli",
+  "steps": [
+    {
+      "file": "package.json",
+      "line": 3,
+      "title": "package.json version field",
+      "description": "The version field was changed from \"1.3.2\" to \"1.3.3\". This is the primary version declaration that the npm publish workflow reads dynamically and that the CLI runtime reads via src/update/version.ts."
+    },
+    {
+      "file": "package-lock.json",
+      "line": 3,
+      "title": "package-lock.json top-level version",
+      "description": "The top-level version field in the lockfile was updated from \"1.3.2\" to \"1.3.3\" to stay in sync with package.json."
+    },
+    {
+      "file": "package-lock.json",
+      "line": 9,
+      "title": "package-lock.json packages[\"\"] version",
+      "description": "The packages[\"\"] entry (representing the root package) also had its version updated from \"1.3.2\" to \"1.3.3\". This is the second location in package-lock.json that tracks the package version."
+    }
+  ]
+}
