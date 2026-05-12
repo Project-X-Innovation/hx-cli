@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "What is the safest method to update the version in both package.json and package-lock.json atomically?",
+    "Are there any risks to the existing publish workflow from a simple version string replacement?",
+    "Does the lockfile require regeneration (npm install) or is a direct edit sufficient?"
+  ],
+  "answers": [
+    {
+      "answer": "Two viable options exist: (A) `npm version 1.3.3 --no-git-tag-version` atomically updates both package.json and package-lock.json, or (B) direct text edits to both files. Option A is preferred because it delegates format/integrity concerns to npm itself and is the idiomatic approach.",
+      "evidence": [
+        "npm version docs: --no-git-tag-version skips the automatic git tag and commit, updating only the version fields",
+        "package.json line 3 and package-lock.json lines 3, 9 are the only locations containing '1.3.2'",
+        "product/product.md Open Questions notes both approaches produce valid results"
+      ]
+    },
+    {
+      "answer": "No risk to the publish workflow. The workflow (.github/workflows/publish.yml lines 30-38) reads the version dynamically from package.json via `node -p \"require('./package.json').version\"` and compares it to the tag. A version bump to 1.3.3 in package.json is exactly what the workflow expects for a v1.3.3 tag.",
+      "evidence": [
+        "Direct read of .github/workflows/publish.yml confirms dynamic version read at lines 32-38",
+        "diagnosis/apl.json answer 3 confirms workflow reads version dynamically and needs no changes"
+      ]
+    },
+    {
+      "answer": "Direct edits to both files are valid since the lockfile version fields are simple string replacements with no hash or integrity implications. However, using `npm version` is cleaner because it guarantees lockfile format consistency. A full `npm install` regeneration is unnecessary since no dependencies are changing.",
+      "evidence": [
+        "package-lock.json lockfileVersion is 3, which stores the version as a plain string at lines 3 and 9",
+        "No dependency additions or removals are part of this change",
+        "scout/reference-map.json unknown notes: 'npm install is the standard method' but both approaches produce valid output"
+      ]
+    }
+  ],
+  "statement": "The version bump from 1.3.2 to 1.3.3 is a two-file metadata change with no architectural risk. The preferred approach is `npm version 1.3.3 --no-git-tag-version` which atomically updates both package.json and package-lock.json. Direct edits are an acceptable fallback. No source code, workflow, or documentation changes are needed. Validation via `npm run typecheck` and `npm run build` confirms the bump does not break the build.",
+  "followups": []
+}
