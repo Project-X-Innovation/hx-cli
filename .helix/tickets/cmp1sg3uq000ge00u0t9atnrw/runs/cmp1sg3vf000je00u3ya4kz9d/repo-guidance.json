@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single-repo ticket. All changes are within helix-cli: new skill content directory (skill-content/), new command module (src/skill/), modifications to src/index.ts, package.json, and .github/workflows/publish.yml. No cross-repo impact."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

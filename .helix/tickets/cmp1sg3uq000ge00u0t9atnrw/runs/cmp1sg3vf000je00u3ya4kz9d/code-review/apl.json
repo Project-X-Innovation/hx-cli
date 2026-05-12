@@ -1,0 +1,53 @@
+{
+  "questions": [
+    "Q1: Does the implementation correctly address all 8 ticket acceptance criteria?",
+    "Q2: Are there any correctness issues, missed requirements, or regression risks in the changed code?",
+    "Q3: Do the safety invariants (no-overwrite, atomic rollback, corrupt detection) hold under edge cases?",
+    "Q4: Does the code follow established codebase patterns and conventions?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 8 acceptance criteria are met. AC-1: skill-content in tarball confirmed via npm pack --dry-run. AC-2: hlx skill show prints SKILL.md verbatim with clean stdout. AC-3: auto-detect logic correctly selects single agent dir. AC-4: both-dirs-present exits non-zero with --for in error message. AC-5: no-overwrite without --force exits non-zero, destination unchanged. AC-6: --target writes to <path>/hlx-cli/ correctly. AC-7: corrupt detection exits non-zero with reinstall instruction containing 'npm install -g @projectxinnovation/helix-cli@latest'. AC-8: atomic rollback removes partial destination on copy failure.",
+      "evidence": [
+        "Runtime verification: hlx skill show exits 0, stdout starts with '---\\nname: hlx-cli'",
+        "Runtime verification: install to /tmp/hlx-review-test exits 0, SKILL.md byte-for-byte match confirmed",
+        "Runtime verification: repeat install exits 1, stderr contains '--force'",
+        "Runtime verification: --force install exits 0, files present",
+        "Runtime verification: corrupt detection (skill-content renamed) exits 1, stderr contains reinstall instruction",
+        "npm pack --dry-run lists skill-content/SKILL.md (4.7kB) and skill-content/references/commands.md (3.9kB)"
+      ]
+    },
+    {
+      "answer": "No correctness issues, missed requirements, or regression risks found. The implementation is a clean new feature that adds 7 new files and modifies 3 existing files without altering any existing behavior. All 22 existing tests continue to pass. The only modifications to existing files are additive: a new case in the switch, a new entry in SKIP_AUTO_UPDATE, usage text additions, files[] entry, and a CI grep check.",
+      "evidence": [
+        "npx tsc --noEmit: exit 0, zero errors",
+        "npm test: 42 tests pass (22 existing + 20 new), 0 failures",
+        "src/index.ts: only additive changes — import, SKIP_AUTO_UPDATE set entry, usage lines, switch case",
+        "package.json: only 'skill-content' added to files[]",
+        ".github/workflows/publish.yml: only one grep line added alongside existing checks"
+      ]
+    },
+    {
+      "answer": "Yes, all safety invariants hold. No-overwrite: existsSync(dest) && !force correctly gates with exit(1) and --force mention. Atomic rollback: try-catch in install.ts removes partial dest on error, verified by unit test. Corrupt detection: getSkillContentDir() validates skill-content/ existence before any subcommand, verified at runtime. Minor edge case noted: readdirSync only copies flat files from references/, but this is acceptable since references/ currently only contains commands.md, and any future EISDIR error would be caught by the rollback handler.",
+      "evidence": [
+        "install.ts lines 33-39: no-overwrite check with process.exit(1)",
+        "install.ts lines 62-70: try-catch rollback with rmSync",
+        "paths.ts lines 21-28: existsSync check with process.exit(1) and reinstall instruction",
+        "skill.test.ts 'does not leave a partial directory on copy failure': test passes",
+        "Runtime: corrupt detection exits 1 with 'npm install -g @projectxinnovation/helix-cli@latest'"
+      ]
+    },
+    {
+      "answer": "Yes, the code faithfully follows established codebase patterns. skill/index.ts mirrors the inspect/index.ts router pattern (skillUsage + switch + isHelpRequested per subcommand). skill/paths.ts mirrors the version.ts path resolution pattern (dirname(fileURLToPath(import.meta.url)) + join). install.ts uses getFlag/hasFlag from flags.ts. Tests use node:test + node:assert with describe/it blocks matching flags.test.ts conventions. The skill case in src/index.ts follows the same dispatch pattern as other no-auth commands (token). Zero runtime dependencies added, consistent with codebase constraint.",
+      "evidence": [
+        "src/skill/index.ts: skillUsage() function + switch dispatch matches src/inspect/index.ts pattern",
+        "src/skill/paths.ts: dirname(fileURLToPath(import.meta.url)) + join('..','..') matches src/update/version.ts",
+        "src/skill/install.ts: uses getFlag, hasFlag from src/lib/flags.ts",
+        "src/skill/skill.test.ts: uses node:test describe/it + node:assert strict matching src/lib/flags.test.ts",
+        "src/index.ts: case 'skill' dispatches runSkill(args.slice(1)) without config, matching token pattern"
+      ]
+    }
+  ],
+  "statement": "Code review complete. All 10 changed files reviewed against ticket requirements, product spec, and codebase conventions. Zero issues found requiring code fixes. All 8 acceptance criteria verified via both code inspection and runtime validation. Quality gates pass: TypeScript typecheck 0 errors, 42 tests pass (22 existing + 20 new). No changes made by review.",
+  "followups": []
+}

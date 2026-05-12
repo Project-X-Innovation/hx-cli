@@ -1,0 +1,59 @@
+{
+  "questions": [
+    "Q1: What is the correct strategy for bundling static markdown files in the npm package given the tsc build only compiles src/ to dist/?",
+    "Q2: What runtime path resolution pattern should the skill command use to locate bundled files from the compiled dist/ module?",
+    "Q3: How should the skill command integrate with the existing CLI command router (auth, auto-update, subcommand dispatch)?",
+    "Q4: What Node.js APIs and patterns are needed for atomic install with rollback using only built-in modules?",
+    "Q5: What files must the skill-content directory contain, and what determines their content?",
+    "Q6: How should hlx skill show decide what to print — SKILL.md only or also references?"
+  ],
+  "answers": [
+    {
+      "answer": "Place skill files in a top-level `skill-content/` directory and add `\"skill-content\"` to the package.json `files[]` array. This is the simplest correct approach: zero build pipeline changes, clean separation from compiled output, and the .npmignore only excludes test files so it does not interfere. The alternative — a build step copying .md into dist/ — adds unnecessary complexity and blurs the dist/ convention of compiled-only output.",
+      "evidence": [
+        "package.json lines 18-22: files: [\"dist\", \"!dist/**/*.test.js\", \"!dist/**/*.test.d.ts\"] — only includes dist/",
+        "tsconfig.json: rootDir=src, outDir=dist, module=Node16 — tsc emits only .js and .d.ts files",
+        ".npmignore: only excludes dist/**/*.test.js and dist/**/*.test.d.ts — no conflict with a top-level skill-content/ directory"
+      ]
+    },
+    {
+      "answer": "Use `dirname(fileURLToPath(import.meta.url))` to get the runtime directory of the compiled module, then navigate up to package root. From `dist/skill/index.js` (or any file in dist/skill/), package root is `join(thisDir, '..', '..')`. Skill content resolves to `join(pkgRoot, 'skill-content')`. This exactly follows the established pattern in src/update/version.ts lines 10-14 which resolves package.json from dist/update/version.js using the same two-directory-up navigation.",
+      "evidence": [
+        "src/update/version.ts lines 10-14: const thisDir = dirname(fileURLToPath(import.meta.url)); const pkgPath = join(thisDir, '..', '..', 'package.json')"
+      ]
+    },
+    {
+      "answer": "The skill command does not need authentication and should follow the no-auth dispatch pattern. Add `case \"skill\"` to the switch in src/index.ts, calling `runSkill(args.slice(1))` directly (no configOrHelp()). This matches the token and login patterns. Additionally, add `\"skill\"` to the SKIP_AUTO_UPDATE set on line 61 — the command is purely local (reads bundled files, writes to local disk) and should not incur network latency for an update check.",
+      "evidence": [
+        "src/index.ts lines 70-76: login and token dispatch without configOrHelp()",
+        "src/token/index.ts: runToken(args) signature takes only args, no config",
+        "src/index.ts line 61: SKIP_AUTO_UPDATE = new Set([\"--version\", \"-v\", \"update\", \"--help\", \"-h\"])"
+      ]
+    },
+    {
+      "answer": "Use synchronous Node.js built-in FS APIs (mkdirSync, copyFileSync, readdirSync, existsSync, rmSync) wrapped in try-catch for atomicity. Pattern: (1) existsSync to check destination does not exist unless --force, (2) mkdirSync to create target dir with { recursive: true }, (3) iterate and copyFileSync each file inside try, (4) on any error catch, rmSync the target with { recursive: true, force: true } before exiting non-zero. This guarantees no half-populated state. Sync APIs are appropriate since the operation is small (a few markdown files) and deterministic.",
+      "evidence": [
+        "src/lib/config.ts line 131: mkdirSync(CONFIG_DIR, { recursive: true }) — established pattern",
+        "The package has zero runtime dependencies; only node:fs, node:path, node:os built-ins are used",
+        "Ticket failure behavior: 'Either the install completes fully or the partial destination is removed before exit'"
+      ]
+    },
+    {
+      "answer": "The skill-content directory must contain at minimum SKILL.md (the primary operational guidance document) and a references/ subdirectory with supporting markdown files. No canonical source exists today — the content must be authored as part of this ticket. The SKILL.md should document how an AI agent should use the hlx CLI: available commands, common workflows, flag conventions, and operational guardrails. References should cover detailed per-command usage. The workspace .claude/skills/ confirms the canonical format: each skill is a directory with SKILL.md at root and optional references/ with .md files.",
+      "evidence": [
+        "scout/reference-map.json unknowns[0]: 'No SKILL.md or references/ directory currently exists anywhere in the helix-cli repository'",
+        "Workspace .claude/skills/agent-browser/ contains: SKILL.md, references/ (7 .md files), templates/ (3 .sh files) — confirms skill directory format",
+        "Ticket: 'The bundled files are verbatim copies of the existing canonical SKILL.md and references/* files' — the invariant applies post-authoring"
+      ]
+    },
+    {
+      "answer": "`hlx skill show` should print only the SKILL.md content. The ticket specifies 'at minimum the full SKILL.md'. Printing only SKILL.md keeps stdout pipe-friendly and predictable. References are supporting material best accessed via `hlx skill install` and reading from disk. This also aligns with the invariant that show 'must emit only the skill content. No log noise, no version banner, no update-check output.'",
+      "evidence": [
+        "Ticket acceptance criterion 2: 'hlx skill show on a freshly npm-installed CLI prints non-empty content that includes the bundled SKILL.md content verbatim'",
+        "Ticket invariant: 'hlx skill show must emit only the skill content. No log noise, no version banner, no update-check output.'"
+      ]
+    }
+  ],
+  "statement": "The technical direction is confirmed: bundle skill content in a top-level skill-content/ directory (added to package.json files[]), implement a new src/skill/ command module following established CLI patterns (no-auth, skip-auto-update, switch-based subcommand router), resolve bundled file paths at runtime via import.meta.url, and use synchronous Node.js built-in FS APIs with try-catch rollback for atomic install. All decisions carry forward from diagnosis with no contradictions found during code inspection. Skill content (SKILL.md + references/) must be authored as part of implementation.",
+  "followups": []
+}

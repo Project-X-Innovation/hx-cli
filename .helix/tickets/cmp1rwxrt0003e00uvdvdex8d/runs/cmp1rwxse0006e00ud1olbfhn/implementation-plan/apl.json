@@ -1,0 +1,43 @@
+{
+  "questions": [
+    "What is the correct sequence and structure for the implementation steps?",
+    "What are the minimal file changes required?",
+    "What verification checks can confirm all 5 acceptance criteria?",
+    "Are there any pre-conditions or blockers for verification?"
+  ],
+  "answers": [
+    {
+      "answer": "Three steps in sequence: (1) add local TicketDetail/TicketResponse types to artifacts.ts, (2) append a combined empty-result block with run-ID resolution and follow-up output, (3) run quality gates (typecheck + test). Steps 1 and 2 can be done in a single editing pass since they modify the same file.",
+      "evidence": [
+        "tech-research/tech-research.md — Option A chosen: append combined empty block",
+        "diagnosis/diagnosis-statement.md — single-file change scope confirmed",
+        "src/tickets/artifacts.ts — 47-line function, changes append after line 46"
+      ]
+    },
+    {
+      "answer": "Only src/tickets/artifacts.ts is changed. Two type declarations are added (TicketDetail, TicketResponse) and a combined empty-result block is appended after line 46. No signature changes, no new imports, no new files.",
+      "evidence": [
+        "repo-guidance.json — helix-cli is sole target, single-file scope",
+        "tech-research/tech-research.md — Summary Table confirms single file, no signature changes, no new dependencies",
+        "src/tickets/artifacts.ts — existing imports (hxFetch, getFlag) already cover what's needed"
+      ]
+    },
+    {
+      "answer": "Six required checks: (CHK-01) typecheck passes, (CHK-02) all 30 tests pass, (CHK-03) empty-result shows run ID and suggestion, (CHK-04) --run value echoed exactly, (CHK-05) success-path output unchanged, (CHK-06) resolution failure exits 0 gracefully. CHK-03 through CHK-06 require the built CLI running against the staging API.",
+      "evidence": [
+        "ticket.md — 5 acceptance criteria map to CHK-03 through CHK-06 plus CHK-05 for success path",
+        "package.json — quality gates: tsc --noEmit, npm test (30 tests)",
+        "dev setup config — HELIX_API_KEY and HELIX_URL provided for staging API access"
+      ]
+    },
+    {
+      "answer": "The staging API (HELIX_URL) and a real ticket reference are needed for runtime verification (CHK-03 through CHK-06). The .env values are provided in the dev setup config. Availability of test tickets with specific states (empty artifacts, non-empty artifacts, zero runs) depends on staging server state and is marked as unknown.",
+      "evidence": [
+        "dev setup configuration — provides HELIX_API_KEY and HELIX_URL for staging",
+        "ticket.md — acceptance criteria reference 'a ticket whose artifacts response is empty' and 'a ticket with artifacts'"
+      ]
+    }
+  ],
+  "statement": "The implementation plan defines a 3-step sequence for a single-file change to src/tickets/artifacts.ts: add local TicketDetail/TicketResponse types, append a combined empty-result block with run-ID resolution (reusing the established pattern from artifact.ts/bundle.ts) and follow-up command suggestion, then verify via quality gates. Six required checks cover typecheck, test regression, all 5 acceptance criteria (empty-result output, --run echo, success-path unchanged, zero-runs, graceful failure). The plan is directly executable by the implementation agent.",
+  "followups": []
+}

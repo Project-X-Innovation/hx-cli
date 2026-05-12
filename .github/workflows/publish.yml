@@ -49,6 +49,7 @@ jobs:
           echo "--- Validating required files ---"
           grep -q "package/dist/index.js" tarball-contents.txt || { echo "::error::dist/index.js missing from tarball"; exit 1; }
           grep -q "package/package.json" tarball-contents.txt || { echo "::error::package.json missing from tarball"; exit 1; }
+          grep -q "package/skill-content/SKILL.md" tarball-contents.txt || { echo "::error::skill-content/SKILL.md missing from tarball"; exit 1; }
           # Verify no test files leaked into tarball
           if grep -q "\.test\.\(js\|d\.ts\)" tarball-contents.txt; then
             echo "::error::Test files found in tarball — check .npmignore"

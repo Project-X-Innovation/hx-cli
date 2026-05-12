@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Q1: What is the correct location and format for the canonical CLI documentation content module?",
+    "Q2: How should the package.json exports map be configured to expose the content module?",
+    "Q3: What constraints apply to the content module to ensure browser compatibility?"
+  ],
+  "answers": [
+    {
+      "answer": "Create src/docs/cli-content.ts — a TypeScript module that exports a single object containing the documentation fields (id, title, content, order, keywords). This compiles to dist/docs/cli-content.js + .d.ts via the existing tsc build (tsconfig.json: rootDir 'src', outDir 'dist', declaration true). The dist/ directory is already in the files array, so the compiled content is automatically included in the npm package. No changes to the files array or build scripts are needed.",
+      "evidence": [
+        "helix-cli tsconfig.json: rootDir 'src', outDir 'dist', declaration true — any .ts file in src/ compiles to dist/ with declarations",
+        "helix-cli package.json files: ['dist', '!dist/**/*.test.js', '!dist/**/*.test.d.ts'] — dist/ contents already published",
+        "helix-cli package.json scripts.prepare: 'npm run build' — tsc runs before npm publish"
+      ]
+    },
+    {
+      "answer": "Add an exports field to package.json: { \"./docs\": { \"types\": \"./dist/docs/cli-content.d.ts\", \"import\": \"./dist/docs/cli-content.js\" } }. The 'types' condition comes first per TypeScript convention. The 'import' condition covers ESM consumers (helix-global-client). No '.' entry is needed — the bin field works independently, and nothing imports the bare package specifier. No 'require' condition needed since no CJS consumer exists.",
+      "evidence": [
+        "helix-cli package.json: type 'module' — compiled output is ESM",
+        "helix-cli package.json: bin.hlx 'dist/index.js' — works independently of exports",
+        "No existing exports field in package.json — this is a new addition"
+      ]
+    },
+    {
+      "answer": "The content module must be a pure data export: only const declarations and export statements. No imports of any kind, especially no Node.js built-ins (fs, path, process, child_process, os). The module exports string literals, number literals, and string arrays only. This is necessary because helix-global-client bundles the import with Vite for the browser, and Vite has no Node.js polyfill configuration. Violation would cause the helix-global-client build to fail.",
+      "evidence": [
+        "helix-global-client vite.config.ts: no Node polyfill plugins — Node built-ins not available",
+        "helix-global-client is a browser application (React 19 + Vite 7)",
+        "The existing inline docs pattern in docs-content.ts uses only const declarations with string literals"
+      ]
+    }
+  ],
+  "statement": "helix-cli must create src/docs/cli-content.ts as a pure-data TypeScript module exporting documentation content (id, title, markdown content, order, keywords), and add a package.json exports map entry at './docs' pointing to the compiled output. The existing tsc build and dist/ publishing handle compilation and npm distribution with no changes. The content module must contain no imports to ensure browser compatibility when consumed by helix-global-client's Vite build.",
+  "followups": []
+}

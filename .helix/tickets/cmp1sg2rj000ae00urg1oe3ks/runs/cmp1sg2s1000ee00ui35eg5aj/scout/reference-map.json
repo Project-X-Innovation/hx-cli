@@ -1,0 +1,101 @@
+{
+  "problem": "The helix-cli repo must provide a canonical documentation content source that the helix-global-client front-end consumes. No documentation file or directory currently exists in this repo. The package.json `files` field only publishes `dist/`, so any content intended for npm consumers must either be added to `files` or placed within `dist/`.",
+  "files": [
+    {
+      "path": "package.json",
+      "why": "Package metadata. Name: `@projectxinnovation/helix-cli`, version 1.3.2, binary: `hlx` → `dist/index.js`. The `files` field (lines 18-21) only includes `dist/` (excluding tests). Public npm access. Any canonical docs content must be included here to be available to npm consumers."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and command router. Lines 33-56 define the usage string with the complete command reference. All top-level commands: login, token, org, tickets, inspect, comments, update. This is the authoritative command list."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Implements `hlx tickets list` with flags: --search, --user, --status, --status-not-in, --archived, --sprint, --json. Required worked example per acceptance criteria."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Implements `hlx tickets get <ticket-ref>` with --json flag. Accepts internal ID, short ID (BLD-339), or ticket number (339). Required worked example per acceptance criteria."
+    },
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Implements `hlx tickets create` with --title, --description, --description-file, --repos, --mode (AUTO|BUILD|FIX|RESEARCH|EXECUTE). Required worked example per acceptance criteria."
+    },
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Implements `hlx tickets artifacts <ticket-ref>` with --run flag. Required worked example per acceptance criteria."
+    },
+    {
+      "path": "src/tickets/continue.ts",
+      "why": "Implements `hlx tickets continue <ticket-ref> \"context\"` with --dry-run flag. Ticket mentions `continue --dry-run` as a high-value pattern."
+    },
+    {
+      "path": "src/tickets/update-description.ts",
+      "why": "Implements `hlx tickets update-description <ticket-ref>` with --file or --text. Ticket mentions `update-description` as a high-value pattern."
+    },
+    {
+      "path": "src/inspect/repos.ts",
+      "why": "Implements `hlx inspect repos`. Required worked example per acceptance criteria."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Implements `hlx inspect db --repo <name> \"<sql>\"` with --query and --query-file alternatives."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Implements `hlx inspect logs --repo <name> \"<query>\"` with --limit flag."
+    },
+    {
+      "path": "src/inspect/api.ts",
+      "why": "Implements `hlx inspect api --repo <name> <path>`."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Implements `hlx comments post [--ticket <ref>] <message>`. Required worked example per acceptance criteria."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Implements `hlx comments list` with --ticket, --helix-only, --since flags."
+    },
+    {
+      "path": "src/login.ts",
+      "why": "Implements `hlx login <server-url>` and `hlx login --manual`. Documents the authentication flow needed for the setup section."
+    },
+    {
+      "path": "src/update/index.ts",
+      "why": "Implements `hlx update` with --enable-auto and --disable-auto. The update section's primary instruction must be `hlx update` per ticket invariants."
+    },
+    {
+      "path": "src/org/switch.ts",
+      "why": "Implements `hlx org switch <org-name-or-id>`. Relevant for multi-org setup documentation."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config file management at `~/.hlx/config.json`. Documents where credentials are stored, relevant for troubleshooting section."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Shared flag parsing utilities. Defines how all flags work across commands."
+    }
+  ],
+  "facts": [
+    "Package name is `@projectxinnovation/helix-cli`, version 1.3.2, binary is `hlx`, entry `dist/index.js`.",
+    "npm `files` field publishes only `dist/` directory (excluding test files). No docs directory is currently published.",
+    "Package has `publishConfig.access: 'public'` — it is publicly available on npm registry.",
+    "No README.md, no HELIX_CLI_NOTES.md, no docs/ directory exists in the repository root.",
+    "The usage string at `src/index.ts` lines 35-55 is the only existing command reference. It lists: login, token add, org, tickets (list|latest|get|create|rerun|continue|artifacts|artifact|bundle), inspect (repos|db|logs|api), comments (list|post), update.",
+    "The CLI has 7 top-level command groups: login, token, org, tickets, inspect, comments, update.",
+    "Ticket modes accepted by `hlx tickets create --mode`: AUTO, BUILD, FIX, RESEARCH, EXECUTE (from src/tickets/create.ts).",
+    "Ticket references accept three formats: internal ID, short ID (e.g., BLD-339), or ticket number (e.g., 339) — resolved in `src/lib/resolve-ticket.ts`.",
+    "Config stored at `~/.hlx/config.json` — contains API key, URL, org tokens.",
+    "Auto-update runs before most commands unless command is in SKIP_AUTO_UPDATE set (--version, -v, update, --help, -h) at `src/index.ts` line 61.",
+    "Build: `tsc` (TypeScript compilation). Typecheck: `tsc --noEmit`. Test: `tsc && node --test dist/**/*.test.js`.",
+    "No ORM, no database, no migrations. Pure CLI tool with TypeScript compilation to `dist/`."
+  ],
+  "unknowns": [
+    "Where exactly should the canonical content source file live? Options: (1) a `docs/` directory added to `files` in package.json, (2) a TypeScript file in `src/` that compiles to `dist/`, (3) a static `.md` or `.json` file at repo root added to `files`.",
+    "Should the canonical content be a single markdown file, a JSON data file matching the `DocSection` shape, or a TypeScript module exporting structured content?",
+    "How will the content be versioned relative to CLI changes? The npm version is 1.3.2 — will the front-end pin a version or use `latest`?",
+    "The package has 2 test files (`flags.test.ts`, `resolve-ticket.test.ts`) — should a test verify the docs content file exists/has expected structure?"
+  ]
+}
