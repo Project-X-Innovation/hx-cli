@@ -1,42 +1,67 @@
 {
-  "title": "Fix: bundle passes runId to artifact summary endpoint",
-  "description": "Walkthrough of the two-file fix that enables hlx tickets bundle to produce populated archives for PREVIEW_READY and other non-active ticket statuses.",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-430: Fix hlx tickets bundle for non-active ticket statuses",
+  "description": "This tour walks through the fix for BLD-430, where `hlx tickets bundle` produced 0 artifact files for PREVIEW_READY and other non-active ticket statuses. The root cause was that bundle.ts resolved a valid runId but never passed it as a query parameter to the artifact summary API call. The server requires an explicit runId for non-active statuses and returned an empty stepArtifactSummary, causing the download loop to iterate zero times. The fix adds runId as a queryParam to the summary fetch and introduces a --run flag matching the pattern established by sibling commands artifacts.ts and artifact.ts.",
   "steps": [
     {
       "file": "src/tickets/bundle.ts",
+      "line": 1,
+      "description": "This file implements `hlx tickets bundle`. The bug lives entirely here. The server API works correctly when given a runId — proven by `hlx tickets artifacts --run <id>` succeeding for the same PREVIEW_READY tickets. No server-side changes are needed. Two client-side edits fix the issue: (1) pass runId as a queryParam to the artifact summary fetch, and (2) add a --run flag so users can override the auto-resolved runId, matching the pattern used by artifacts.ts and artifact.ts.",
+      "title": "Overview: bundle.ts is the sole root cause"
+    },
+    {
+      "file": "src/tickets/bundle.ts",
       "line": 5,
-      "title": "Import getFlag alongside requireFlag",
-      "description": "Added getFlag to the import from flags.js. This utility reads an optional CLI flag value (returns string | undefined), matching the pattern used by artifact.ts and artifacts.ts."
+      "description": "Before the fix, this import line only pulled in `requireFlag`. The --run flag must be optional (the command should still work without it by falling back to the auto-resolved runId), so `getFlag` — which returns undefined rather than throwing when a flag is absent — must be imported alongside requireFlag. This matches exactly how artifacts.ts and artifact.ts import and use getFlag for their own --run flags.",
+      "title": "Step 1a: Add getFlag to imports"
     },
     {
       "file": "src/tickets/bundle.ts",
-      "line": 31,
-      "title": "Parse the --run flag",
-      "description": "Added explicitRunId = getFlag(args, '--run') to read an optional explicit run ID from the CLI arguments. This is parsed after --out (required) and before the ticket detail fetch."
+      "line": 36,
+      "description": "This line already resolves runId via `ticket.currentRun?.id ?? ticket.runs[0]?.id`. The fix prepends an explicit check: `const explicitRunId = getFlag(args, '--run'); const runId = explicitRunId ?? ticket.currentRun?.id ?? ticket.runs[0]?.id`. This gives flag-provided values precedence while preserving the existing auto-resolution fallback. Active-status tickets continue to work unchanged because the server accepts runId for all statuses.",
+      "title": "Step 1b: Prepend explicitRunId from --run flag to resolution chain"
     },
     {
       "file": "src/tickets/bundle.ts",
-      "line": 37,
-      "title": "Prefer explicit run ID in resolution chain",
-      "description": "Changed the runId resolution from 'ticket.currentRun?.id ?? ticket.runs[0]?.id' to 'explicitRunId ?? ticket.currentRun?.id ?? ticket.runs[0]?.id'. The --run flag value takes precedence over auto-resolution, matching artifact.ts:29-35."
+      "line": 43,
+      "description": "This is the line that caused the bug. The call `hxFetch(config, \\`/tickets/${ticketId}/artifacts\\`, { basePath: '/api' })` had no queryParams. For non-active statuses (PREVIEW_READY, DEPLOYED, UNVERIFIED, FAILED), the server returns `{ stepArtifactSummary: [] }` without an explicit runId. The fix changes this to `hxFetch(config, \\`/tickets/${ticketId}/artifacts\\`, { basePath: '/api', ...(runId ? { queryParams: { runId } } : {}) })`, mirroring the pattern at artifacts.ts lines 20-22. Now the server returns the full stepArtifactSummary and the loop at line 53 iterates over real entries.",
+      "title": "Step 2: Pass runId as queryParams to artifact summary fetch — the core fix"
     },
     {
       "file": "src/tickets/bundle.ts",
-      "line": 44,
-      "title": "Core fix: pass runId to artifact summary endpoint",
-      "description": "This is the root cause fix. Added queryParams: { runId } to the hxFetch call for /tickets/${ticketId}/artifacts. Without this parameter, the server returns empty stepArtifactSummary for non-active statuses (PREVIEW_READY, DEPLOYED, etc.). The runId is always non-null here (guarded by the exit at lines 38-40)."
+      "line": 53,
+      "description": "Before the fix, `for (const entry of artifacts.stepArtifactSummary)` iterated zero times because the summary array was empty. With runId now passed to the API call above, stepArtifactSummary contains the actual step entries. The loop executes, reaches line 55 where each step-artifact is fetched using runId in the URL, and totalFiles increments correctly. The output changes from '0 artifact file(s)' to the real count.",
+      "title": "Step 2 outcome: loop now iterates over real entries"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 20,
+      "description": "artifacts.ts lines 20-22 show the established working pattern: `hxFetch(config, \\`/tickets/${ticketId}/artifacts\\`, { basePath: '/api', ...(runId ? { queryParams: { runId } } : {}) })`. This is exactly the same endpoint that bundle.ts calls. Because artifacts.ts conditionally passes runId, `hlx tickets artifacts --run <id>` has always worked for PREVIEW_READY tickets. The bundle fix adopts this identical pattern, ensuring behavioral consistency across sibling commands.",
+      "title": "Reference: the correct pattern this fix mirrors"
     },
     {
       "file": "src/tickets/index.ts",
       "line": 27,
-      "title": "Update usage string",
-      "description": "Added [--run <runId>] to the bundle line in the main tickets usage output, matching the pattern used by artifacts (line 25) and artifact (line 26)."
+      "description": "The bundle subcommand's usage string on this line previously showed no --run option, making the new flag invisible to `hlx tickets --help`. The fix appends `[--run <runId>]` to match the usage strings for artifacts (line 112) and artifact (line 123). This is a documentation-only change with no functional impact, but it is necessary for user discoverability and consistency.",
+      "title": "Step 3: Update usage string to document --run flag"
     },
     {
       "file": "src/tickets/index.ts",
       "line": 136,
-      "title": "Update help text",
-      "description": "Added [--run <runId>] to the bundle-specific help text shown when 'hlx tickets bundle --help' is invoked."
+      "description": "Lines 134-143 contain the detailed help block for the bundle command dispatched from the router. The fix adds `[--run <runId>]` to the help text here as well, explaining that this flag overrides the auto-resolved run and is useful when targeting a specific historical run rather than the latest. This mirrors the help text pattern used for the artifacts and artifact commands at lines 112-119 and 123-131.",
+      "title": "Step 3b: Update help text for bundle subcommand"
+    },
+    {
+      "file": "src/lib/flags.ts",
+      "line": 5,
+      "description": "getFlag at line 5 returns the string value for a named flag or undefined if absent. requireFlag at line 28 throws if the flag is missing. The bundle fix uses getFlag because --run is optional. No changes are needed to this file — it already provides exactly the utility required. This confirms the fix scope is strictly the two files noted: bundle.ts and index.ts.",
+      "title": "Reference: getFlag utility — no changes needed here"
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 55,
+      "description": "The complete fixed data flow is: (1) --run flag parsed via getFlag → (2) runId resolved with flag precedence over currentRun fallback → (3) runId passed as queryParam to artifact summary fetch → (4) server returns populated stepArtifactSummary → (5) loop at line 53 iterates → (6) each step-artifact fetched here at line 55 using runId in URL → (7) files written to output directory → (8) correct count reported. All three ticket status categories (active, non-active with currentRun, non-active with explicit --run) now work correctly. Sibling commands are unaffected. No regressions are introduced.",
+      "title": "Summary: data flow confirmed clean end-to-end"
     }
   ]
 }
