@@ -15,6 +15,13 @@ type ArtifactsResponse = {
   }>;
 };
 
+type TicketDetail = {
+  currentRun?: { id: string };
+  runs: Array<{ id: string }>;
+};
+
+type TicketResponse = { ticket: TicketDetail };
+
 export async function cmdTicketsArtifacts(config: HxConfig, ticketId: string, args: string[]): Promise<void> {
   const runId = getFlag(args, "--run");
   const data = (await hxFetch(config, `/tickets/${ticketId}/artifacts`, {
@@ -43,5 +50,29 @@ export async function cmdTicketsArtifacts(config: HxConfig, ticketId: string, ar
     console.log("\nUse: hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey>");
   } else {
     console.log("No step artifacts found.");
+  }
+
+  // Combined empty-result: show run ID and follow-up suggestion
+  if (data.items.length === 0 && data.stepArtifactSummary.length === 0) {
+    let resolvedRunId: string | undefined = runId;
+
+    if (!resolvedRunId) {
+      try {
+        const resp = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
+        const ticket = resp.ticket;
+        resolvedRunId = ticket.currentRun?.id ?? ticket.runs[0]?.id;
+
+        if (!resolvedRunId) {
+          console.log("\nNo runs available for this ticket.");
+          return;
+        }
+      } catch {
+        console.log("\nCould not resolve the run ID for this ticket.");
+        return;
+      }
+    }
+
+    console.log(`\nRun ID: ${resolvedRunId}`);
+    console.log(`Use: hlx tickets artifact <ticket-ref> --run ${resolvedRunId} --step <stepId> --repo <repoKey>`);
   }
 }

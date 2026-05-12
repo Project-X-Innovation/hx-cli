@@ -1,0 +1,42 @@
+{
+  "title": "BLD-427: Empty-result run ID and follow-up suggestion",
+  "description": "Adds run-ID display and follow-up command suggestion when hlx tickets artifacts returns no results",
+  "steps": [
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 18,
+      "title": "Local TicketDetail and TicketResponse types",
+      "description": "Added local type declarations matching the established convention in artifact.ts and bundle.ts. These are needed for the ticket-detail fetch that resolves the run ID."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 56,
+      "title": "Combined empty-result check",
+      "description": "New block checks if both items and stepArtifactSummary are empty. Only then does run-ID resolution and follow-up output trigger. This preserves the success path byte-identically."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 57,
+      "title": "Narrowly-scoped resolvedRunId variable",
+      "description": "Declares let resolvedRunId initialized from the existing const runId (line 26). If the user supplied --run, this value is used directly (AC 2). Otherwise, the ticket-detail fetch resolves it."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 60,
+      "title": "Ticket-detail fetch with try/catch",
+      "description": "When --run is not supplied, fetches ticket detail to resolve the run ID. Wrapped in try/catch per failure behavior spec: on error, prints a graceful note and returns normally (exit 0, no throw, no retry)."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 65,
+      "title": "No-runs handling",
+      "description": "If the ticket has no currentRun and no runs array entries, prints 'No runs available for this ticket.' and returns without a follow-up suggestion (AC 4)."
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 75,
+      "title": "Run ID and follow-up suggestion output",
+      "description": "Prints the resolved run ID and the follow-up command template. Only the run ID is a concrete value; ticket-ref, stepId, and repoKey remain as placeholders."
+    }
+  ]
+}
