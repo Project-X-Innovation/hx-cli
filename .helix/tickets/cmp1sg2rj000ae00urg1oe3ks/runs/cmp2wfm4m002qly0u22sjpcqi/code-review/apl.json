@@ -1,0 +1,46 @@
+{
+  "questions": [
+    "Q1: Does the content module accurately document all CLI commands and flags?",
+    "Q2: Is the package.json exports map correctly configured?",
+    "Q3: Is the content module browser-safe for Vite bundling?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 13 CLI command source files were cross-referenced against the documentation. Every documented flag matches the source code exactly. No undocumented flags were added, and no source-code flags were omitted from the documentation. The content includes all six ticket-required worked examples plus two additional high-value patterns.",
+      "evidence": [
+        "src/tickets/list.ts: all 7 flags match (--search, --user, --status, --status-not-in, --archived, --sprint, --json)",
+        "src/tickets/create.ts: all 5 flags match (--title, --description, --description-file, --repos, --mode) with correct mode values",
+        "src/tickets/get.ts: --json flag and ref resolution (internal ID, short ID, number) confirmed",
+        "src/tickets/artifacts.ts: --run flag confirmed",
+        "src/tickets/continue.ts: --dry-run flag confirmed",
+        "src/tickets/update-description.ts: --file, --text flags confirmed as mutually exclusive",
+        "src/inspect/repos.ts: no flags confirmed",
+        "src/comments/post.ts: --ticket flag confirmed (resolved upstream)",
+        "src/comments/list.ts: --ticket, --helix-only, --since flags confirmed",
+        "src/login.ts: --manual flag confirmed",
+        "src/update/index.ts: --enable-auto, --disable-auto flags confirmed",
+        "src/token/add.ts: --token, --url, --name, --current flags confirmed",
+        "src/org/index.ts: current, list, switch subcommands confirmed"
+      ]
+    },
+    {
+      "answer": "Yes. The exports field has a './docs' entry with 'types' condition first (TypeScript convention) pointing to './dist/docs/cli-content.d.ts' and 'import' condition pointing to './dist/docs/cli-content.js'. Only 'import' is needed since the package is ESM-only (type: module). The existing 'bin' field is unaffected by the exports addition.",
+      "evidence": [
+        "package.json lines 9-14: exports field with correct structure",
+        "package.json line 4: type: 'module' confirms ESM-only",
+        "dist/docs/cli-content.js (8063 bytes) and cli-content.d.ts (141 bytes) exist",
+        "npm run build exit 0"
+      ]
+    },
+    {
+      "answer": "Yes. The source file (src/docs/cli-content.ts) contains zero import statements — it is a pure 'export const' declaration. The compiled output (dist/docs/cli-content.js) contains no require() calls or Node.js built-in module references. The module is safe for Vite browser bundling.",
+      "evidence": [
+        "grep for 'import' in src/docs/cli-content.ts: no matches",
+        "grep for require() and Node built-ins in dist/docs/cli-content.js: no matches",
+        "npm run build in helix-global-client (which bundles via Vite): exit 0"
+      ]
+    }
+  ],
+  "statement": "Code review of helix-cli found no issues. The canonical content module is a correct, browser-safe, pure-data TypeScript module with all documented flags verified against 13 CLI source files. The package.json exports map is correctly configured. All quality gates pass. No code changes made by review.",
+  "followups": []
+}
