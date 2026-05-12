@@ -6,6 +6,12 @@
   "bin": {
     "hlx": "dist/index.js"
   },
+  "exports": {
+    "./docs": {
+      "types": "./dist/docs/cli-content.d.ts",
+      "import": "./dist/docs/cli-content.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
