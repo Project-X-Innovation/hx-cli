@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
-import { requireFlag } from "../lib/flags.js";
+import { requireFlag, getFlag } from "../lib/flags.js";
 
 type TicketDetail = {
   id: string;
@@ -28,19 +28,23 @@ type StepArtifactResponse = {
 
 export async function cmdTicketsBundle(config: HxConfig, ticketId: string, args: string[]): Promise<void> {
   const outDir = requireFlag(args, "--out", "--out <dir> is required.");
+  const explicitRunId = getFlag(args, "--run");
 
   // 1. Fetch ticket detail
   const resp = (await hxFetch(config, `/tickets/${ticketId}`, { basePath: "/api" })) as TicketResponse;
   const ticket = resp.ticket;
 
-  const runId = ticket.currentRun?.id ?? ticket.runs[0]?.id;
+  const runId = explicitRunId ?? ticket.currentRun?.id ?? ticket.runs[0]?.id;
   if (!runId) {
     console.error("Error: No runs found for this ticket.");
     process.exit(1);
   }
 
   // 2. Fetch artifacts
-  const artifacts = (await hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: "/api" })) as ArtifactsResponse;
+  const artifacts = (await hxFetch(config, `/tickets/${ticketId}/artifacts`, {
+    basePath: "/api",
+    queryParams: { runId },
+  })) as ArtifactsResponse;
 
   // 3. Create output directory
   mkdirSync(outDir, { recursive: true });

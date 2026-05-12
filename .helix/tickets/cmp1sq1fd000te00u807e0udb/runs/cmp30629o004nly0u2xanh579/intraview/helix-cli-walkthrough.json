@@ -1,0 +1,42 @@
+{
+  "title": "Fix: bundle passes runId to artifact summary endpoint",
+  "description": "Walkthrough of the two-file fix that enables hlx tickets bundle to produce populated archives for PREVIEW_READY and other non-active ticket statuses.",
+  "steps": [
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 5,
+      "title": "Import getFlag alongside requireFlag",
+      "description": "Added getFlag to the import from flags.js. This utility reads an optional CLI flag value (returns string | undefined), matching the pattern used by artifact.ts and artifacts.ts."
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 31,
+      "title": "Parse the --run flag",
+      "description": "Added explicitRunId = getFlag(args, '--run') to read an optional explicit run ID from the CLI arguments. This is parsed after --out (required) and before the ticket detail fetch."
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 37,
+      "title": "Prefer explicit run ID in resolution chain",
+      "description": "Changed the runId resolution from 'ticket.currentRun?.id ?? ticket.runs[0]?.id' to 'explicitRunId ?? ticket.currentRun?.id ?? ticket.runs[0]?.id'. The --run flag value takes precedence over auto-resolution, matching artifact.ts:29-35."
+    },
+    {
+      "file": "src/tickets/bundle.ts",
+      "line": 44,
+      "title": "Core fix: pass runId to artifact summary endpoint",
+      "description": "This is the root cause fix. Added queryParams: { runId } to the hxFetch call for /tickets/${ticketId}/artifacts. Without this parameter, the server returns empty stepArtifactSummary for non-active statuses (PREVIEW_READY, DEPLOYED, etc.). The runId is always non-null here (guarded by the exit at lines 38-40)."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 27,
+      "title": "Update usage string",
+      "description": "Added [--run <runId>] to the bundle line in the main tickets usage output, matching the pattern used by artifacts (line 25) and artifact (line 26)."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 136,
+      "title": "Update help text",
+      "description": "Added [--run <runId>] to the bundle-specific help text shown when 'hlx tickets bundle --help' is invoked."
+    }
+  ]
+}

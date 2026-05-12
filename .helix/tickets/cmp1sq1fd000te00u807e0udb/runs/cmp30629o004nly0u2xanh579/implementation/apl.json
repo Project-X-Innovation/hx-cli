@@ -1,0 +1,45 @@
+{
+  "questions": [
+    "Were the code changes minimal and targeted to the two identified files?",
+    "Does the bundle command now pass runId to the artifact summary endpoint?",
+    "Is the --run flag available and documented in usage/help?",
+    "Do all quality gates (build, typecheck, tests) pass after the changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. Only two files were modified: src/tickets/bundle.ts (3 changes: import, flag parsing, queryParams) and src/tickets/index.ts (2 changes: usage string and help text). No other files, types, or configuration changed.",
+      "evidence": [
+        "bundle.ts line 5: added getFlag to import from flags.js",
+        "bundle.ts line 31: added explicitRunId = getFlag(args, '--run')",
+        "bundle.ts line 37: changed runId resolution to explicitRunId ?? ticket.currentRun?.id ?? ticket.runs[0]?.id",
+        "bundle.ts lines 44-47: added queryParams: { runId } to hxFetch call",
+        "index.ts line 27: added [--run <runId>] to usage string",
+        "index.ts line 136: added [--run <runId>] to help text"
+      ]
+    },
+    {
+      "answer": "Yes. The hxFetch call for /tickets/${ticketId}/artifacts now includes queryParams: { runId }, unconditionally passing the resolved runId. This is the core fix that enables the server to return populated stepArtifactSummary for non-active statuses.",
+      "evidence": [
+        "bundle.ts lines 44-47: const artifacts = (await hxFetch(config, `/tickets/${ticketId}/artifacts`, { basePath: '/api', queryParams: { runId } })) as ArtifactsResponse"
+      ]
+    },
+    {
+      "answer": "Yes. The --run flag is parsed via getFlag(args, '--run') and takes precedence over auto-resolved runId. The flag is documented in both the main usage string (line 27) and the bundle-specific help text (line 136).",
+      "evidence": [
+        "bundle.ts line 31: const explicitRunId = getFlag(args, '--run')",
+        "index.ts line 27: hlx tickets bundle <ticket-ref> --out <dir> [--run <runId>]",
+        "Help output verified: 'Usage: hlx tickets bundle <ticket-ref> --out <dir> [--run <runId>]'"
+      ]
+    },
+    {
+      "answer": "Yes. npm run build (exit 0), npm run typecheck (exit 0), and npm test (30/30 tests pass, exit 0) all succeed after the changes.",
+      "evidence": [
+        "npm run build: tsc compiled with exit code 0",
+        "npm run typecheck: tsc --noEmit with exit code 0",
+        "npm test: 30 tests pass, 0 fail, exit code 0"
+      ]
+    }
+  ],
+  "statement": "Implementation complete. Two files modified: bundle.ts (getFlag import, --run flag parsing, queryParams addition to artifacts summary call) and index.ts (usage string and help text updates). All quality gates pass. Live bundle test against staging PREVIEW_READY ticket (HLX-4) completes successfully with no warning errors.",
+  "followups": []
+}
