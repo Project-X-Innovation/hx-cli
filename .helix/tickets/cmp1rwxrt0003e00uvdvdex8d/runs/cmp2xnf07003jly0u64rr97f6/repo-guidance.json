@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single-repo ticket. All changes are in src/tickets/artifacts.ts -- a CLI-only change to the empty-result output path. The run-ID resolution pattern already exists in sibling commands (artifact.ts, bundle.ts) within the same repo."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

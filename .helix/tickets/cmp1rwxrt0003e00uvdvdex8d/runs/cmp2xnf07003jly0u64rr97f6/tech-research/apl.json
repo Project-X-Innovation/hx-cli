@@ -1,0 +1,52 @@
+{
+  "questions": [
+    "Should the TicketDetail/TicketResponse types be extracted into a shared module or kept as local type declarations?",
+    "Should the combined empty-result check be appended after the existing output blocks or should the function structure be reorganized?",
+    "How should the run-ID variable be managed given the existing `const runId = getFlag(args, '--run')` on line 19 that is used as a query param?",
+    "What should the follow-up suggestion placeholder format be — `<ticket-ref>` or `<ticket-id>` — and should the run ID be the only concrete value?",
+    "What is the correct error handling pattern for the ticket-detail fetch given hxFetch throws after retries?"
+  ],
+  "answers": [
+    {
+      "answer": "Keep TicketDetail/TicketResponse as local type declarations in artifacts.ts. The codebase convention (artifact.ts lines 5-10, bundle.ts lines 7-13) is to define these types locally in each file. Extracting to a shared module would be a separate refactoring ticket and exceeds the scope of this change.",
+      "evidence": [
+        "src/tickets/artifact.ts:5-10 — local TicketDetail and TicketResponse types",
+        "src/tickets/bundle.ts:7-13 — duplicate local TicketDetail and TicketResponse types",
+        "ticket.md — 'Do not restructure the success-path output of hlx tickets artifacts'"
+      ]
+    },
+    {
+      "answer": "Append the combined empty-result check after both existing output blocks. The existing blocks (lines 25-36 for items, lines 38-46 for stepArtifactSummary) remain unchanged. A new block at the end checks `items.length === 0 && stepArtifactSummary.length === 0` and performs run-ID resolution + output. This preserves byte-identical behavior for all non-empty cases (AC 3) and cleanly isolates the new logic.",
+      "evidence": [
+        "src/tickets/artifacts.ts:25-46 — existing independent empty/non-empty blocks",
+        "ticket.md — AC 3: 'For a ticket with artifacts or step artifacts, the output is byte-identical to current behavior'",
+        "diagnosis/diagnosis-statement.md — 'After the existing output blocks, add a combined empty check'"
+      ]
+    },
+    {
+      "answer": "The existing `const runId = getFlag(args, '--run')` on line 19 extracts the flag value used as an API query parameter. This same variable can be reused in the combined empty block: if it has a value, use it directly (satisfying AC 2 — user-supplied --run echoed exactly); if undefined, fetch ticket detail to resolve. No variable rename or new extraction is needed.",
+      "evidence": [
+        "src/tickets/artifacts.ts:19 — const runId = getFlag(args, '--run')",
+        "src/tickets/artifacts.ts:22 — ...(runId ? { queryParams: { runId } } : {})",
+        "ticket.md — AC 2: 'the printed run id is the exact <runId> supplied; no other run id appears'"
+      ]
+    },
+    {
+      "answer": "Use `<ticket-ref>` as the placeholder, consistent with the ticket's Required Behavior section which specifies: 'hlx tickets artifact <ticket-ref> --run <runId> --step <stepId> --repo <repoKey>'. The run ID is the only concrete resolved value; all other tokens remain placeholders. Note: the existing line 43 suggestion uses `<ticket-id>` but the ticket specification explicitly says `<ticket-ref>`, so the new suggestion follows the specification.",
+      "evidence": [
+        "ticket.md — Required Behavior #4: 'hlx tickets artifact <ticket-ref> --run <runId> --step <stepId> --repo <repoKey>'",
+        "src/tickets/artifacts.ts:43 — existing: 'hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey>'"
+      ]
+    },
+    {
+      "answer": "Wrap the `hxFetch(config, /tickets/${ticketId}, { basePath: '/api' })` call in a try/catch block. On catch: print 'No artifacts found.' and a single line noting the run ID could not be resolved, then return (exit 0). This matches the ticket's Failure Behavior requirement. The catch block should not rethrow, retry, or call process.exit.",
+      "evidence": [
+        "src/lib/http.ts:70-133 — hxFetch retries 3 times then throws Error",
+        "ticket.md — Failure Behavior: 'must still exit 0, print No artifacts found., and print a single line stating that the run id could not be resolved. It must not retry, must not throw, and must not exit non-zero'",
+        "src/tickets/artifact.ts:43-54 — reference for try/catch pattern around hxFetch (though that one uses process.exit(1))"
+      ]
+    }
+  ],
+  "statement": "The technical direction is a single-file change to src/tickets/artifacts.ts. Append a combined empty-result block after the existing output blocks that: (1) reuses the existing runId variable from getFlag, (2) when runId is absent, fetches ticket detail via GET /api/tickets/${ticketId} wrapped in try/catch for graceful error handling, (3) resolves via ticket.currentRun?.id ?? ticket.runs[0]?.id matching the established codebase pattern, and (4) prints the run ID and a follow-up command suggestion. Local TicketDetail/TicketResponse types follow the duplication convention. No new dependencies, no signature changes, no shared utility extraction.",
+  "followups": []
+}
