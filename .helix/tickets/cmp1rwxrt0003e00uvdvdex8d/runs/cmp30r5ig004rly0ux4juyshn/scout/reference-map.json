@@ -1,0 +1,109 @@
+{
+  "problem": "The `hlx tickets artifacts` command prints only 'No artifacts found.' and 'No step artifacts found.' when the API response is empty. Users need a run ID to fall back to `hlx tickets artifact --run <runId> --step <stepId> --repo <repoKey>`, but the CLI never surfaces that run ID in the empty-result path.",
+  "files": [
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Primary change target. Contains `cmdTicketsArtifacts()` which owns the empty-result branch (lines 34-36 for items, lines 44-46 for stepArtifactSummary). Currently does not resolve or print run IDs.",
+      "anchors": [
+        { "line": 19, "label": "getFlag(args, '--run') extracts optional --run flag" },
+        { "line": 20, "label": "API call to /tickets/${ticketId}/artifacts with optional runId query param" },
+        { "line": 25, "label": "items.length > 0 check — success path for artifact items" },
+        { "line": 35, "label": "'No artifacts found.' — empty items output" },
+        { "line": 38, "label": "stepArtifactSummary.length > 0 check — success path for step summaries" },
+        { "line": 43, "label": "Existing follow-up suggestion (only shown when stepArtifactSummary is non-empty)" },
+        { "line": 45, "label": "'No step artifacts found.' — empty stepArtifactSummary output" }
+      ]
+    },
+    {
+      "path": "src/tickets/artifact.ts",
+      "why": "Reference pattern for run ID resolution. Lines 29-40 show the existing approach: fetch ticket detail via GET /api/tickets/${ticketId}, then use currentRun?.id ?? runs[0]?.id. Also defines TicketDetail and TicketResponse types (lines 5-10).",
+      "anchors": [
+        { "line": 5, "label": "TicketDetail type: { currentRun?: { id: string }; runs: Array<{ id: string }> }" },
+        { "line": 10, "label": "TicketResponse type: { ticket: TicketDetail }" },
+        { "line": 29, "label": "let runId = getFlag(args, '--run')" },
+        { "line": 32, "label": "if (!runId) — fallback fetch ticket detail to resolve run ID" },
+        { "line": 35, "label": "ticket.currentRun?.id ?? ticket.runs[0]?.id — run resolution logic" },
+        { "line": 36, "label": "if (!runId) — no runs found for ticket, error exit" }
+      ]
+    },
+    {
+      "path": "src/tickets/bundle.ts",
+      "why": "Second reference for run ID resolution. Lines 33-39 duplicate the same TicketDetail type and currentRun?.id ?? runs[0]?.id resolution pattern.",
+      "anchors": [
+        { "line": 7, "label": "TicketDetail type with currentRun and runs" },
+        { "line": 36, "label": "runId = ticket.currentRun?.id ?? ticket.runs[0]?.id" },
+        { "line": 37, "label": "No runs found error handling" }
+      ]
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Command router. Line 119 dispatches to cmdTicketsArtifacts(config, resolved.id, rest). Note: does NOT pass rawRef (unlike cmdTicketsContinue on line 108). The ticketId received by cmdTicketsArtifacts is the resolved internal ID.",
+      "anchors": [
+        { "line": 112, "label": "case 'artifacts': — command dispatch block" },
+        { "line": 117, "label": "const rawRef = extractTicketRef(rest)" },
+        { "line": 118, "label": "const resolved = await resolveTicket(config, rawRef)" },
+        { "line": 119, "label": "await cmdTicketsArtifacts(config, resolved.id, rest) — only internal ID passed" },
+        { "line": 25, "label": "Usage: hlx tickets artifacts <ticket-ref> [--run <runId>]" }
+      ]
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "hxFetch is the HTTP client used for all API calls. Throws on failure (with retries). Understanding throw behavior is relevant to the error-handling requirement.",
+      "anchors": [
+        { "line": 37, "label": "hxFetch signature with options: { method, body, queryParams, basePath }" },
+        { "line": 103, "label": "throw new Error(message) — non-retryable or last-attempt failure" }
+      ]
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "getFlag(args, flag) utility used to extract --run. Simple index-based lookup.",
+      "anchors": [
+        { "line": 5, "label": "getFlag() implementation" }
+      ]
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines HxConfig type used throughout. Provides context on authenticated config structure.",
+      "anchors": [
+        { "line": 13, "label": "HxConfig type definition" }
+      ]
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Shows the full TicketDetail type with runs array structure including status, startedAt, finishedAt fields (lines 14-20). Wider type than artifact.ts uses.",
+      "anchors": [
+        { "line": 14, "label": "runs: Array<{ id, status, startedAt, finishedAt }>" }
+      ]
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Existing test file demonstrating test patterns (Node.js built-in test runner with describe/it/assert). Reference for any new tests.",
+      "anchors": []
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Second existing test file showing testing conventions.",
+      "anchors": []
+    }
+  ],
+  "facts": [
+    "artifacts.ts cmdTicketsArtifacts() is the sole function handling `hlx tickets artifacts`. It receives (config, ticketId, args) where ticketId is already resolved to an internal ID.",
+    "The empty-result branch is when both data.items.length === 0 AND data.stepArtifactSummary.length === 0. Currently outputs 'No artifacts found.' and 'No step artifacts found.' with no run ID.",
+    "The --run flag is optional. When provided, it is passed as a query parameter to the API. When absent, the API infers the run on the server side.",
+    "artifact.ts (singular) already has a working run-ID resolution pattern: fetch GET /api/tickets/${ticketId}, read ticket.currentRun?.id ?? ticket.runs[0]?.id.",
+    "bundle.ts also duplicates the same run-ID resolution pattern with the same TicketDetail type.",
+    "The TicketDetail type for run resolution is: { currentRun?: { id: string }; runs: Array<{ id: string }> } — defined locally in both artifact.ts and bundle.ts.",
+    "index.ts passes resolved.id (internal ID) as ticketId to cmdTicketsArtifacts, but does NOT pass rawRef. cmdTicketsContinue receives rawRef as a separate parameter.",
+    "The existing follow-up suggestion on line 43 of artifacts.ts uses placeholder tokens: 'hlx tickets artifact <ticket-id> --step <stepId> --repo <repoKey>' — shown only when stepArtifactSummary is non-empty.",
+    "Quality gates: typecheck (tsc --noEmit) passes clean; test (tsc && node --test) passes 30/30. No lint config.",
+    "Project uses TypeScript 6.x with strict mode, ES2022 target, Node16 module resolution. Node.js built-in test runner (describe/it).",
+    "No ORM, no migrations, no database. This is a pure CLI tool.",
+    "hxFetch throws on network/server errors after retrying (3 attempts with exponential backoff). The ticket requires catching such failures gracefully in the run-ID resolution path.",
+    "CI publishes to npm on tag push. Tests run as part of publish pipeline."
+  ],
+  "unknowns": [
+    "Whether the /tickets/${ticketId}/artifacts API response includes any runId field that could avoid the extra ticket-detail request. The ArtifactsResponse type only declares items[] and stepArtifactSummary[] — no runId field is typed.",
+    "Whether the follow-up command suggestion's <ticket-ref> placeholder should be replaced with the actual internal ticketId or remain a placeholder for the user. The existing line-43 pattern uses literal placeholder tokens.",
+    "Whether tests should be added for cmdTicketsArtifacts — currently no test files exist under src/tickets/. The existing tests cover only lib/ utilities."
+  ]
+}
