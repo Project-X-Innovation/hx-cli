@@ -1,24 +1,67 @@
 {
-  "title": "Helix CLI Documentation Content Module",
-  "description": "Tour of the canonical CLI documentation content module and its package.json exports configuration",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Helix CLI: Add Canonical Documentation Content Module",
+  "description": "This tour walks through the addition of a first-party documentation content module to helix-cli. The change creates src/docs/cli-content.ts — a pure-data TypeScript module exporting structured CLI documentation as markdown — and exposes it via a new package.json exports map entry at './docs'. This allows helix-global-client to import canonical CLI docs as an npm dependency. No existing CLI source files, build scripts, or CLI behavior are changed.",
   "steps": [
     {
-      "file": "src/docs/cli-content.ts",
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/product/product.md",
       "line": 1,
-      "title": "Content module export",
-      "description": "The cliDocsContent export is a pure-data object (zero imports) containing structured documentation. The shape {id, title, content, order, keywords} matches what helix-global-client's DocSection type expects (minus the audience field, which the consumer assigns)."
+      "description": "The Helix CLI had zero first-party documentation. The only command reference was a usage() string inside src/index.ts. New users, existing users, and automated agents had no canonical landing page for install, auth, commands, or troubleshooting. This ticket adds a single documentation content module to helix-cli so that the helix-global-client front-end can import and render it as a docs page — keeping content co-located with the CLI source it describes.",
+      "title": "Overview: Why This Change Exists"
     },
     {
-      "file": "src/docs/cli-content.ts",
-      "line": 4,
-      "title": "Markdown content string",
-      "description": "The content field is a complete markdown document covering: Installation, Setup & Authentication, Common Commands (with flag tables), Worked Examples (8 examples for all required commands), Updating, and Troubleshooting. All flags were verified against the actual CLI source code."
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The diagnosis confirmed that no documentation artifacts existed in the repo. The CLI source code contained all necessary information (commands, flags, behaviors) scattered across implementation files, but nothing was structured for external consumption. The fix requires exactly two changes: (1) create src/docs/cli-content.ts as a pure-data module, and (2) add an exports map entry to package.json. No changes to files[], tsconfig.json, or CLI source are needed because dist/ is already published and declaration:true already generates .d.ts files.",
+      "title": "Diagnosis: What Was Missing and Why"
     },
     {
-      "file": "package.json",
-      "line": 9,
-      "title": "Exports map for subpath import",
-      "description": "The exports field exposes './docs' so consumers can import { cliDocsContent } from '@projectxinnovation/helix-cli/docs'. The types condition comes first per TypeScript convention, and only the import condition is used since this is an ESM-only package."
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/diagnosis/diagnosis-statement.md",
+      "line": 22,
+      "description": "Before writing documentation content, every command was verified against the actual CLI source. This table is the authoritative cross-reference: hlx tickets list (src/tickets/list.ts, flags: --search, --user, --status, --status-not-in, --archived, --sprint, --json), hlx tickets get (src/tickets/get.ts, --json, accepts internal ID / short ID / number), hlx tickets create (src/tickets/create.ts, --title, --description/--description-file mutually exclusive, --repos, --mode), and hlx tickets artifacts (src/tickets/artifacts.ts, --run). Only verified flags were documented — no unreleased behavior was added.",
+      "title": "Verified Command Inventory"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/scout/reference-map.json",
+      "line": 1,
+      "description": "The scout phase mapped every source file relevant to the change. package.json was identified as requiring an exports field addition. src/index.ts (lines 33-56) was confirmed as the authoritative command list via its usage() string. Individual command files (src/tickets/list.ts, get.ts, create.ts, artifacts.ts, continue.ts) were each inspected to verify flags and behavior before documentation was written. This bottom-up verification ensures the documentation content module is accurate.",
+      "title": "Scout: File Reference Map"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The implementation is deliberately minimal: Step 1 creates src/docs/cli-content.ts as a pure-data module (zero imports, compatible with Vite browser bundling). Step 2 adds only an exports field to package.json — no changes to files[], scripts, or tsconfig.json. Step 3 verifies that npm run build succeeds and dist/docs/cli-content.js plus dist/docs/cli-content.d.ts are emitted correctly. The guiding principle is that no existing CLI behavior, build pipeline, or published API surface is altered.",
+      "title": "Implementation Plan: Three-Step Approach"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/implementation-plan/implementation-plan.md",
+      "line": 38,
+      "description": "The cliDocsContent export uses the shape { id: string, title: string, content: string, order: number, keywords: string[] }. id is 'helix-cli', title is 'Helix CLI', order is 2 (placing it after the NetSuite Integration doc at order 1), and content is a markdown string with ## headings covering Installation, Setup/Auth, Command Groups, Worked Examples (6 required), Update, and Troubleshooting. The audience field is intentionally omitted — it is a front-end concern assigned by the consumer (helix-global-client). Zero import statements are used so the module is safe for Vite browser bundling.",
+      "title": "Content Module Export Shape"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/implementation-plan/apl.json",
+      "line": 1,
+      "description": "The APL records three critical decisions. (1) The content module must have zero imports — pure data only — to be compatible with Vite browser bundling in helix-global-client. (2) The package.json exports entry uses types before import per TypeScript convention: { './docs': { 'types': './dist/docs/cli-content.d.ts', 'import': './dist/docs/cli-content.js' } }. Only the import condition is needed since the package is ESM-only (type: 'module'). (3) No require condition, no '.' root entry, and no changes to the bin field are needed.",
+      "title": "APL: Key Implementation Decisions"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/diagnosis/apl.json",
+      "line": 1,
+      "description": "The diagnosis APL confirms that the exports map entry './docs' pointing to './dist/docs/cli-content.js' is the correct mechanism for exposing the content module to npm consumers. No changes to the files[] array are needed because dist/ is already fully published. The tsconfig.json declaration:true setting automatically generates dist/docs/cli-content.d.ts when TypeScript compiles src/docs/cli-content.ts. The existing bin field (hlx → dist/index.js) is completely unaffected — the exports map is additive only.",
+      "title": "Diagnosis APL: Package.json Exports Map Rationale"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/implementation-plan/implementation-plan.md",
+      "line": 57,
+      "description": "The complete data flow after this change: (1) src/docs/cli-content.ts is authored as a pure TypeScript literal. (2) npm run build compiles it via tsconfig.json (rootDir: src/, outDir: dist/) producing dist/docs/cli-content.js and dist/docs/cli-content.d.ts. (3) npm publish includes dist/ per the existing files[] field — no change needed. (4) helix-global-client imports '@projectxinnovation/helix-cli/docs' which resolves via the new exports map to dist/docs/cli-content.js. (5) The front-end renders cliDocsContent.content (markdown) as a documentation page. The CLI binary path (dist/index.js via bin field) is entirely separate and unaffected.",
+      "title": "Data Flow: From Source to Consumer"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg2rj000ae00urg1oe3ks/runs/cmp1sg2s1000ee00ui35eg5aj/product/product.md",
+      "line": 45,
+      "description": "This change is purely additive. The CLI binary entry point (src/index.ts → dist/index.js), all command implementations (src/tickets/*, src/comments/*, src/inspect/*), the build pipeline (tsconfig.json, package.json scripts), and the published files[] array are all unchanged. The only additions are: one new source file (src/docs/cli-content.ts) and one new field in package.json (exports). All existing code paths — CLI execution, command routing, API calls, auth flows — remain exactly as before. The helix-global-client integration is a read-only consumer of the compiled output with no coupling to CLI runtime behavior.",
+      "title": "Summary: Clean Code Paths Confirmed"
     }
   ]
 }
