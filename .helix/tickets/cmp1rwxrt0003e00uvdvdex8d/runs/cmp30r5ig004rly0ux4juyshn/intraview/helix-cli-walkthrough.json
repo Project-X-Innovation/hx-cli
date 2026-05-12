@@ -1,42 +1,67 @@
 {
-  "title": "BLD-427: Empty-result run ID and follow-up suggestion",
-  "description": "Adds run-ID display and follow-up command suggestion when hlx tickets artifacts returns no results",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-427: Surface Run ID in Empty-Result Path of hlx tickets artifacts",
+  "description": "This tour walks through the single-file change made to src/tickets/artifacts.ts to fix BLD-427. When the hlx tickets artifacts command returns no results, users previously saw only generic 'No artifacts found.' messages with no guidance on how to proceed. The fix appends a combined empty-result block that resolves the run ID (reusing the established pattern from artifact.ts and bundle.ts) and prints a follow-up command suggestion so users can immediately query specific step artifacts without leaving the terminal.",
   "steps": [
     {
       "file": "src/tickets/artifacts.ts",
-      "line": 18,
-      "title": "Local TicketDetail and TicketResponse types",
-      "description": "Added local type declarations matching the established convention in artifact.ts and bundle.ts. These are needed for the ticket-detail fetch that resolves the run ID."
+      "line": 1,
+      "description": "This is the only file changed in BLD-427. cmdTicketsArtifacts() handles the output of artifact listings for a ticket run. Before this fix, the empty-result path (when both items[] and stepArtifactSummary[] are empty) printed two generic messages and exited, leaving the user with no run ID and no actionable next step. The diagnosis confirmed that sibling commands artifact.ts and bundle.ts already resolve run IDs via a well-established pattern, so the fix reuses that exact pattern here without introducing new dependencies or changing the function signature.",
+      "title": "Overview: Why This File Needed Changing"
     },
     {
       "file": "src/tickets/artifacts.ts",
-      "line": 56,
-      "title": "Combined empty-result check",
-      "description": "New block checks if both items and stepArtifactSummary are empty. Only then does run-ID resolution and follow-up output trigger. This preserves the success path byte-identically."
+      "line": 5,
+      "description": "The ArtifactsResponse type declares only items[] and stepArtifactSummary[]. The API response carries no runId field, which means that when --run is not supplied by the user, the only way to obtain a run ID for display is to make a separate GET /api/tickets/${ticketId} request. This structural gap is a key contributing factor identified in the diagnosis: even when --run is passed as a query param, its value is discarded after the fetch and never retained for output.",
+      "title": "Existing ArtifactsResponse Type: No runId Field"
     },
     {
       "file": "src/tickets/artifacts.ts",
-      "line": 57,
-      "title": "Narrowly-scoped resolvedRunId variable",
-      "description": "Declares let resolvedRunId initialized from the existing const runId (line 26). If the user supplied --run, this value is used directly (AC 2). Otherwise, the ticket-detail fetch resolves it."
+      "line": 17,
+      "description": "Two local type declarations are added here, placed after ArtifactsResponse and before the function declaration. TicketDetail captures currentRun?: { id: string } and runs: Array<{ id: string }>, and TicketResponse wraps it as { ticket: TicketDetail }. This follows the codebase convention of local type duplication seen in artifact.ts (lines 5-10) and bundle.ts (lines 7-13). No shared utility is extracted — the implementation plan explicitly chose the smallest correct change over refactoring.",
+      "title": "New Local Types: TicketDetail and TicketResponse"
     },
     {
       "file": "src/tickets/artifacts.ts",
-      "line": 60,
-      "title": "Ticket-detail fetch with try/catch",
-      "description": "When --run is not supplied, fetches ticket detail to resolve the run ID. Wrapped in try/catch per failure behavior spec: on error, prints a graceful note and returns normally (exit 0, no throw, no retry)."
+      "line": 19,
+      "description": "getFlag(args, '--run') extracts the optional --run value. Before this fix, this value was only used as a query parameter for the artifacts fetch (line 22) and then discarded. The new empty-result block reuses this same runId variable: if it is already set, it is printed directly without an extra API call; if it is undefined, the combined empty-result block initiates a ticket-detail fetch to resolve it. This avoids any redundant requests on the happy path.",
+      "title": "Existing --run Flag Extraction"
     },
     {
       "file": "src/tickets/artifacts.ts",
-      "line": 65,
-      "title": "No-runs handling",
-      "description": "If the ticket has no currentRun and no runs array entries, prints 'No runs available for this ticket.' and returns without a follow-up suggestion (AC 4)."
+      "line": 35,
+      "description": "This line prints 'No artifacts found.\\n' when items[] is empty. It is left byte-identical by the fix. The implementation plan required that the success path and individual empty branches remain unchanged — the new combined empty-result block is appended after both existing checks, not merged into them. This minimises diff noise and regression risk.",
+      "title": "Existing Empty Items Branch (Unchanged)"
     },
     {
       "file": "src/tickets/artifacts.ts",
-      "line": 75,
-      "title": "Run ID and follow-up suggestion output",
-      "description": "Prints the resolved run ID and the follow-up command template. Only the run ID is a concrete value; ticket-ref, stepId, and repoKey remain as placeholders."
+      "line": 45,
+      "description": "This line prints 'No step artifacts found.' when stepArtifactSummary[] is empty. Like the items branch above, it is left untouched. The two independent empty checks remain. The combined empty-result block that follows is only entered when both arrays are empty, detected by checking items.length === 0 && stepArtifactSummary.length === 0 after both individual blocks have run.",
+      "title": "Existing Empty stepArtifactSummary Branch (Unchanged)"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 47,
+      "description": "The combined empty-result block begins here with if (items.length === 0 && stepArtifactSummary.length === 0). This unified check is the central structural fix: it ensures run-ID display and the follow-up suggestion are only shown when the response is fully empty, not when one array has data and the other does not. This directly addresses the missing code path identified as the root cause in the diagnosis.",
+      "title": "New Combined Empty-Result Block: Entry Condition"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 50,
+      "description": "Inside the combined block, if runId is already set from --run, it is used directly. Otherwise a try/catch wraps a GET /api/tickets/${ticketId} fetch. The resolved ticket detail is read as (data as TicketResponse).ticket, and the run ID is derived via ticket.currentRun?.id ?? ticket.runs[0]?.id — exactly the same expression used in artifact.ts (line 40) and bundle.ts (line 39). If the fetch throws or the ticket has no runs, the catch block prints a graceful fallback message and returns without a non-zero exit, satisfying the fail-safe requirement from the implementation plan.",
+      "title": "Run-ID Resolution: Reusing the Established Pattern"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 62,
+      "description": "After resolving the run ID, the block prints the run ID and a formatted follow-up command template: 'hlx tickets artifact --run <runId> --step <stepId> --repo <repoKey>'. This directly closes the information gap described in the product statement. If runId resolved to undefined (ticket has no runs), a 'no runs available' message is printed instead and no suggestion is shown, matching use case 3 from the product document.",
+      "title": "Follow-Up Suggestion Output"
+    },
+    {
+      "file": "src/tickets/artifacts.ts",
+      "line": 1,
+      "description": "The success path (non-empty items or stepArtifactSummary) is byte-identical to the pre-change code. The --run flag extraction, the artifacts API call, and the two individual empty-branch messages are all unchanged. Only the combined empty-result block is new, and it is append-only. The typecheck and full test suite (30 tests) pass cleanly. No new imports, no new files, no signature changes, and no shared utilities were introduced — the fix is the smallest correct change as specified in the implementation principles.",
+      "title": "Summary: Code Paths Remain Clean"
     }
   ]
 }
