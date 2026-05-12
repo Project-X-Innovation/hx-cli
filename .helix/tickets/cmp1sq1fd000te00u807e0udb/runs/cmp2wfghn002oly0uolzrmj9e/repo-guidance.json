@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "The bug is entirely within the helix-cli bundle command (src/tickets/bundle.ts). The fix requires passing the already-resolved runId as a queryParam to the artifact summary API call. No server-side or cross-repo changes are needed."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
