@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Is node_modules tracked in the Git index on the current run branch?",
+    "Does .gitignore already contain node_modules/?",
+    "What is the correct cleanup command?"
+  ],
+  "answers": [
+    {
+      "answer": "Unknown for the current run branch specifically. Scout confirms node_modules is tracked on remote branches, but the run branch state must be checked at implementation time with `git ls-files --cached node_modules`. If the run branch was created from a branch with node_modules tracked, it will also have them tracked.",
+      "evidence": [
+        "scout/reference-map.json: 'node_modules is tracked in the Git index on remote branches'",
+        "scout/reference-map.json: 'node_modules directory does NOT exist in the current working tree'",
+        "scout unknowns: 'Whether the run branch was created from a branch that has node_modules tracked'"
+      ]
+    },
+    {
+      "answer": "Yes. helix-cli/.gitignore line 1 contains `node_modules/`. The ignore rule is present and correct. No .gitignore changes are needed.",
+      "evidence": [
+        "helix-cli/.gitignore direct read: line 1 is `node_modules/`",
+        "Full content: node_modules/, dist/, .env, .env.*"
+      ]
+    },
+    {
+      "answer": "`git rm -r --cached node_modules` removes node_modules from the Git index without touching disk files. The `--cached` flag ensures only the index is modified. This is followed by a commit (handled by the normal workflow). Since .gitignore has the rule, future npm install will not re-track.",
+      "evidence": [
+        "Standard Git behavior: --cached flag operates on the index only",
+        "tech-research: 'git rm -r --cached node_modules removes from the index without touching files on disk'",
+        ".gitignore rule at line 1 prevents future re-tracking"
+      ]
+    }
+  ],
+  "statement": "The helix-cli cleanup plan removes node_modules from the Git index on the run branch using `git rm -r --cached node_modules` if tracked. No code changes or .gitignore modifications are needed -- the ignore rule is already present as line 1. The implementation agent must check current index state before attempting removal since the run branch state is unknown until runtime.",
+  "followups": []
+}

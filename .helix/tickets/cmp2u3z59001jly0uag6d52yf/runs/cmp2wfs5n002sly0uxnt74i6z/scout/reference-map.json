@@ -1,0 +1,42 @@
+{
+  "problem": "helix-cli has node_modules tracked in the Git index on active remote branches even though .gitignore lists node_modules/. This causes the helix-global-server implementation commit phase to fail because `git ls-files -m` reports node_modules as modified and `git add -A` refuses to stage ignored paths. The cleanup requires removing node_modules from the Git index and committing the removal on the branches Helix uses for tickets.",
+  "files": [
+    {
+      "path": ".gitignore",
+      "why": "Already contains `node_modules/` as the first ignore rule (line 1). Also ignores `dist/`, `.env`, and `.env.*`. The ignore rule is present but insufficient when node_modules is already tracked in the index."
+    },
+    {
+      "path": "package.json",
+      "why": "Defines the project as @projectxinnovation/helix-cli. Has no runtime dependencies (only devDependencies: @types/node and typescript). Scripts: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js), prepare (npm run build)."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config: ES2022 target, Node16 module, strict mode. Compiles src/ to dist/."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "CI workflow that publishes to npm on version tags. Runs npm ci and npm test. Validates tarball contents."
+    }
+  ],
+  "facts": [
+    ".gitignore already contains `node_modules/` as the first line — the ignore rule is present.",
+    "node_modules directory does NOT exist in the current working tree.",
+    "The issue is that node_modules is tracked in the Git index on remote branches, so .gitignore alone does not prevent `git ls-files -m` from reporting it.",
+    "helix-cli has zero runtime dependencies (only devDependencies: @types/node and typescript).",
+    "The repo has a CI workflow (.github/workflows/publish.yml) for npm publishing.",
+    "Test infrastructure uses Node.js built-in test runner via `node --test dist/**/*.test.js`.",
+    "Two test files exist: src/lib/flags.test.ts and src/lib/resolve-ticket.test.ts.",
+    "The cleanup requires `git rm -r --cached node_modules` followed by a commit on each affected branch to remove node_modules from the index without deleting files from disk."
+  ],
+  "unknowns": [
+    "Which specific remote branches currently have node_modules tracked — cannot verify without git commands (orchestrator-managed).",
+    "Whether the run branch (helix/fix/FIX-432-harden-ignored-path-staging-and-clean-helix-cli) was created from a branch that has node_modules tracked.",
+    "Whether there are additional Helix-relevant base branches beyond main and staging that need cleanup."
+  ],
+  "qualityGates": {
+    "test": "tsc && node --test dist/**/*.test.js",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "ormStrategy": "no-orm"
+}

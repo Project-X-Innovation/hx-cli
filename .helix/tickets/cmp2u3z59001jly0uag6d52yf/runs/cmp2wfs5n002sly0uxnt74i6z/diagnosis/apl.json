@@ -1,0 +1,31 @@
+{
+  "questions": [
+    "Does helix-cli/.gitignore already contain the node_modules/ ignore rule?",
+    "Is node_modules tracked in the Git index on the current branch?",
+    "What cleanup is required to untrack node_modules without deleting files from disk?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. helix-cli/.gitignore line 1 contains `node_modules/`. The ignore rule is present and correct. The issue is not a missing ignore rule.",
+      "evidence": [
+        "helix-cli/.gitignore line 1: `node_modules/`"
+      ]
+    },
+    {
+      "answer": "node_modules is tracked on remote branches (confirmed by scout). The directory does not exist in the current working tree. The tracked state on remote branches causes `git ls-files -m` to report node_modules paths as modified when the server workflow runs.",
+      "evidence": [
+        "Scout reference-map: 'node_modules directory does NOT exist in the current working tree'",
+        "Scout reference-map: 'The issue is that node_modules is tracked in the Git index on remote branches'"
+      ]
+    },
+    {
+      "answer": "The standard approach is `git rm -r --cached node_modules` which removes from the index without touching disk files, followed by a commit on each affected branch. Since .gitignore already has the rule, future `npm install` will not re-track the directory.",
+      "evidence": [
+        "Scout reference-map: 'The cleanup requires `git rm -r --cached node_modules` followed by a commit on each affected branch'",
+        "helix-cli has zero runtime dependencies (only devDependencies: @types/node and typescript)"
+      ]
+    }
+  ],
+  "statement": "helix-cli has node_modules tracked in the Git index on active remote branches despite .gitignore correctly listing node_modules/ as line 1. This legacy index state causes the helix-global-server staging logic to include node_modules paths in the git add pathspec, triggering a failure. The cleanup requires removing node_modules from the Git index via `git rm -r --cached node_modules` on each active Helix branch and committing the removal. No .gitignore changes are needed — the rule is already correct.",
+  "followups": []
+}
