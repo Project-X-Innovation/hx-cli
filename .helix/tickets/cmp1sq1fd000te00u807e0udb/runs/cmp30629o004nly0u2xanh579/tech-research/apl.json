@@ -1,0 +1,48 @@
+{
+  "questions": [
+    "What is the correct technical approach to fix the missing runId in the bundle artifacts summary call?",
+    "Should runId always be passed or only conditionally (like the artifacts command)?",
+    "What is the right pattern for adding the --run flag to bundle to match sibling commands?",
+    "Are there any regression risks from always passing runId for active-status tickets?"
+  ],
+  "answers": [
+    {
+      "answer": "The fix requires passing the already-resolved runId as queryParams to the hxFetch call at bundle.ts line 43. The runId is resolved at line 36 and validated at line 38, so it is guaranteed non-null by the time the artifacts summary call is made. The change is a single-expression addition: `queryParams: { runId }` in the options object.",
+      "evidence": [
+        "bundle.ts:36 — `const runId = ticket.currentRun?.id ?? ticket.runs[0]?.id` resolves before line 43",
+        "bundle.ts:38-40 — `if (!runId)` guard exits, so runId is guaranteed non-null after this point",
+        "bundle.ts:43 — current call: `hxFetch(config, /tickets/${ticketId}/artifacts, { basePath: \"/api\" })` — no queryParams",
+        "http.ts:46-49 — hxFetch already supports queryParams via `url.searchParams.set()`"
+      ]
+    },
+    {
+      "answer": "The bundle command should always pass runId because (a) it already resolves runId unconditionally at line 36 and exits if missing, (b) the runId is used for individual step-artifact fetches at line 55, and (c) this is simpler than the conditional pattern in artifacts.ts since bundle always needs a valid runId. When a --run flag is added, the explicit value should take precedence over the auto-resolved value.",
+      "evidence": [
+        "bundle.ts:36 — runId is resolved unconditionally",
+        "bundle.ts:38-40 — missing runId causes early exit, so it is always available",
+        "bundle.ts:55 — runId is already used for step-artifact fetches: `/tickets/${ticketId}/runs/${runId}/step-artifacts/${entry.stepId}`",
+        "artifacts.ts:20-22 — uses conditional pattern because --run is optional and no fallback resolution exists in that command"
+      ]
+    },
+    {
+      "answer": "The --run flag should follow the exact pattern from artifact.ts (lines 29-35): use getFlag to read --run, and if provided, use it instead of auto-resolution. In bundle's case, the flag value should override the auto-resolved runId from ticket.currentRun?.id ?? ticket.runs[0]?.id. The import of getFlag (already available in flags.ts) replaces the need for new flag parsing.",
+      "evidence": [
+        "artifact.ts:29 — `let runId = getFlag(args, \"--run\")`",
+        "artifact.ts:32-39 — falls back to ticket detail resolution only if --run not provided",
+        "flags.ts:5-9 — getFlag returns string | undefined, suitable for optional flags",
+        "bundle.ts:5 — already imports requireFlag from flags.ts; adding getFlag import is trivial"
+      ]
+    },
+    {
+      "answer": "No regression risk. For active-status tickets, the server already returns populated stepArtifactSummary without runId. Adding runId as a query parameter simply provides additional context that the server can use or ignore. The artifacts command (artifacts.ts:20-22) already conditionally passes runId with no reported issues. The step-artifact fetches at bundle.ts:55 already use runId in the URL path for both active and non-active tickets.",
+      "evidence": [
+        "artifacts.ts:20-22 — already passes runId when --run is provided, works for all statuses",
+        "bundle.ts:55 — already uses runId in step-artifact URL for all tickets",
+        "Ticket description — 'the artifacts are present and reachable' confirms server handles runId correctly",
+        "http.ts:46-49 — queryParams are appended to URL; they don't alter request semantics beyond filtering"
+      ]
+    }
+  ],
+  "statement": "The fix is a minimal, well-scoped client-side change to bundle.ts: (1) pass the already-resolved runId as queryParams to the artifact summary fetch at line 43, and (2) add a --run flag for explicit override matching sibling commands. The usage string and help text in index.ts must also be updated. No server-side, cross-repo, or architectural changes are needed.",
+  "followups": []
+}

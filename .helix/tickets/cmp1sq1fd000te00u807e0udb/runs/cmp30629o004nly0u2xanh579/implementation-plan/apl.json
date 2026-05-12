@@ -1,0 +1,44 @@
+{
+  "questions": [
+    "What is the correct sequence of changes to fix the missing runId in the bundle artifacts summary call?",
+    "What files need to be modified and what is the minimal change set?",
+    "How should the --run flag be integrated to match sibling command patterns?",
+    "What verification steps confirm the fix works without regressions?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation has four sequential steps: (1) add getFlag import and --run flag parsing to bundle.ts, (2) pass runId as queryParams to the artifact summary hxFetch call at line 43, (3) update usage string and help text in index.ts, (4) run quality gates. Steps 1-2 are in bundle.ts, step 3 is in index.ts, step 4 is verification only.",
+      "evidence": [
+        "bundle.ts:43 — current call has no queryParams; adding `queryParams: { runId }` is the core fix",
+        "bundle.ts:5 — imports only requireFlag; getFlag must be added for --run flag support",
+        "bundle.ts:36 — runId resolution chain needs explicitRunId prepended for flag precedence",
+        "index.ts:27 and index.ts:136 — usage string and help text need [--run <runId>] appended"
+      ]
+    },
+    {
+      "answer": "Exactly two files are modified: src/tickets/bundle.ts (import change, flag parsing, queryParams addition) and src/tickets/index.ts (usage string and help text updates). No other files, types, dependencies, or configurations change.",
+      "evidence": [
+        "tech-research/tech-research.md — Summary Table confirms 'Fix scope: Client-side only; 2 files changed (bundle.ts, index.ts)'",
+        "product/product.md — Scope section confirms 'Change is confined to helix-cli (src/tickets/bundle.ts and src/tickets/index.ts)'"
+      ]
+    },
+    {
+      "answer": "The --run flag uses getFlag(args, '--run') to read an optional value. If provided, it takes precedence over the auto-resolved runId from ticket.currentRun?.id ?? ticket.runs[0]?.id. This matches the pattern in artifact.ts:29-35 but does not skip the ticket detail fetch (still needed for ticket.json output).",
+      "evidence": [
+        "artifact.ts:29 — `let runId = getFlag(args, \"--run\")` — same pattern to follow",
+        "artifact.ts:32-39 — falls back to ticket detail resolution only if --run not provided",
+        "tech-research/tech-research.md — Technical Decision #2 explains the precedence and why ticket detail is still fetched"
+      ]
+    },
+    {
+      "answer": "Four verification checks: (1) npm run build succeeds, (2) npm run typecheck succeeds, (3) npm test passes all existing tests, (4) live bundle command against staging API with PREVIEW_READY ticket cmp1jfwt5002lmo0tts95de2q produces non-empty archive.",
+      "evidence": [
+        "package.json scripts — build=tsc, typecheck=tsc --noEmit, test=tsc && node --test",
+        "ticket.md — provides concrete PREVIEW_READY ticket cmp1jfwt5002lmo0tts95de2q for live verification",
+        "Dev setup config — provides HELIX_API_KEY and HELIX_URL for staging API access"
+      ]
+    }
+  ],
+  "statement": "The implementation plan covers a minimal two-file fix to bundle.ts and index.ts. In bundle.ts: add getFlag import, parse --run flag with precedence over auto-resolution, and pass runId as queryParams to the artifact summary hxFetch call. In index.ts: update usage string and help text to include [--run <runId>]. Verification includes quality gates (build, typecheck, tests) plus a live bundle test against the staging API with a known PREVIEW_READY ticket.",
+  "followups": []
+}

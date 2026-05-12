@@ -24,7 +24,7 @@ function ticketsUsage(exitCode: number = 1): never {
   hlx tickets continue <ticket-ref> "continuation context" [--dry-run]
   hlx tickets artifacts <ticket-ref> [--run <runId>]
   hlx tickets artifact <ticket-ref> --step <stepId> --repo <repoKey> [--run <runId>]
-  hlx tickets bundle <ticket-ref> --out <dir>
+  hlx tickets bundle <ticket-ref> --out <dir> [--run <runId>]
 
 --repos accepts repository display names, keys, or internal IDs. Run "hlx inspect repos" to see available repositories.
 
@@ -133,7 +133,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
 
     case "bundle": {
       if (isHelpRequested(rest)) {
-        console.log("Usage: hlx tickets bundle <ticket-ref> --out <dir>\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).");
+        console.log("Usage: hlx tickets bundle <ticket-ref> --out <dir> [--run <runId>]\n\nTicket references accept: internal ID, short ID (e.g. BLD-339), or ticket number (e.g. 339).");
         process.exit(0);
       }
       const rawRef = extractTicketRef(rest);
