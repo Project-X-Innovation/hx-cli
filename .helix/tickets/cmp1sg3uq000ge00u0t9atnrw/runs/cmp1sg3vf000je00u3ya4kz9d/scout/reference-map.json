@@ -1,0 +1,137 @@
+{
+  "problem": "The hlx-cli agent skill (SKILL.md + references/) lives outside the CLI package today. Users and agents must manually locate and copy skill files. This ticket bundles the canonical skill content inside the published @projectxinnovation/helix-cli npm package and adds a `hlx skill` command with `show` (print to stdout) and `install` (copy to agent skills directory) subcommands.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and top-level command router. The new `skill` case must be added to the switch statement (line 69-117). Commands without auth (login, token, update) are dispatched without configOrHelp(). SKIP_AUTO_UPDATE set on line 61 may need the 'skill' command added."
+    },
+    {
+      "path": "package.json",
+      "why": "Controls npm publish payload via `files` field (currently only includes `dist`). Must be updated to include bundled skill content directory. Also defines build/test scripts and version (1.3.2)."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript compiler config. rootDir=src, outDir=dist. tsc does NOT copy non-TS files, so static skill files cannot live in src/ and be compiled to dist/. Determines how runtime path resolution works."
+    },
+    {
+      "path": ".npmignore",
+      "why": "Controls npm tarball exclusions. Currently excludes test files only. Must not exclude bundled skill files."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "CI pipeline validates tarball contents before npm publish. Currently checks for dist/index.js and package.json presence, and rejects test files. May need skill file validation added."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Shared flag parsing: getFlag(), hasFlag(), isHelpRequested(), requireFlag(), getPositionalArgs(). The skill command handlers will use these utilities for --target, --for, --force, --help."
+    },
+    {
+      "path": "src/inspect/index.ts",
+      "why": "Reference command module showing the standard subcommand router pattern: usage function, switch dispatch, per-subcommand help, isHelpRequested() checks."
+    },
+    {
+      "path": "src/token/index.ts",
+      "why": "Reference for a no-auth command pattern. Dispatched directly from index.ts without configOrHelp(). The skill command follows this same no-auth pattern."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Shows runtime path resolution pattern using import.meta.url and dirname(fileURLToPath()). The skill command needs similar resolution to locate bundled skill files relative to the installed package."
+    },
+    {
+      "path": "src/update/validate.ts",
+      "why": "Shows how to resolve the global npm install path and validate package integrity. Relevant to the corrupt-install detection requirement for skill commands."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Uses homedir() from node:os for ~/.hlx/ path. The skill install command needs homedir() to resolve ~/.claude/skills/ and ~/.codex/skills/."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Test pattern reference: uses node:test built-in runner with describe/it blocks and node:assert. New skill tests should follow this pattern."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Additional test pattern reference showing beforeEach/afterEach for env var manipulation. Relevant for skill install tests that mock filesystem state."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "The CLI entry point uses a switch statement in src/index.ts (lines 69-117) to route top-level commands. New commands are added as new case blocks.",
+      "evidence": "src/index.ts lines 69-117"
+    },
+    {
+      "claim": "Commands that don't need authentication (login, token, update) are dispatched without configOrHelp(). The skill command falls into this category.",
+      "evidence": "src/index.ts lines 71-72 (login), 74-76 (token), 100-101 (update) — no configOrHelp() call"
+    },
+    {
+      "claim": "The SKIP_AUTO_UPDATE set contains --version, -v, update, --help, -h. Commands in this set bypass the auto-update check.",
+      "evidence": "src/index.ts line 61: const SKIP_AUTO_UPDATE = new Set([\"--version\", \"-v\", \"update\", \"--help\", \"-h\"])"
+    },
+    {
+      "claim": "The files field in package.json only includes dist/ (minus test files). Static non-JS files placed anywhere other than dist/ are not included in the npm tarball.",
+      "evidence": "package.json lines 18-22: \"files\": [\"dist\", \"!dist/**/*.test.js\", \"!dist/**/*.test.d.ts\"]"
+    },
+    {
+      "claim": "tsc compiles src/ to dist/ but does NOT copy non-TypeScript files. SKILL.md and references/*.md cannot be placed in src/ and expected to appear in dist/.",
+      "evidence": "tsconfig.json: rootDir=src, outDir=dist. TypeScript compiler only emits .js and .d.ts files."
+    },
+    {
+      "claim": "Runtime path resolution to package root uses dirname(fileURLToPath(import.meta.url)) and navigates up. From dist/update/version.js, package.json is at ../../package.json.",
+      "evidence": "src/update/version.ts lines 10-14"
+    },
+    {
+      "claim": "No SKILL.md or references/ directory currently exists anywhere in the helix-cli repository.",
+      "evidence": "Glob search for **/SKILL.md and **/references/** in the repo returned no results."
+    },
+    {
+      "claim": "The canonical skill format (as used by Claude agent) is a directory with SKILL.md at root and optional references/ subdirectory with markdown files.",
+      "evidence": "Workspace .claude/skills/ directory structure: each skill is <name>/SKILL.md with optional <name>/references/*.md"
+    },
+    {
+      "claim": "Target install directories are ~/.claude/skills/<name>/ and ~/.codex/skills/<name>/. Neither exists in the current sandbox environment.",
+      "evidence": "Bash check: ls ~/.claude/skills/ and ~/.codex/skills/ both returned 'not found'"
+    },
+    {
+      "claim": "Tests use Node.js built-in test runner (node:test). No external test frameworks. Run via: npm test which compiles then runs node --test dist/**/*.test.js",
+      "evidence": "package.json scripts.test: \"tsc && node --test dist/**/*.test.js\"; src/lib/flags.test.ts imports from node:test"
+    },
+    {
+      "claim": "The CI publish workflow packs the tarball and validates contents before publishing. It checks for dist/index.js and package.json presence, and rejects .test.js files.",
+      "evidence": ".github/workflows/publish.yml lines 44-56"
+    },
+    {
+      "claim": "The codebase uses only Node.js built-in modules (node:fs, node:path, node:os, node:http, node:crypto, node:child_process). No runtime dependencies.",
+      "evidence": "package.json has zero dependencies (only devDependencies: @types/node, typescript)"
+    },
+    {
+      "claim": "The package is ESM (type: module) targeting ES2022 with Node16 module resolution.",
+      "evidence": "package.json: \"type\": \"module\"; tsconfig.json: target ES2022, module Node16"
+    },
+    {
+      "claim": "The usage() function in src/index.ts (lines 33-58) serves as the global help screen. New commands should be listed here.",
+      "evidence": "src/index.ts lines 33-58"
+    },
+    {
+      "claim": "Subcommand modules export a single router function (runInspect, runComments, runTickets, etc.) that takes args and optionally config.",
+      "evidence": "src/inspect/index.ts exports runInspect(config, args); src/comments/index.ts exports runComments(config, args); src/token/index.ts exports runToken(args)"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "What is the canonical SKILL.md content for the hlx-cli skill? The ticket says to bundle 'verbatim copies' but the content does not exist in the repository yet.",
+      "impact": "Implementation must either author the skill content or locate the existing canonical source. The ticket says it 'lives outside the CLI today' but does not specify where."
+    },
+    {
+      "question": "Which specific files should be in the references/ directory? The ticket mentions 'references/*' but no canonical source is identified.",
+      "impact": "Determines the set of files to bundle and copy during install."
+    },
+    {
+      "question": "Should the bundled skill files live in a top-level directory (e.g., skill-content/) added to files[], or should a build step copy them into dist/?",
+      "impact": "Affects package.json files field, build pipeline, and runtime path resolution logic."
+    },
+    {
+      "question": "Should 'skill' be added to SKIP_AUTO_UPDATE? It's a local-only command that doesn't need network access.",
+      "impact": "Minor UX consideration — auto-update check before a purely local command adds latency."
+    }
+  ]
+}

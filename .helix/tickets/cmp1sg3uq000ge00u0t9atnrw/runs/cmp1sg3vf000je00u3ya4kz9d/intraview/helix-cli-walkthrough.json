@@ -1,0 +1,49 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-429: Bundle hlx-cli Agent Skill in the CLI",
+  "description": "This tour walks through the implementation of BLD-429, which adds a canonical hlx-cli agent skill (SKILL.md + references/) as bundled static assets in the published @projectxinnovation/helix-cli npm package, and exposes them via a new `hlx skill` top-level command with `show` and `install` subcommands. No existing behavior is altered — this is a purely additive feature built in bottom-up dependency order: skill content first, then bundling, then runtime path resolution, then command handlers, then CLI wiring, and finally CI validation.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmp1sg3uq000ge00u0t9atnrw/runs/cmp1sg3vf000je00u3ya4kz9d/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The diagnosis establishes the three structural gaps this change closes: (1) no SKILL.md or skill content existed anywhere in the helix-cli repository — it had to be authored from scratch; (2) the npm `files[]` array only shipped `dist/`, so non-TypeScript assets like markdown were silently excluded from the tarball; (3) no `hlx skill` command existed in the CLI router. All subsequent changes flow directly from these three root causes.",
+      "title": "Overview: What Was Missing and Why"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg3uq000ge00u0t9atnrw/runs/cmp1sg3vf000je00u3ya4kz9d/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The plan establishes the implementation sequence: author skill content first (all other steps depend on it), then update package.json to bundle it, then implement the path resolution utility (shared by show and install), then the show handler, install handler, router, CLI entry point integration, CI validation, and finally tests. This bottom-up order ensures each step can be independently verified. Five guiding principles are also set here: follow established patterns (inspect router, token no-auth dispatch, update path resolution, flags API), zero runtime dependencies (Node.js built-ins only), sync FS operations for atomic rollback simplicity, static bundling without build changes, and safety by default (no-overwrite, atomic install, corrupt detection).",
+      "title": "Implementation Plan: Bottom-Up Dependency Order"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg3uq000ge00u0t9atnrw/runs/cmp1sg3vf000je00u3ya4kz9d/diagnosis/apl.json",
+      "line": 1,
+      "description": "The APL for diagnosis answers the six critical architecture questions. Most importantly, Q2 establishes WHY a top-level `skill-content/` directory added to `files[]` was chosen over a post-build copy script: zero build pipeline changes are needed because tsc only processes TypeScript, and path resolution from the package root is straightforward. Q3 establishes that runtime path resolution must use `import.meta.url` (matching the pattern already used in `src/update/version.ts`) to correctly locate bundled files whether the package is installed globally or locally. Q4 confirms the `skill` command should skip auto-update checks, matching the `token` command no-auth dispatch pattern.",
+      "title": "APL Diagnosis: Key Architecture Decisions"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg3uq000ge00u0t9atnrw/runs/cmp1sg3vf000je00u3ya4kz9d/implementation-plan/apl.json",
+      "line": 1,
+      "description": "The implementation plan APL answers how to verify all 8 acceptance criteria. The content authoring step is explicitly called out as the dependency anchor — without SKILL.md existing, none of the subsequent show, install, test, or tarball validation steps can pass. The verification approach is incremental: typecheck after each source file, then behavioral tests, then end-to-end runtime verification of each safety invariant (no-overwrite, atomic rollback, corrupt detection). This APL also confirms the skill content format follows the YAML frontmatter + markdown sections convention observed in `.claude/skills/runtime-inspection/SKILL.md`.",
+      "title": "APL Implementation Plan: Verification Strategy"
+    },
+    {
+      "file": ".github/workflows/publish.yml",
+      "line": 52,
+      "description": "This single added line closes AC-1 (skill content in tarball) at the CI level. The publish workflow already ran `npm pack --dry-run` and captured the file list into `tarball-contents.txt`, then validated that `dist/index.js` and `package.json` were present. The new `grep -q` check adds `skill-content/SKILL.md` to that same validation gate with the same fail-fast pattern (`|| { echo ...; exit 1; }`). If a future change accidentally removes `skill-content` from `package.json`'s `files[]` array, this check will catch it before the package is published. Data flow: npm pack → tarball-contents.txt → grep validation → CI pass/fail.",
+      "title": "CI: Validate skill-content/SKILL.md Is in the Tarball"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg3uq000ge00u0t9atnrw/runs/cmp1sg3vf000je00u3ya4kz9d/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "The code review confirms no issues were found across all 10 changed files (7 new, 3 modified). The review cross-referenced `src/lib/flags.ts` (flag parsing API used correctly), `src/inspect/index.ts` (subcommand router pattern followed faithfully), `src/update/version.ts` (import.meta.url path resolution pattern matches), and `.npmignore` (no conflict with skill-content/ inclusion). All 22 existing tests continued to pass, confirming zero regression risk. The review also performed runtime end-to-end verification: `hlx skill show` exits 0 with correct stdout, install exits 1 on repeat without `--force`, `--force` install succeeds, and corrupt detection exits 1 with the reinstall instruction containing the correct package name.",
+      "title": "Code Review: All 8 Acceptance Criteria Confirmed"
+    },
+    {
+      "file": ".helix/tickets/cmp1sg3uq000ge00u0t9atnrw/runs/cmp1sg3vf000je00u3ya4kz9d/code-review/apl.json",
+      "line": 1,
+      "description": "The code review APL validates Q3 (safety invariants under edge cases) explicitly: no-overwrite without --force exits non-zero with destination unchanged; atomic rollback removes partial destination on copy failure; corrupt detection (skill-content renamed/missing) exits non-zero with the reinstall instruction. Q4 confirms codebase conventions are followed throughout — the subcommand router, flag parsing, and path resolution all match established patterns. Evidence items in this APL record the exact runtime verification commands and their observed outputs, providing a reproducible audit trail for each acceptance criterion.",
+      "title": "Code Review APL: Safety Invariants Hold Under Edge Cases"
+    }
+  ]
+}
