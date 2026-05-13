@@ -1,0 +1,33 @@
+{
+  "questions": [
+    "What CLI module structure is needed for library commands?",
+    "How should library item resolution work for the <ref> argument?",
+    "What SKILL.md updates are needed for agent discoverability?"
+  ],
+  "answers": [
+    {
+      "answer": "A new src/library/ module following the established switch-based pattern: index.ts router with subcommand dispatch (list, show, comments list, comments post), individual command files, and a resolve-library-item.ts utility in src/lib/. Main router src/index.ts needs a 'library' case added to the switch statement.",
+      "evidence": [
+        "src/index.ts: switch-based command dispatch at lines 72-124, no 'library' case exists",
+        "src/comments/index.ts: 53-line module router with subcommand switch, configOrHelp pattern, resolveTicket call",
+        "No src/library/ directory exists (confirmed via index.ts imports)"
+      ]
+    },
+    {
+      "answer": "Library item resolution mirrors resolve-ticket.ts pattern: extractLibraryRef from --item flag or positional arg, matchLibraryItem against items list by cuid, ticket shortId, or title substring. The API endpoint GET /library/items provides the items list for matching.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: extractTicketRef + matchTicket pattern with priority matching (internal ID > short ID > numeric suffix)",
+        "Server API: GET /library/items endpoint returns items list (src/routes/api.ts line 318)"
+      ]
+    },
+    {
+      "answer": "skill-content/SKILL.md needs a new 'Library' section in the Available Commands table documenting: hlx library list, hlx library show <ref>, hlx library comments list <ref> [--section <slug>], hlx library comments post <ref> --section <slug> --rating <value> [message]. Agent workflow example for library feedback loop should also be added.",
+      "evidence": [
+        "skill-content/SKILL.md: command table at lines 31-50, workflow examples section follows",
+        "Scout reference-map: 4 commands specified, --section and --rating flags, rating values thumbs-up/love/thumbs-down"
+      ]
+    }
+  ],
+  "statement": "The CLI needs a net-new src/library/ module with four commands (list, show, comments list, comments post) following the established comments module pattern. A resolve-library-item.ts utility mirrors the resolve-ticket.ts approach. SKILL.md must be updated for agent discoverability. No existing library infrastructure exists in the CLI—all code is greenfield. The patterns from comments/ and lib/ provide clear templates.",
+  "followups": []
+}
