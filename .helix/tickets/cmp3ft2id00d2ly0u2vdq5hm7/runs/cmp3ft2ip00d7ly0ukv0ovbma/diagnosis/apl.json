@@ -1,0 +1,48 @@
+{
+  "questions": [
+    "Does any library module or library-related code exist in the CLI?",
+    "What module and routing patterns must the new library module follow?",
+    "How does item reference resolution work, and what parallel is needed for library items?",
+    "Does SKILL.md need a Library section for agent discoverability?",
+    "How does the continue command integrate with library comment context?"
+  ],
+  "answers": [
+    {
+      "answer": "No library module or library-related code exists in the CLI. src/index.ts switch-case dispatcher (lines 72-124) has no 'library' case. No src/library/ directory exists.",
+      "evidence": [
+        "src/index.ts: Switch cases at lines 72-124 include login, token, inspect, comments, org, tickets, skill, update — no library",
+        "No src/library/ directory in the repository"
+      ]
+    },
+    {
+      "answer": "The CLI uses a consistent module pattern: src/{domain}/index.ts exports a runX(config, args) function that dispatches to cmd* functions based on subcommand. The comments module (src/comments/index.ts) is the closest parallel — it dispatches to cmdCommentsList and cmdCommentsPost. The library module needs: index.ts (router), list.ts, show.ts, comments.ts (nested router), comments-list.ts, comments-post.ts.",
+      "evidence": [
+        "src/comments/index.ts: runComments dispatches to cmdCommentsList and cmdCommentsPost",
+        "src/index.ts: Each top-level command calls runX(config, args.slice(1))",
+        "src/lib/flags.ts: getFlag(), hasFlag(), getPositionalArgs() for argument parsing"
+      ]
+    },
+    {
+      "answer": "Ticket resolution (src/lib/resolve-ticket.ts) supports internal ID, short ID (XXX-NNN pattern), and numeric ticket number via extractTicketRef() and matchTicket(). Library item resolution needs a parallel resolve-library-item.ts supporting cuid, ticket short ID (find latest library item for that ticket), and title substring match. The API endpoint for resolution is GET /api/library/items (already exists in the server).",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: extractTicketRef extracts ref from --ticket flag or positional args",
+        "src/lib/resolve-ticket.ts: matchTicket matches by exact ID, shortId, or numeric ticket number"
+      ]
+    },
+    {
+      "answer": "Yes. SKILL.md (skill-content/SKILL.md, 148 lines) documents all CLI commands for agent discoverability. It has sections for Available Commands, Common Workflows, Flag Conventions, but no Library section. Adding a Library section is critical for agents to know about library list, show, comments list, and comments post commands.",
+      "evidence": [
+        "skill-content/SKILL.md: 148 lines with sections for commands, workflows, guardrails — no Library section"
+      ]
+    },
+    {
+      "answer": "The continue command (src/tickets/continue.ts) posts continuationContext to POST /api/tickets/{ticketId}/rerun. Currently requires non-empty context text. The research report specifies that library comments should be auto-included in continuation context server-side. The CLI continue command does not need to change for MVP — the server assembles library comments into the context. However, SKILL.md should document the workflow of posting library comments before continuing.",
+      "evidence": [
+        "src/tickets/continue.ts: Posts continuationContext to POST /api/tickets/{ticketId}/rerun",
+        "Continuation integration is primarily server-side (auto-fetch library comments during rerun)"
+      ]
+    }
+  ],
+  "statement": "Complete CLI feature gap: no library module exists. A new src/library/ module must be created with list, show, comments list, and comments post commands following the established module pattern (switch-case routing, flag parsing, hxFetch HTTP client). A resolve-library-item.ts utility parallels resolve-ticket.ts. SKILL.md needs a Library section for agent discoverability. The continue command does not need changes for MVP since continuation integration is server-side.",
+  "followups": []
+}
