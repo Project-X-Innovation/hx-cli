@@ -1,0 +1,40 @@
+{
+  "questions": [
+    "Should resolve-library-item.ts support all three resolution strategies (cuid, ticket short ID, title)?",
+    "How should the library module handle the nested 'comments' subcommand routing?",
+    "Should 'hlx library show' render full markdown content or just headings with metadata?",
+    "Does the hxFetch basePath need to change for library commands?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes, all three strategies. Resolution priority: (1) cuid — if input starts with 'c' and is 25 chars, treat as library item ID. (2) ticket short ID — if input matches XXX-NNN pattern, resolve the ticket, then find the latest library item for that ticket via GET /api/library/items?ticketShortId=X. (3) title substring — fallback to case-insensitive title match across GET /api/library/items list. This parallels resolve-ticket.ts (exact ID > short ID > numeric) and provides intuitive CLI ergonomics.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: extractTicketRef and matchTicket support ID, shortId, and number with priority ordering",
+        "Research report: 'Three resolution strategies following resolve-ticket.ts'"
+      ]
+    },
+    {
+      "answer": "Nested switch-case in a comments.ts router, following the same pattern as the top-level index.ts dispatcher. The library module's index.ts dispatches 'comments' to runLibraryComments(config, args), which itself dispatches 'list' to cmdCommentsListLibrary and 'post' to cmdCommentsPostLibrary. This mirrors how the existing comments module (src/comments/index.ts) dispatches to cmdCommentsList and cmdCommentsPost.",
+      "evidence": [
+        "src/comments/index.ts: runComments dispatches to cmdCommentsList and cmdCommentsPost based on subcommand",
+        "src/index.ts: Top-level switch dispatches to runX(config, args.slice(1))"
+      ]
+    },
+    {
+      "answer": "Render headings with section slugs and comment summaries, plus a truncated content preview per section. Full markdown content in a terminal is unwieldy (reports can be 1000+ lines). The show command extracts heading lines from the markdown content, annotates each with its slug and comment summary counts, and shows the first ~3 lines of content under each heading. A --full flag can output the complete content. This is the most useful format for agents and users deciding which sections to comment on.",
+      "evidence": [
+        "Research report: 'Shows report content with section headings annotated with slugs and comment summaries'",
+        "The primary purpose of 'show' is to discover section slugs for the --section flag in comments post"
+      ]
+    },
+    {
+      "answer": "Library commands use basePath: '/api' (not the default '/api/inspect'). This is the same basePath used by the existing comments module for non-inspect endpoints. The hxFetch utility supports this via the options.basePath parameter.",
+      "evidence": [
+        "src/lib/http.ts: hxFetch accepts basePath option, defaults to '/api/inspect'",
+        "src/comments/list.ts and post.ts use basePath: '/api' for ticket comment endpoints"
+      ]
+    }
+  ],
+  "statement": "The CLI needs a new src/library/ module following the established switch-case routing pattern with a nested comments subcommand router. resolve-library-item.ts supports cuid, ticket short ID, and title match resolution. 'hlx library show' renders heading-level summaries with slugs and comment counts (not full content by default). All commands use basePath '/api' with the existing hxFetch client. SKILL.md update is critical for agent discoverability.",
+  "followups": []
+}
