@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "How should the library module be structured relative to the existing comments module?",
+    "How should library item resolution work, and is the list endpoint data sufficient?",
+    "What output format should 'hlx library show' use?"
+  ],
+  "answers": [
+    {
+      "answer": "The library module should be a separate src/library/ directory (not an extension of src/comments/). Library commands have different API endpoints (/library/items vs /tickets), different resolution logic (library item vs ticket), and different flags (--section, --rating). The module follows the same structural pattern as src/comments/: index.ts router with subcommand switch, individual command files (list.ts, show.ts, comments.ts which handles both 'comments list' and 'comments post' subcommands), and imports from src/lib/ for shared utilities.",
+      "evidence": [
+        "src/comments/index.ts: 53-line module router with subcommand switch (list, post), configOrHelp, resolveTicket",
+        "src/index.ts lines 72-124: switch-based routing, 'comments' case at lines 87-90 is the template for a new 'library' case",
+        "Product spec: 'Separate module, not extension: src/library/ is its own module, not an extension of src/comments/'"
+      ]
+    },
+    {
+      "answer": "Library item resolution follows the resolve-ticket.ts pattern: extractLibraryRef from --item flag or positional arg, then matchLibraryItem by cuid > ticket shortId > title substring. The current GET /library/items endpoint returns LibraryItem fields including ticketId but NOT ticketShortId. The server tech research recommends adding ticketShortId to the list response (a minor join enhancement). With that change, the CLI can resolve items by ticket short ID (e.g., RSH-439) without additional API calls.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: extractTicketRef (--ticket flag > HELIX_TICKET_ID env > positional arg), matchTicket (by internal ID, shortId, numeric number)",
+        "src/types/api.ts (client) lines 105-121: LibraryItem has ticketId but not ticketShortId; LibraryItemDetail adds ticketShortId",
+        "Server tech research: recommends adding ticketShortId to library items list response"
+      ]
+    },
+    {
+      "answer": "'hlx library show <ref>' should fetch the full library item detail (including content) and render it as: (1) metadata header (title, status, version date), (2) section index showing heading slugs with comment counts (from the summary endpoint), (3) the full report markdown content output to stdout. This provides agents with the section slugs they need for --section flags in subsequent comment commands. The section index is a separate summary, not inline annotations in the markdown.",
+      "evidence": [
+        "Server API: GET /library/items/:itemId returns LibraryItemDetail with content; GET /library/items/:itemId/comments/summary returns per-anchor counts",
+        "Product use case: 'Agent runs hlx library show RSH-439 to see report headings with section slugs and comment counts'",
+        "CLI simplicity principle: terminal output should be grep-friendly; inline annotations make content harder to parse"
+      ]
+    }
+  ],
+  "statement": "The CLI needs a new src/library/ module (separate from src/comments/) with four commands following the established switch-based routing and module patterns. Library item resolution mirrors resolve-ticket.ts with cuid/shortId/title matching, requiring the server to include ticketShortId in the list response. 'hlx library show' outputs a metadata header + section index (slugs with comment counts) + full markdown content. Flag parsing uses existing getFlag/requireFlag utilities for --section and --rating.",
+  "followups": []
+}
