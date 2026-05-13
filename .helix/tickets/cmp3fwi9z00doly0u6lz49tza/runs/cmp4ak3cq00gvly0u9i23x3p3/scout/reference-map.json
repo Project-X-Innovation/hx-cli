@@ -1,0 +1,32 @@
+{
+  "problem": "helix-cli is the CLI tool that Helix agents use and is a target of the workflow pipeline. Its verification artifacts demonstrate how the current verification model works in practice. It has minimal direct architectural involvement in the proposed verification restructuring but contains concrete examples of the current verification plan/result pattern.",
+  "files": [
+    {
+      "path": "package.json",
+      "why": "Quality gates: tsc (build), tsc --noEmit (typecheck), node --test (test runner). Zero runtime dependencies. These are the checks that the verification step currently runs for this repo."
+    },
+    {
+      "path": ".helix/tickets/cmnpig1s90026k00u8ik6m0iq/runs/cmnpiptcg002jk00uz8u72215/verification/verification-actual.md",
+      "why": "Concrete example of current verification output: structured checks (CHK-01 through CHK-05), TypeScript compilation, build testing, CLI timeout behavior, error handling, retry behavior. Demonstrates the CHK-based verification pattern in practice."
+    },
+    {
+      "path": ".helix/tickets/cmnpig1s90026k00u8ik6m0iq/runs/cmnpiptcg002jk00uz8u72215/implementation-plan/implementation-plan.md",
+      "why": "Example of a Verification Plan that the verification step follows. Shows the Pre-conditions and Required Checks structure."
+    },
+    {
+      "path": ".helix/tickets/cmnpig1s90026k00u8ik6m0iq/runs/cmnpiptcg002jk00uz8u72215/implementation/implementation-actual.md",
+      "why": "Example of implementation self-verification output. Shows how the implementation step records Verification Plan Results."
+    }
+  ],
+  "facts": [
+    "helix-cli is a zero-runtime-dependency CLI tool. Its quality gates are: tsc (build), tsc --noEmit (typecheck), node --test (native test runner).",
+    "Existing verification artifacts in this repo use the CHK-01 through CHK-05 ID pattern with Action, Expected Outcome, and evidence collection.",
+    "helix-cli has no web UI — it is a command-line tool. Browser-based verification/demo concepts from the ticket do not apply directly to this repo.",
+    "The repo contains CodeTour (intraview) walkthrough JSON files demonstrating the code tour pattern used for implementation walkthroughs.",
+    "The repo's verification example includes blocked checks (CHK-04, CHK-05) due to missing dependencies — demonstrating the verification_broken outcome path."
+  ],
+  "unknowns": [
+    "Whether helix-cli would need changes to support new workflow step types (e.g., a demo step) if the pipeline is restructured.",
+    "Whether the CLI serves as the agent orchestration tool that would need to be aware of per-step verification layers."
+  ]
+}
