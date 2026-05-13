@@ -1,0 +1,26 @@
+{
+  "questions": [
+    "Q1: Should library commands be a new module or extend the existing comments module?",
+    "Q2: How should library item references be resolved in the CLI?"
+  ],
+  "answers": [
+    {
+      "answer": "A1: A new src/library/ module with nested subcommands. Library items are a distinct domain — they need list/show/comments subcommands separate from ticket comments. The existing comments module is hard-coupled to --ticket flag and ticket API endpoints. A new module follows the same structural pattern (index.ts router, subcommand files, flag parsing) but routes to /api/library/* endpoints.",
+      "evidence": [
+        "src/index.ts: switch-based routing with separate modules per domain (tickets, comments, inspect, skill)",
+        "src/comments/index.ts: router dispatches to list.ts and post.ts using ticketId — not extensible to library without breaking changes",
+        "src/tickets/index.ts: ticket commands follow list/get/create pattern — library module follows the same structure"
+      ]
+    },
+    {
+      "answer": "A2: Library items should be resolvable by: (1) Library item ID (cuid), (2) ticket short ID (e.g., 'RSH-439') which maps to the latest library item for that ticket, (3) partial title match as a fallback. A new resolve-library-item.ts utility follows the resolve-ticket.ts pattern: first try exact ID, then try short ID via the /api/library/items?ticketId= endpoint (already exists), then fallback to listing items and matching by title substring.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: accepts internal ID, short ID, or ticket number — same multi-strategy pattern",
+        "Client api/library.ts L38-47: libraryItemByTicketQueryOptions uses /library/items?ticketId= — server already supports ticket-based lookup",
+        "Ticket description: agents need programmatic access — stable IDs and human-readable short IDs are both important"
+      ]
+    }
+  ],
+  "statement": "The CLI requires a new src/library/ module with list, show, and comments (list/post) subcommands following the existing module pattern. Section targeting uses --section with heading slugs. Rating uses --rating with human-readable values (thumbs-up, love, thumbs-down). Item resolution supports ID, ticket short ID, and title match. SKILL.md must document all new commands for agent discoverability. All commands depend on server API endpoints.",
+  "followups": []
+}
