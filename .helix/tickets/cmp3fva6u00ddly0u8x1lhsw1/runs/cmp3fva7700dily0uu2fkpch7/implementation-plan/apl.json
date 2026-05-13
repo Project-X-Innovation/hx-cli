@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "What is the correct implementation sequence for the CLI library module?",
+    "How should library item resolution work?",
+    "What SKILL.md updates are needed?"
+  ],
+  "answers": [
+    {
+      "answer": "The sequence is: (1) resolve-library-item utility, (2) list command, (3) show command, (4) comments commands (list + post), (5) module router, (6) main router integration, (7) SKILL.md update, (8) quality gate. Resolution utility first because all commands depend on it. Commands before router so the router has functions to import. Main router last so the module is complete before wiring.",
+      "evidence": [
+        "src/comments/index.ts: module router imports from individual command files",
+        "src/index.ts: main router imports from module index.ts",
+        "src/lib/resolve-ticket.ts: utility imported by command files"
+      ]
+    },
+    {
+      "answer": "Library item resolution mirrors resolve-ticket.ts with three-strategy matching: exact cuid, ticket short ID (case-insensitive), title substring (case-insensitive). Requires the server to include ticketShortId in the GET /library/items response (server step 8 adds this).",
+      "evidence": [
+        "src/lib/resolve-ticket.ts: extractTicketRef + matchTicket with priority matching",
+        "Server tech research: listItems endpoint enhanced with ticketShortId join",
+        "Client types/api.ts line 120: LibraryItemDetail already has ticketShortId"
+      ]
+    },
+    {
+      "answer": "SKILL.md needs a Library section in the command table with 4 commands (list, show, comments list, comments post), flag documentation (--section, --rating with value mappings), and an agent workflow example showing the discover-read-post feedback loop.",
+      "evidence": [
+        "skill-content/SKILL.md: command table at lines 31-50 to extend",
+        "Product spec: agent discoverability is critical; agents read SKILL.md",
+        "Tech research: specific SKILL.md content and workflow example defined"
+      ]
+    }
+  ],
+  "statement": "CLI implementation follows an 8-step sequence: resolve-library-item utility, then 4 command files, then module router, main router integration, SKILL.md update, and quality gate. All code follows established patterns from the comments module and resolve-ticket.ts. The SKILL.md update is critical for agent discoverability. Item resolution uses three-strategy matching (cuid > shortId > title) and depends on the server including ticketShortId in the list response.",
+  "followups": []
+}
