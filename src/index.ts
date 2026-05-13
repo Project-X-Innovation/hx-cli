@@ -11,6 +11,7 @@ import { runTickets } from "./tickets/index.js";
 import { getPackageVersion } from "./update/version.js";
 import { runUpdate, checkAutoUpdate } from "./update/index.js";
 import { runSkill } from "./skill/index.js";
+import { runLibrary } from "./library/index.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -87,6 +88,12 @@ try {
     case "comments": {
       const config = configOrHelp(args.slice(1));
       await runComments(config, args.slice(1));
+      break;
+    }
+
+    case "library": {
+      const config = configOrHelp(args.slice(1));
+      await runLibrary(config, args.slice(1));
       break;
     }
 
