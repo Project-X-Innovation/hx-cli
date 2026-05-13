@@ -1,0 +1,28 @@
+{
+  "questions": [
+    "What is the module structure for the new CLI library commands?",
+    "How does library item resolution work across multiple reference formats?",
+    "What commands and flags does the CLI need for library comments?",
+    "What needs to be added to SKILL.md for agent discoverability?"
+  ],
+  "answers": [
+    {
+      "answer": "New src/library/ module with 6 files: index.ts (router dispatching to list, show, comments), list.ts, show.ts, comments.ts (nested router dispatching to comments-list, comments-post), comments-list.ts, comments-post.ts. Plus src/lib/resolve-library-item.ts utility. Follows the exact pattern of src/comments/ (router -> cmd* functions).",
+      "evidence": ["src/comments/index.ts (module router pattern)", "tech-research/tech-research.md (CLI) Module Structure section"]
+    },
+    {
+      "answer": "Three strategies with priority: (1) cuid — if input starts with 'c' and is 25 chars, use as item ID directly; (2) ticket short ID — if matches /^[A-Z]+-\\d+$/ (e.g., RSH-439), resolve via API to find latest library item for that ticket; (3) title match — fallback to case-insensitive title substring match on all items.",
+      "evidence": ["src/lib/resolve-ticket.ts (parallel resolution pattern)", "tech-research/tech-research.md (CLI) Item Resolution section"]
+    },
+    {
+      "answer": "4 commands: hlx library list (no flags), hlx library show <ref> (optional --full), hlx library comments list <ref> (optional --section <slug>), hlx library comments post <ref> --section <slug> --rating <value> [message]. Rating accepts thumbs-up/love/thumbs-down with shorthands up/down/love. Section flag auto-slugifies text input containing spaces or uppercase.",
+      "evidence": ["tech-research/tech-research.md (CLI) Commands section", "product/product.md essential feature #9"]
+    },
+    {
+      "answer": "A new ## Library section in skill-content/SKILL.md documenting all 4 commands with flag descriptions, ref resolution, and rating values. This is critical because agents read SKILL.md to discover available CLI capabilities.",
+      "evidence": ["skill-content/SKILL.md (148 lines, no Library section)", "tech-research/tech-research.md (CLI) SKILL.md Update section"]
+    }
+  ],
+  "statement": "Complete CLI feature gap: no library module exists. Implementation plan covers 9 ordered steps: resolve-library-item utility, module router, 4 command files, main dispatcher integration, and SKILL.md update. Follows established src/comments/ module pattern exactly. All commands non-interactive, use standard flag parsing via src/lib/flags.ts.",
+  "followups": []
+}
