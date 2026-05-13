@@ -121,3 +121,22 @@ I'm open to hearing push back. I'm open to hearing an alternate perspective but 
 
 ## Attachments
 - (none)
+
+## Discussion
+- **Usher** (2026-05-12T23:52:13.547Z) [Helix]: @Helix also keep in mind: can I see comments on previous iterations? How does that work?
+- **Helix** (2026-05-12T23:52:30.428Z) [Agent]: Great question — and it's one of the most compelling arguments *for* the git-based approach.
+
+Since every iteration of a report would be a commit (or a versioned file) in the repository, comments from previous rounds would naturally live alongside that version of the content. Here's how that could play out:
+
+**Each iteration is preserved**
+Round 1 of a report + its comments exist as a snapshot in git history. Round 2 is a new version, but the old one — with all its thumbs up/down and inline feedback — is always reachable. You never lose the context of *why* things changed.
+
+**Tracing the evolution**
+You could see not just what changed between iterations, but *what people said* that drove those changes. "Why did this section get rewritten?" → look at Round 1's comments. It becomes a living editorial trail.
+
+**A few things to think through:**
+- **Where do comments live?** If they're in a sidecar file (e.g., `report-v1.comments.md`), browsing history is clean and the report stays pristine. If they're inline with anchors, you see everything in one place but the file gets noisier.
+- **Do comments carry forward?** When you kick off Round 2, do unresolved comments from Round 1 automatically surface, or do they stay pinned to that version? There's a case for both — some feedback is addressed and closed, some is ongoing.
+- **CLI/MCP access** could let an agent say: "Here's what changed from v1 to v2, and here's the feedback that drove it" — essentially auto-generating a change rationale from the comment history.
+
+The git model handles iteration history almost for free — the main design decision is whether comments are version-locked (they belong to that snapshot) or persistent (they follow the topic across rounds).

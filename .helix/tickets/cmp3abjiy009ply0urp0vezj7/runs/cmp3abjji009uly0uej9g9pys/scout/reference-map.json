@@ -1,0 +1,64 @@
+{
+  "problem": "The CLI has comment commands for tickets (hlx comments list/post) but no library commands at all. The ticket requires CLI and MCP access for library feedback — reading/posting section-level ratings and comments on library items, viewing other people's comments, and triggering iteration rounds.",
+  "files": [
+    {
+      "path": "src/comments/index.ts",
+      "why": "Existing comment command router: list and post subcommands for ticket comments. Reference pattern for library comment CLI commands."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Lists ticket comments with --helix-only and --since filters. GET /api/tickets/{ticketId}/comments. Reference for library comment listing."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Posts a comment to a ticket. POST /api/tickets/{ticketId}/comments with { content }. Reference for library comment posting."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point with switch routing: login, token, org, tickets, comments, inspect, skill, update. No 'library' command. Extension point to add library subcommand."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client with API key / bearer auth, retry logic (3 attempts, exponential backoff), 30s timeout. All API calls route through this."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Multi-org config management. ~/.hlx/config.json with HELIX_API_KEY / HELIX_URL env fallbacks."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Flag parsing utilities: getFlag(), hasFlag(), isHelpRequested(). Used by all command modules."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket reference resolution: accepts ID, short ID, or ticket number. Comments module uses this. Library commands would need similar resolution for library items."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Bundled skill documentation for agent integration. Documents all CLI operations. Would need update with library commands."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Ticket command module: list, get, create, continue, rerun. Reference for library command structure."
+    },
+    {
+      "path": "package.json",
+      "why": "Minimal deps: TypeScript, @types/node only. Scripts: build (tsc), dev (tsx watch), typecheck, lint."
+    }
+  ],
+  "facts": [
+    "CLI uses a custom router pattern (switch statement in src/index.ts), not commander or yargs. No external CLI framework dependency.",
+    "Comment commands exist for tickets only: hlx comments list [--ticket <ref>] [--helix-only] [--since <iso>] and hlx comments post [--ticket <ref>] <message>.",
+    "No library command module exists — src/library/ directory does not exist.",
+    "Ticket reference resolution (resolve-ticket.ts) accepts internal ID, short ID (e.g. BLD-339), or ticket number. Library items would need similar resolution.",
+    "SKILL.md documents all CLI operations for agent integration (hlx skill show/install). New library commands must be added here for MCP/agent access.",
+    "HTTP client supports both API key (hxi_ prefix) and Bearer token auth with X-Helix-Org-ID header.",
+    "Each command module follows a consistent pattern: index.ts (router + usage), subcommand files (list.ts, post.ts, etc.), flag parsing via lib/flags.ts."
+  ],
+  "unknowns": [
+    "Whether library comment CLI commands should be a subcommand of a new 'library' module (hlx library comments ...) or extend the existing 'comments' module with a --library flag.",
+    "How section-level targeting works in CLI — whether users specify a heading slug, line range, or copy-paste the section text.",
+    "Whether the CLI needs a 'library list' and 'library show' command before comments can be targeted.",
+    "How rating (thumbs up/down/love) is expressed in CLI — flag-based (--rating thumbs-up), positional argument, or emoji shorthand."
+  ]
+}
