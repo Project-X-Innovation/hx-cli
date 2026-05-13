@@ -140,3 +140,16 @@ You could see not just what changed between iterations, but *what people said* t
 - **CLI/MCP access** could let an agent say: "Here's what changed from v1 to v2, and here's the feedback that drove it" — essentially auto-generating a change rationale from the comment history.
 
 The git model handles iteration history almost for free — the main design decision is whether comments are version-locked (they belong to that snapshot) or persistent (they follow the topic across rounds).
+- **Usher** (2026-05-12T23:53:29.400Z) [Helix]: We are also not beholden to a UI or CLI interface that exactly mirrors the way it is stored in Git. We can be creative in how the CLI and UI access the information, just putting that out there. These can be two separate questions.
+- **Helix** (2026-05-12T23:53:43.599Z) [Agent]: Absolutely — that's an important distinction and it opens things up a lot.
+
+The *storage format* in git (anchors, sidecar files, structured markdown, whatever ends up being the cleanest) doesn't have to dictate the *experience* of using it. The UI and CLI can both be thoughtful, opinionated interfaces that translate the underlying data into whatever feels best for that surface.
+
+For example:
+- **In the UI** — you highlight a sentence, click a thumbs down, type a note, and it feels like commenting in a Google Doc. Under the hood it's writing to a structured file in git, but you'd never know.
+- **In the CLI/MCP** — you might say `helix comment --section "Introduction" --reaction thumbs-down "wrong level of abstraction"` or even just paste a section and react to it in natural language. The agent figures out the anchor and writes it correctly.
+- **In a coding agent** — the agent reads the comment file, understands the feedback structure, and uses it as rich context for the next run — without caring at all how it was originally entered.
+
+So the git format can be optimized for *durability, portability, and machine-readability*, while each interface is optimized for *the human or agent using it*. They're separate design problems. That's a smart way to frame it.
+
+Does that mean you want the research to focus more on what the ideal storage/anchoring format looks like in git, and treat the UI/CLI as a separate follow-on question?

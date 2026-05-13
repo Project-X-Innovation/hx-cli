@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Q1: Should library comments be a subcommand of a new 'library' module or extend the existing 'comments' module?",
+    "Q2: How should section-level targeting work in the CLI?",
+    "Q3: What CLI commands are needed for the library comment workflow?"
+  ],
+  "answers": [
+    {
+      "answer": "A1: A new 'library' command module (src/library/) with nested subcommands is the right approach. Library items are a distinct domain from tickets — they need their own list/show/comments commands. This mirrors the existing ticket/comments separation and keeps the CLI intuitive: 'hlx library list', 'hlx library show', 'hlx library comments list', 'hlx library comments post'. The existing 'comments' module stays ticket-scoped.",
+      "evidence": [
+        "src/index.ts: switch router with separate modules per domain (tickets, comments, inspect, skill)",
+        "src/tickets/index.ts: ticket commands follow list/get/create/continue/rerun pattern — library should follow similar structure",
+        "src/comments/index.ts: comments module is hard-coupled to --ticket flag"
+      ]
+    },
+    {
+      "answer": "A2: Section targeting should use the heading slug (e.g., --section 'key-findings') derived from the same slugification that rehype-slug uses. The CLI should also support --section-text for fuzzy matching by pasting/quoting section content. For agents/MCP, the section slug is the primary programmatic anchor. A 'hlx library show' command should display section headings with their slugs to make targeting discoverable.",
+      "evidence": [
+        "rehype-slug generates deterministic slugs from heading text (e.g., 'Key Findings' → 'key-findings')",
+        "Ticket description: 'you can just kind of copy and paste the section that you want and say, Oh I didn't like that and here's why'",
+        "Ticket discussion: CLI/MCP example 'helix comment --section Introduction --reaction thumbs-down wrong level of abstraction'"
+      ]
+    },
+    {
+      "answer": "A3: Required commands: (1) hlx library list — list library items, (2) hlx library show <itemRef> — display report with section headings/slugs and comment summaries, (3) hlx library comments list <itemRef> [--section <slug>] — list comments with optional section filter, (4) hlx library comments post <itemRef> --section <slug> --rating <thumbs-up|love|thumbs-down> [message] — post section feedback. The --rating flag uses human-readable values. SKILL.md must document all new commands for agent access.",
+      "evidence": [
+        "src/comments/post.ts: posts via POST /api/tickets/{ticketId}/comments with { content } — library equivalent needs anchor + rating fields",
+        "src/comments/list.ts: lists via GET with filters — library equivalent needs section filter",
+        "skill-content/SKILL.md: documents all CLI operations for agent integration"
+      ]
+    }
+  ],
+  "statement": "The CLI has no library commands. A new src/library/ module is needed with list, show, and comments subcommands following the existing command module pattern (switch router, flag parsing, HTTP client). Section targeting uses heading slugs (--section flag) consistent with rehype-slug anchoring. Rating uses a --rating flag with readable values. SKILL.md must be updated for agent/MCP discoverability. All commands depend on server API endpoints being implemented first.",
+  "followups": []
+}
