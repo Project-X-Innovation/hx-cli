@@ -1,0 +1,65 @@
+{
+  "problem": "The CLI has no library module. Users and agents cannot list library items, view reports with section anchors, or post section-level feedback via the command line. A new src/library/ module is needed with list, show, comments list, and comments post commands. SKILL.md needs a Library section for agent discoverability.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI dispatcher (lines 66-124). Switch-case routing for top-level commands. A new 'library' case must be added alongside 'comments', 'tickets', etc."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Pattern reference: Comment module router. Dispatches to cmdCommentsList and cmdCommentsPost based on subcommand. Library module follows identical pattern."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Pattern reference: Comment list command. Fetches from /api/tickets/{ticketId}/comments, formats output. Library comments list follows same fetch+format pattern."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Pattern reference: Comment post command. Collects message from positional args, POSTs to API. Library comments post adds --section and --rating flags."
+    },
+    {
+      "path": "src/tickets/continue.ts",
+      "why": "Continuation command (46 lines). Posts to /api/tickets/{ticketId}/rerun with continuationContext. Research report says library comments should be auto-included in continuations."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket resolution utility: extractTicketRef() for arg parsing, matchTicket() for ID/shortId/number matching, resolveTicket() for API-backed resolution. A parallel resolve-library-item.ts is needed for library item resolution."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Custom flag parsing: getFlag(), hasFlag(), getPositionalArgs(), requireFlag(). Library commands use same utilities for --section, --rating, --helix-only flags."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client: hxFetch() with auth headers (hxi_ API key or Bearer token), retry logic, timeout. Library commands use same client with basePath: '/api'."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "HxConfig type with apiKey, url, orgId. Loaded via loadConfig(). Library commands receive config from parent router."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Agent skill documentation. Lists all available commands. No Library section exists. Must be updated with library list, show, comments list, comments post documentation."
+    },
+    {
+      "path": "package.json",
+      "why": "Build: 'tsc'. Typecheck: 'tsc --noEmit'. Test: 'tsc && node --test dist/**/*.test.js'. Pure TypeScript with no bundler."
+    }
+  ],
+  "facts": [
+    "CLI uses switch-case routing in src/index.ts. Each top-level command has a runX() function imported from its module.",
+    "Module pattern: src/{domain}/index.ts exports runX(config, args) which dispatches to cmd* functions based on subcommand.",
+    "Flag parsing is custom (src/lib/flags.ts): getFlag(args, flag) returns value, hasFlag(args, flag) returns boolean, getPositionalArgs filters non-flag args.",
+    "HTTP client (src/lib/http.ts): hxFetch(config, path, options) with basePath (default '/api/inspect', library uses '/api'), auth headers, retry with backoff.",
+    "Ticket resolution (src/lib/resolve-ticket.ts): Supports internal ID, short ID (XXX-NNN), and numeric ticket number. Library item resolution needs similar multi-format support.",
+    "No library module exists in src/. No library-related code in any existing module.",
+    "SKILL.md (148 lines) has sections: Guardrails, Environment Setup, Available Commands, Common Workflows, Flag Conventions. No Library section.",
+    "Continue command (src/tickets/continue.ts) sends continuationContext string to POST /api/tickets/{ticketId}/rerun. Currently requires non-empty context text.",
+    "Comments module supports --ticket flag and HELIX_TICKET_ID env var for ticket reference resolution. Library module will use similar pattern with --item flag or positional ref."
+  ],
+  "unknowns": [
+    "Should resolve-library-item.ts resolve by library item cuid, ticket short ID (then find latest library item), or item title? The research report specifies all three strategies.",
+    "The hxFetch basePath defaults to '/api/inspect'. Library commands need '/api' basePath. The comments module already uses basePath: '/api' — confirm this is the established pattern for non-inspect endpoints.",
+    "Should 'hlx library show' fetch and render the full markdown content from the API, or just metadata with section headings? Full content display in terminal may need formatting (e.g., truncation, heading extraction)."
+  ]
+}
