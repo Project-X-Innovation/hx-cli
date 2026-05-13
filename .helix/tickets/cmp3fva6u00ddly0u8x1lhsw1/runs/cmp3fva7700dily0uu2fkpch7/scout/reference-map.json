@@ -1,0 +1,62 @@
+{
+  "problem": "Implement a new 'hlx library' CLI module with commands for listing library items, showing reports with section annotations, and posting/listing section-level comments. Requires new src/library/ module, resolve-library-item utility, and SKILL.md update for agent discoverability. This is Phase 2b (parallel with client).",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI router (129 lines). Switch-based command dispatch. Must add 'library' case importing and calling a new runLibrary function. Pattern: lines 87-90 (comments case) shows config loading and subcommand delegation."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Existing comments module router (53 lines). Pattern reference for the new library module: subcommand switch, help handling, configOrHelp usage, ticket resolution. Library module follows the same shape but with library-specific resolution."
+    },
+    {
+      "path": "src/comments/list.ts",
+      "why": "Pattern reference for cmdList implementation. Shows hxFetch usage, response formatting, flag parsing."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Pattern reference for cmdPost implementation. Shows hxFetch POST, message extraction from args."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket resolution utility (128 lines). Pattern reference for resolve-library-item.ts. Shows extractTicketRef, matchTicket (by ID, shortId, numeric number), and resolveTicket API call pattern."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch) with retry, timeout, backoff. All new library commands use this for API calls."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Flag parsing utilities (getFlag, isHelpRequested). New commands will use --section, --rating flags."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Config types (HxConfig) and loading (requireConfig, loadConfig). All commands receive HxConfig."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Agent skill documentation. Must add Library section documenting hlx library list, show, comments list, comments post commands. Lines 31-50 show the command table that needs new entries."
+    },
+    {
+      "path": "package.json",
+      "why": "Build: 'tsc'. Typecheck: 'tsc --noEmit'. Test: 'tsc && node --test dist/**/*.test.js'. No new dependencies needed."
+    }
+  ],
+  "facts": [
+    "CLI uses switch-based routing in src/index.ts. Each command has its own module directory (comments/, inspect/, tickets/, org/, etc.).",
+    "No src/library/ directory exists yet. This is a net-new module.",
+    "HTTP client: hxFetch in src/lib/http.ts with retry (3 attempts), timeout (30s), exponential backoff.",
+    "Flag parsing: getFlag for named flags (--ticket, --section, --rating), isHelpRequested for --help/-h.",
+    "Ticket resolution pattern: extractTicketRef (--ticket flag > HELIX_TICKET_ID env > positional arg), then resolveTicket API call to /tickets endpoint. Library item resolution will be similar but against /library/items endpoint.",
+    "Build output goes to dist/. Entry point: dist/index.js. Package is @projectxinnovation/helix-cli v1.3.2.",
+    "SKILL.md is at skill-content/SKILL.md (not src/skill/). It's a markdown file with agent guidance, command tables, and workflow examples.",
+    "Existing 'hlx comments' module handles ticket-level comments. Library comments are a separate domain with different API endpoints (/library/items/:itemId/comments), different flags (--section, --rating), and different resolution (library item ID vs ticket ID).",
+    "CLI rating flag values: thumbs-up/up, love, thumbs-down/down. Maps to server values: THUMBS_UP, LOVE, THUMBS_DOWN.",
+    "No test files exist for the existing comments module. New library module tests would follow the resolve-ticket.test.ts pattern."
+  ],
+  "unknowns": [
+    "Whether the library list endpoint returns enough data for item resolution (shortId-based resolution requires knowing the ticket shortId, then finding the latest library item for that ticket).",
+    "Exact output formatting for 'hlx library show <ref>' - whether it fetches full report content via the API or just metadata with section headings.",
+    "Whether the CLI needs to render section annotations inline in the terminal output or just list sections with comment counts separately."
+  ]
+}
