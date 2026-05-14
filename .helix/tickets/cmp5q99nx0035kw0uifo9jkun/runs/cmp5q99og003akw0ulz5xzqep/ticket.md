@@ -21,18 +21,5 @@ There is a bit of an oversight. Currently the build process requires that a repo
 
 Second of all even for code repos why not just take a staging branch off main? Why do we need to have a user manually do this?
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### FIX-441: Implement: Library System Architecture Checkup
-- Mode: FIX | Status: DEPLOYED
-- Completed runs: 1 (run-1)
-- Materialized files: 15 artifacts
-- Path: `.helix-refs/FIX-441/`
-- Manifest: `.helix-refs/FIX-441/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - image.png (image/png, 197767 bytes)
