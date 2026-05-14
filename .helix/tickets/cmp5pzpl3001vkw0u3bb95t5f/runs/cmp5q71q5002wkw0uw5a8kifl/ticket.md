@@ -23,19 +23,6 @@ Well at least the right amount of detail right? They should see every ticket. Ri
 
 To manage cost as well as audit, they need to be able to audit the things to see where that went and I want to be very transparent.
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### BLD-434: Implement: Client token usage
-- Mode: BUILD | Status: DEPLOYED
-- Completed runs: 2 (run-1, run-2)
-- Materialized files: 58 artifacts
-- Path: `.helix-refs/BLD-434/`
-- Manifest: `.helix-refs/BLD-434/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - (none)
 
