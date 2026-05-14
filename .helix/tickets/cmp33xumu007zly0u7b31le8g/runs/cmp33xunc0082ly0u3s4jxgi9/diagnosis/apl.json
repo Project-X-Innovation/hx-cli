@@ -1,0 +1,48 @@
+{
+  "questions": [
+    "What is the current version in package.json and where exactly is it declared?",
+    "Are there other files besides package.json that contain a hardcoded version string '1.3.2'?",
+    "Does the publish workflow depend on the version being in a specific location or format?",
+    "Are there any release metadata files (CHANGELOG, README, release notes) that must stay in sync with the version?",
+    "Does any source code contain a hardcoded version string that would need updating?"
+  ],
+  "answers": [
+    {
+      "answer": "package.json line 3 declares \"version\": \"1.3.2\". This is the sole authoritative version source for the package.",
+      "evidence": [
+        "Direct read of package.json confirms line 3: \"version\": \"1.3.2\"",
+        "Package name is @projectxinnovation/helix-cli"
+      ]
+    },
+    {
+      "answer": "package-lock.json contains '1.3.2' on lines 3 and 9. No other repo files outside .helix/ artifacts contain the version string.",
+      "evidence": [
+        "Direct read of package-lock.json lines 3 and 9 both show \"version\": \"1.3.2\"",
+        "Grep for '1.3.2' across the entire repo confirmed only package.json, package-lock.json, and .helix/ ticket artifacts contain the string"
+      ]
+    },
+    {
+      "answer": "The publish workflow (.github/workflows/publish.yml lines 30-38) strips the 'v' prefix from the Git tag and compares it to the version read dynamically from package.json via node -p. No changes to the workflow are needed; it reads package.json at runtime.",
+      "evidence": [
+        "Direct read of .github/workflows/publish.yml lines 32-38: TAG_VERSION=\"${GITHUB_REF_NAME#v}\" compared to PKG_VERSION=$(node -p \"require('./package.json').version\")"
+      ]
+    },
+    {
+      "answer": "No CHANGELOG, README, or other release metadata files exist in the repo. No additional metadata synchronization is required.",
+      "evidence": [
+        "Glob for **/CHANGELOG* returned no files",
+        "Glob for **/README* returned no files",
+        "Scout reference-map.json confirms: \"No CHANGELOG, README, or other release metadata files exist in the repo.\""
+      ]
+    },
+    {
+      "answer": "No source code contains a hardcoded version string. src/update/version.ts reads the version dynamically from package.json at runtime via getPackageVersion(). skill-content/ files reference --version as a CLI flag but do not embed a specific version number.",
+      "evidence": [
+        "Direct read of src/update/version.ts: reads package.json dynamically with readFileSync and JSON.parse",
+        "Scout reference-map.json: \"No version string '1.3.2' appears in any source (.ts) file — grep confirmed.\""
+      ]
+    }
+  ],
+  "statement": "The version bump from 1.3.2 to 1.3.3 requires changes to exactly two files: package.json (line 3) and package-lock.json (lines 3 and 9). No other files in the repo contain hardcoded version references. The publish workflow reads the version dynamically and requires no changes. No release metadata files exist. The change is minimal and self-contained.",
+  "followups": []
+}
