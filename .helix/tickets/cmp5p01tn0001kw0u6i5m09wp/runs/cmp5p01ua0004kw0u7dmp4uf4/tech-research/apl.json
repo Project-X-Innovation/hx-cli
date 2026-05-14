@@ -1,0 +1,53 @@
+{
+  "questions": [
+    "What is the correct mechanism for pushing a Git tag from a GitHub Actions workflow so that it triggers the existing tag-push publish workflow?",
+    "What version extraction method is most appropriate for the auto-tag workflow — jq, node -p, or shell parsing?",
+    "Should the tag existence check query the remote or local tags?",
+    "Should the workflow trigger on every push to main or only when package.json changes?",
+    "What actions/checkout version should the new workflow use?"
+  ],
+  "answers": [
+    {
+      "answer": "The auto-tag workflow must use a PAT or GitHub App installation token (not the default GITHUB_TOKEN) when checking out the repo. GitHub Actions documentation explicitly states: 'When using the repository's GITHUB_TOKEN to perform tasks, events triggered by this token will not create a new workflow run, with the exception of workflow_dispatch and repository_dispatch events.' Passing the PAT via the actions/checkout token parameter persists the credential in the local git config, so subsequent git push operations use it. Events from PAT-authenticated pushes DO trigger other workflows.",
+      "evidence": [
+        "GitHub Actions docs (Context7 /websites/github_en_actions): 'events triggered by [GITHUB_TOKEN] will not create a new workflow run' except workflow_dispatch/repository_dispatch",
+        "GitHub Actions docs (Context7): 'use a GitHub App installation access token or a personal access token instead of GITHUB_TOKEN' to trigger workflows from workflows",
+        "actions/checkout docs (Context7 /actions/checkout): token parameter defaults to github.token; 'The PAT is configured with the local git config, which enables your scripts to run authenticated git commands'",
+        "diagnosis/apl.json answer 3: confirmed GITHUB_TOKEN limitation with same evidence"
+      ]
+    },
+    {
+      "answer": "Use jq for version extraction. jq is pre-installed on all GitHub-hosted ubuntu-latest runners, does not require actions/setup-node, and is purpose-built for JSON field extraction. The command is: jq -r .version package.json. The alternative (node -p \"require('./package.json').version\") works but requires Node.js to be available, which is unnecessary overhead for the auto-tag workflow. The publish.yml workflow uses the node -p pattern, but that workflow already needs Node for npm operations.",
+      "evidence": [
+        "publish.yml line 34: uses node -p pattern in context of existing Node setup",
+        "GitHub-hosted runners documentation: jq is pre-installed on ubuntu-latest",
+        "package.json line 3: version is a simple string field ('1.3.3') — no complex parsing needed"
+      ]
+    },
+    {
+      "answer": "Check remote tags using 'git ls-remote --tags origin refs/tags/v$VERSION'. This queries the remote directly without requiring tag fetching (fetch-tags: true). It is the most authoritative check since the remote is the source of truth for whether the tag exists. It avoids any discrepancy between local and remote tag state, and works with the default fetch-depth: 1 shallow clone.",
+      "evidence": [
+        "actions/checkout defaults to fetch-depth: 1 and fetch-tags: false — local tags are not available after checkout",
+        "git ls-remote queries the remote directly using the authenticated credentials from checkout"
+      ]
+    },
+    {
+      "answer": "Trigger on every push to main without path filtering. The ticket states 'On a push to main, inspect the root package.json version in the pushed commit' — this implies unconditional triggering. The idempotency check (tag exists → skip) makes non-version-bump runs essentially free (< 30 seconds). Path filtering (paths: ['package.json']) would add a condition that could miss edge cases and adds complexity for negligible savings.",
+      "evidence": [
+        "ticket.md line 55: 'On a push to main, inspect the root package.json version in the pushed commit'",
+        "ticket.md line 58: 'If the push does not include a version bump, do nothing' — implies the workflow runs and makes the determination itself",
+        "The workflow is 3 shell commands (jq, git ls-remote, git tag/push) — negligible cost for no-op runs"
+      ]
+    },
+    {
+      "answer": "Use actions/checkout@v4 to match the existing publish.yml workflow version. This maintains consistency within the repository's CI configuration. The latest version is v6, but upgrading checkout versions is out of scope for this ticket (ticket says 'avoid redesigning beyond what is necessary'). The fetch-tags and token parameters needed are available in v4.",
+      "evidence": [
+        "publish.yml line 16: uses actions/checkout@v4",
+        "Context7 /actions/checkout docs: v4 supports token parameter and fetch-tags",
+        "ticket.md: 'The implementation must be simple and avoid redesigning the release process beyond what is necessary'"
+      ]
+    }
+  ],
+  "statement": "The auto-tag workflow is a single new YAML file (.github/workflows/auto-tag.yml) that triggers on every push to main, reads the version from package.json via jq, checks the remote for an existing tag via git ls-remote, and creates/pushes v<version> when absent. The critical technical constraint is that the default GITHUB_TOKEN cannot be used for the tag push because GitHub Actions suppresses downstream workflow triggers from GITHUB_TOKEN events. A PAT or GitHub App token stored as a repository secret (RELEASE_TOKEN) must be passed to the actions/checkout token parameter so the tag push triggers the existing publish.yml. The workflow uses actions/checkout@v4 for consistency with publish.yml, requires no Node.js setup, and adds no dependencies beyond the repository secret.",
+  "followups": []
+}
