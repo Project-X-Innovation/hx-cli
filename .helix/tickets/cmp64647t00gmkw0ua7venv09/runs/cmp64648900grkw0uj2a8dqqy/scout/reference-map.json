@@ -1,0 +1,68 @@
+{
+  "problem": "Map the helix-cli's role in the Helix Core Infrastructure — how it serves as both a user-facing tool and an in-sandbox agent tool.",
+  "files": [
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point — dispatches to subcommands: login, token, inspect, comments, org, tickets, skill, update."
+    },
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Ticket creation command — demonstrates the API contract for creating tickets with mode (AUTO/BUILD/FIX/RESEARCH/EXECUTE), repos, and description."
+    },
+    {
+      "path": "src/tickets/rerun.ts",
+      "why": "Rerun/continue command — POST /api/tickets/{id}/rerun with optional continuationContext. Shows how continuation runs are triggered."
+    },
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Artifact listing command — shows how step artifacts are retrieved and displayed."
+    },
+    {
+      "path": "src/inspect/db.ts",
+      "why": "Database inspection command — read-only SQL queries against production databases. Used by agents for runtime evidence."
+    },
+    {
+      "path": "src/inspect/logs.ts",
+      "why": "Log inspection command — search application logs. Used by agents for runtime debugging."
+    },
+    {
+      "path": "src/inspect/api.ts",
+      "why": "API inspection command — read-only API endpoint calls."
+    },
+    {
+      "path": "src/comments/post.ts",
+      "why": "Comment posting command — agents use this to respond to @Helix comments in ticket discussions."
+    },
+    {
+      "path": "src/skill/install.ts",
+      "why": "Skill installation command — deploys bundled SKILL.md to agent directories."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client — RESTful communication with helix-global-server, retry logic (3 attempts, exponential backoff), auth headers."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Configuration management — ~/.hlx/config.json with multi-org support, token storage, auto-update settings."
+    },
+    {
+      "path": "package.json",
+      "why": "Package metadata — published as @projectxinnovation/helix-cli, zero runtime dependencies, binary 'hlx'."
+    }
+  ],
+  "facts": [
+    "The CLI binary is 'hlx' — installed globally via npm as @projectxinnovation/helix-cli.",
+    "The CLI is installed INSIDE the Vercel Sandbox as a dependency of sandbox-runtime-assets/workflow-steps/package.json (@projectxinnovation/helix-cli ^1.2.0).",
+    "Inside the sandbox, hlx is symlinked to PATH at /home/vercel-sandbox/.local/bin/hlx by the orchestrator's configureInspectionForStep function.",
+    "Agents use hlx for runtime inspection: 'hlx inspect db' for SQL queries, 'hlx inspect logs' for log searches, 'hlx inspect api' for API calls.",
+    "Agents use 'hlx comments post' to respond to user comments tagged with @Helix.",
+    "The CLI authenticates via HELIX_INSPECT_TOKEN and HELIX_INSPECT_BASE_URL environment variables when running inside a sandbox, or via ~/.hlx/config.json for user-facing usage.",
+    "The CLI has zero runtime dependencies — only TypeScript as a dev dependency. All HTTP communication is done with Node.js built-in fetch.",
+    "Ticket references can be specified as internal ID, short ID (e.g., BLD-339), or ticket number (e.g., 339).",
+    "The CLI supports multi-org context switching with org current/list/switch commands."
+  ],
+  "unknowns": [
+    "Whether the CLI's skill install command is used by the orchestrator during sandbox setup or only by external users.",
+    "The full content of the bundled SKILL.md and what capabilities it advertises to external agents."
+  ]
+}
