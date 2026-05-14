@@ -1,0 +1,36 @@
+{
+  "title": "Auto-tag Release Workflow",
+  "description": "Walkthrough of the new GitHub Actions workflow that automatically creates and pushes a Git tag when a version bump is merged to main.",
+  "steps": [
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 1,
+      "title": "Workflow trigger and permissions",
+      "description": "The workflow triggers on every push to main (no path filter). Permissions are set to contents:read for the GITHUB_TOKEN (least privilege). The actual tag write uses the PAT."
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 15,
+      "title": "Checkout with PAT",
+      "description": "Uses actions/checkout@v4 with secrets.RELEASE_TOKEN (a PAT). This is critical: GITHUB_TOKEN-initiated events don't trigger downstream workflows, so the PAT makes the tag push appear as an external event that triggers publish.yml."
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 20,
+      "title": "Version extraction with fail-closed handling",
+      "description": "Reads version from package.json using jq. Uses set -euo pipefail for strict mode, plus an explicit check for empty or 'null' values. If version can't be read, the step exits non-zero (fail-closed)."
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 31,
+      "title": "Remote tag existence check (idempotency)",
+      "description": "Queries the remote via git ls-remote to check if the tag already exists. This is authoritative and works with shallow clones (default fetch-depth: 1). If the tag exists, outputs exists=true and the next step is skipped."
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 44,
+      "title": "Conditional tag creation and push",
+      "description": "Only runs when the tag doesn't exist (if: steps.check-tag.outputs.exists == 'false'). Creates the tag at HEAD and pushes it to origin. The PAT credentials from checkout enable the push and ensure the tag event triggers publish.yml."
+    }
+  ]
+}
