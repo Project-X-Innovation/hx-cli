@@ -1,0 +1,74 @@
+{
+  "problem": "The resolveTicket() function in src/lib/resolve-ticket.ts only fetches active tickets from GET /api/tickets (no query params). It never requests archived tickets (queryParams.archived = 'true'). Commands that route through resolveTicket (get, update-description, rerun, continue, artifacts, artifact, bundle, comments list, comments post) therefore fail with 'not found' for archived ticket references, even though the server can return archived ticket data.",
+  "files": [
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Primary fix target. Contains resolveTicket() (line 83-127) which calls hxFetch(config, '/tickets', { basePath: '/api' }) at line 89 without archived query param. Also contains matchTicket() (line 44-77), the pure matching function that works on whatever items it receives. The ambiguity check at lines 102-121 also only considers the single active-tickets list."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Existing test file with tests for matchTicket() and extractTicketRef(). No tests for resolveTicket() itself (it requires mocking hxFetch). New tests for archived resolution and cross-set ambiguity detection must be added here."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "hxFetch() utility used by resolveTicket(). Already supports queryParams option (line 40-49). The archived ticket API call pattern is: hxFetch(config, '/tickets', { basePath: '/api', queryParams: { archived: 'true' } }). This is the same pattern used by list.ts and latest.ts."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Command router for tickets subcommands. Lines 66, 85, 96, 107, 118, 129, 140 call resolveTicket() for get, update-description, rerun, continue, artifacts, artifact, and bundle commands respectively. These are all affected by the resolver's active-only limitation. No changes expected here since the fix is in the shared resolver."
+    },
+    {
+      "path": "src/comments/index.ts",
+      "why": "Command router for comments subcommands. Lines 32 and 43 call resolveTicket() for list and post commands respectively. Affected by the same resolver limitation."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Boundary file: shows the established API pattern for fetching archived tickets. Line 43-44: if (hasFlag(args, '--archived')) { queryParams.archived = 'true'; }. This command does NOT use resolveTicket and must remain unchanged."
+    },
+    {
+      "path": "src/tickets/latest.ts",
+      "why": "Boundary file: also shows the --archived flag pattern at line 24-25. Does NOT use resolveTicket and must remain unchanged."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Downstream command after resolution. Line 47 shows the direct ticket endpoint: hxFetch(config, `/tickets/${ticketId}`, { basePath: '/api' }). The TicketDetail type (line 6-22) includes isArchived: boolean. The server already returns archived ticket details by ID."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines HxConfig type (line 13-20) used as parameter to resolveTicket(). Contains orgName (used in error messages at lines 119, 124 of resolve-ticket.ts)."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Utility module for flag parsing. Used by resolve-ticket.ts (getFlag at line 3). No changes expected."
+    },
+    {
+      "path": "package.json",
+      "why": "Build and quality gate scripts: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js). Zero runtime dependencies. Node >=18."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config: strict mode, ES2022 target, Node16 modules. Compilation to dist/."
+    }
+  ],
+  "facts": [
+    "resolveTicket() (src/lib/resolve-ticket.ts:83-127) fetches only from GET /api/tickets with no query params, returning only active tickets.",
+    "The API supports an 'archived=true' query parameter on GET /api/tickets, as demonstrated by list.ts:43-44 and latest.ts:24-25.",
+    "hxFetch() already supports queryParams option (src/lib/http.ts:40-49), so no http-layer changes are needed.",
+    "matchTicket() (src/lib/resolve-ticket.ts:44-77) is a pure function operating on any items array. It supports three ref forms: exact internal ID, case-insensitive short ID, and numeric ticket number.",
+    "resolveTicket() is called from 9 command sites: tickets get (line 66), update-description (85), rerun (96), continue (107), artifacts (118), artifact (129), bundle (140) in src/tickets/index.ts, and comments list (32) and post (43) in src/comments/index.ts.",
+    "The ambiguity detection logic in resolveTicket() (lines 102-121) re-scans the same active-only items array, meaning it cannot detect numeric ambiguity between an active ticket and an archived ticket.",
+    "tickets list and tickets latest do NOT use resolveTicket() — they call hxFetch('/tickets', ...) directly with their own query params. They must remain unaffected.",
+    "tickets create does NOT use resolveTicket() — it creates new tickets.",
+    "The TicketDetail type in get.ts includes 'isArchived: boolean' (line 22), confirming the server already models archived state.",
+    "Existing tests cover matchTicket() and extractTicketRef() only — there are no integration-level tests for resolveTicket() itself.",
+    "The test runner is Node's built-in test runner (node --test). Tests require tsc compilation first.",
+    "The repo has zero runtime dependencies (devDependencies only: @types/node, typescript). No test mocking library is available; mocks must use node:test's built-in mock support."
+  ],
+  "unknowns": [
+    "Whether GET /api/tickets?archived=true returns ONLY archived tickets or BOTH active and archived tickets. list.ts uses it as a toggle, which suggests it returns only archived tickets when set to 'true'.",
+    "Whether the API supports a single call to get both active and archived tickets simultaneously, or if two separate calls are required.",
+    "The exact server-side behavior when downstream endpoints (rerun, continue, etc.) are called with an archived ticket ID — ticket says these should surface real server errors, but the actual error shapes are unknown.",
+    "Whether there is a rate limit or performance concern with making two parallel API calls (active + archived) during resolution.",
+    "Whether node:test's mock.method or mock.fn is available in the project's minimum Node 18 target for mocking hxFetch in resolveTicket() tests."
+  ]
+}

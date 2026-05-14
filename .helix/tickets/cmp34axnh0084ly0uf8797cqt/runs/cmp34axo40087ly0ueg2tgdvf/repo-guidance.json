@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "The bug is entirely within src/lib/resolve-ticket.ts in this repository. The resolveTicket() function fetches only active tickets and needs to also fetch archived tickets. The fix is localized to this file and its test file. No other repositories are involved."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
