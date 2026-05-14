@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-435: Bump helix-cli package version from 1.3.2 to 1.3.3",
+  "description": "This tour walks through the metadata-only version bump of @projectxinnovation/helix-cli from 1.3.2 to 1.3.3. Only two files were modified — package.json and package-lock.json — using `npm version 1.3.3 --no-git-tag-version` to atomically update both. The change enables a v1.3.3 Git tag to trigger the existing GitHub Actions publish workflow, which dynamically reads the version from package.json at runtime and validates it against the tag. All quality gates (typecheck, build) passed after the bump, and no stale version references remain in source, config, or workflow files.",
+  "steps": [
+    {
+      "file": "package.json",
+      "line": 3,
+      "description": "This is the single authoritative version declaration for the package. It was changed from '1.3.2' to '1.3.3'. The GitHub Actions publish workflow (.github/workflows/publish.yml) reads this value dynamically at runtime via `node -p \"require('./package.json').version\"` and compares it to the pushed Git tag. The CLI runtime also reads it dynamically through src/update/version.ts:getPackageVersion(). Because no source file hardcodes the version string, this one-line change is the only edit needed in package.json.",
+      "title": "Overview: Version field — the authoritative source"
+    },
+    {
+      "file": "package-lock.json",
+      "line": 3,
+      "description": "package-lock.json contains the version in two places. This is the first: the top-level 'version' field on line 3, which represents the root package metadata. It was updated from '1.3.2' to '1.3.3' by the `npm version` command atomically alongside package.json. Keeping this in sync prevents npm from emitting integrity warnings and ensures reproducible installs.",
+      "title": "Lockfile root entry — first version location"
+    },
+    {
+      "file": "package-lock.json",
+      "line": 9,
+      "description": "The second version occurrence in package-lock.json is inside the 'packages' map entry (keyed as the empty string ''), which describes the root workspace package. Both this entry and line 3 must agree on the version; the `npm version` command updates them together atomically. Independent verification confirmed both lines show '1.3.3' after the bump.",
+      "title": "Lockfile package entry — second version location"
+    },
+    {
+      "file": ".helix/tickets/cmp33xumu007zly0u7b31le8g/runs/cmp33xunc0082ly0u3s4jxgi9/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The diagnosis phase confirmed that a repo-wide grep for '1.3.2' returned matches only in package.json, package-lock.json, and .helix/ ticket artifacts — nothing in .ts source files, workflow YAML, or documentation. The publish workflow reads the version dynamically, src/update/version.ts reads it dynamically, and no CHANGELOG or README embeds the version string. This justified a strictly minimal two-file diff with no source or workflow changes.",
+      "title": "Diagnosis: Why only two files needed changing"
+    },
+    {
+      "file": ".helix/tickets/cmp33xumu007zly0u7b31le8g/runs/cmp33xunc0082ly0u3s4jxgi9/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "The implementation plan chose `npm version 1.3.3 --no-git-tag-version` as the preferred approach because it atomically updates both package.json and package-lock.json in a single operation, eliminating any risk of the two files diverging. The plan mandated two quality gates after the bump: `npm run typecheck` (tsc --noEmit) and `npm run build` (tsc), both of which must exit with code 0. Both passed, confirming the metadata-only change introduced no regressions.",
+      "title": "Implementation plan: Atomic bump strategy and quality gates"
+    },
+    {
+      "file": ".helix/tickets/cmp33xumu007zly0u7b31le8g/runs/cmp33xunc0082ly0u3s4jxgi9/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "Independent code review validated all five acceptance criteria for BLD-435: (1) package.json declares version 1.3.3, (2) package-lock.json declares 1.3.3 in both locations, (3) no stale '1.3.2' references remain in any publishable file, (4) `npm run typecheck` exits 0 with no errors, (5) `npm run build` exits 0 with no errors. No issues were found, no fixes were required, and the repo is ready for a v1.3.3 Git tag to trigger the existing publish workflow. This is a clean, minimal, correctly scoped patch release bump.",
+      "title": "Summary: Code review confirms all acceptance criteria met"
+    }
+  ]
+}

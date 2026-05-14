@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "The only repository in scope. Version bump from 1.3.2 to 1.3.3 is needed in package.json and package-lock.json. No cross-repo dependencies or changes required."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}
