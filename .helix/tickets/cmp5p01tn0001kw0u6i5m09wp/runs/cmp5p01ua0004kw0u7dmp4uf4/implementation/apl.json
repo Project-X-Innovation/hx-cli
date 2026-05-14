@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "What is the exact workflow YAML structure needed for auto-tagging on main push?",
+    "Does the new workflow file break any existing quality gates (typecheck, build, test)?",
+    "Is publish.yml unchanged after implementation?"
+  ],
+  "answers": [
+    {
+      "answer": "The workflow file .github/workflows/auto-tag.yml was created with: name 'Auto-tag release', trigger on push to branches [main] (no path filter), permissions contents:read, a single job 'auto-tag' on ubuntu-latest with 4 steps: (1) checkout with actions/checkout@v4 using secrets.RELEASE_TOKEN PAT, (2) read version via jq -r .version package.json with set -euo pipefail and explicit empty/null check, (3) check existing tag via git ls-remote --tags origin with conditional output, (4) create and push tag only when check-tag.outputs.exists == 'false'.",
+      "evidence": [
+        ".github/workflows/auto-tag.yml: Lines 1-52, full file content verified via Read",
+        "YAML lint passed: npx yaml-lint exit code 0",
+        "Structural validation passed: python3 script confirmed all 14 required patterns present"
+      ]
+    },
+    {
+      "answer": "No. All three quality gates pass with exit code 0: typecheck (tsc --noEmit), build (tsc), and test (tsc && node --test dist/**/*.test.js — 51 tests, 0 failures). The new file is YAML in .github/workflows/ and is not in the TypeScript compilation scope.",
+      "evidence": [
+        "npm run typecheck: exit code 0",
+        "npm run build: exit code 0",
+        "npm test: exit code 0, 51 pass, 0 fail"
+      ]
+    },
+    {
+      "answer": "Yes, publish.yml is completely unchanged. It was never modified — only a new file was added. SHA-256 checksum confirmed: cc6c36ec8f3a67582153eefc8abce265f06094ee084ecdd72e2d8d40d9e50081.",
+      "evidence": [
+        "sha256sum .github/workflows/publish.yml output confirmed",
+        "Only file created: .github/workflows/auto-tag.yml; no edits to existing files"
+      ]
+    }
+  ],
+  "statement": "Implementation complete. A single new file .github/workflows/auto-tag.yml was created that triggers on push to main, reads the package.json version via jq with fail-closed error handling (set -euo pipefail + explicit empty/null check), checks for an existing tag via git ls-remote (remote-authoritative, works with shallow clone), and creates/pushes v<version> only when absent. The workflow uses actions/checkout@v4 with secrets.RELEASE_TOKEN PAT to enable downstream publish.yml triggering. Permissions are set to contents:read (least-privilege GITHUB_TOKEN scope). All quality gates pass (typecheck, build, 51/51 tests). publish.yml is unchanged.",
+  "followups": []
+}

@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single repository in scope. The automation gap (missing auto-tag workflow) and the fix (new .github/workflows/auto-tag.yml) are both within helix-cli. No cross-repo dependencies exist — this is a pure TypeScript CLI tool with self-contained GitHub Actions workflows."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

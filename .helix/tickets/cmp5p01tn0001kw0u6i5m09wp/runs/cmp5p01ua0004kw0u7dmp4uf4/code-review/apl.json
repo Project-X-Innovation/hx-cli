@@ -1,0 +1,42 @@
+{
+  "questions": [
+    "Does the auto-tag workflow correctly implement all ticket requirements (trigger, version extraction, idempotency, fail-closed, PAT usage)?",
+    "Are there any correctness bugs or edge cases in the shell logic (set -euo pipefail + grep -q in if conditions, race conditions)?",
+    "Is publish.yml unchanged and are all quality gates passing?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The workflow triggers on push to main (no path filter), reads version via jq with explicit empty/null check and set -euo pipefail, checks tag existence via git ls-remote (remote-authoritative, works with shallow clone), creates/pushes tag only when absent (if condition on check-tag output), and uses actions/checkout@v4 with secrets.RELEASE_TOKEN PAT to enable downstream publish.yml triggering. Permissions are set to contents:read (least-privilege GITHUB_TOKEN scope). All acceptance criteria, non-negotiable invariants, and failure behaviors are correctly implemented.",
+      "evidence": [
+        ".github/workflows/auto-tag.yml lines 1-53: full file reviewed",
+        "Trigger: lines 3-6 (push to branches [main])",
+        "Permissions: lines 8-9 (contents: read)",
+        "PAT checkout: lines 15-18 (actions/checkout@v4 with secrets.RELEASE_TOKEN)",
+        "Version extraction + fail-closed: lines 20-30 (jq + set -euo pipefail + empty/null check)",
+        "Tag existence check: lines 32-43 (git ls-remote + grep -q with conditional output)",
+        "Tag create/push: lines 45-52 (conditional on exists == false, set -euo pipefail)"
+      ]
+    },
+    {
+      "answer": "No bugs found. The set -euo pipefail + grep -q pattern inside the if condition (line 37) is correct because bash set -e is explicitly exempt for commands in if test expressions. When the tag does not exist, grep -q exits 1, the if evaluates to false, and execution correctly routes to the else branch setting exists=false. Race conditions between concurrent pushes are handled safely: the second git push fails if the first already created the tag (fail-closed). A transient git ls-remote failure would cause the workflow to attempt tag creation, but git push would also fail in that scenario, maintaining fail-closed behavior.",
+      "evidence": [
+        "Line 35: set -euo pipefail in check-tag step",
+        "Line 37: if git ls-remote ... | grep -q — bash set -e exempt in if conditions per POSIX spec",
+        "Lines 45-52: set -euo pipefail in create-and-push step ensures git push failure aborts the step",
+        "Line 46: if condition (exists == 'false') gates tag creation"
+      ]
+    },
+    {
+      "answer": "Yes. publish.yml is confirmed unchanged (63 lines, same content as pre-implementation). All quality gates pass independently verified: npm run typecheck (exit 0), npm run build (exit 0), npm test (exit 0, 51/51 pass). YAML lint of auto-tag.yml also passes.",
+      "evidence": [
+        ".github/workflows/publish.yml: 63 lines unchanged, triggers on push tags v*",
+        "npm run typecheck: exit code 0",
+        "npm run build: exit code 0",
+        "npm test: exit code 0, 51 pass, 0 fail",
+        "npx yaml-lint .github/workflows/auto-tag.yml: YAML Lint successful"
+      ]
+    }
+  ],
+  "statement": "Code review complete. The single new file .github/workflows/auto-tag.yml (53 lines) was reviewed against all ticket requirements, acceptance criteria, non-negotiable invariants, and product spec success criteria. No issues found. The workflow correctly triggers on push to main, reads version via jq with fail-closed error handling, checks for existing tags via git ls-remote (remote-authoritative), and creates/pushes v<version> only when absent. PAT usage via actions/checkout token parameter enables downstream publish.yml triggering. Shell strict mode (set -euo pipefail) is applied in all steps. Idempotency is correctly implemented. All quality gates pass independently verified (typecheck, build, 51/51 tests). publish.yml is unchanged. No code changes made by review.",
+  "followups": []
+}

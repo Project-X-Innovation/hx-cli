@@ -1,0 +1,43 @@
+{
+  "questions": [
+    "What is the minimum set of implementation steps needed to create the auto-tag workflow?",
+    "What verification checks can be performed in the sandbox without GitHub Actions runtime?",
+    "Are there any dependencies between the steps that affect ordering?",
+    "Does the implementation require any changes to existing files?"
+  ],
+  "answers": [
+    {
+      "answer": "Two steps: (1) Create the new .github/workflows/auto-tag.yml file with the complete workflow definition, and (2) validate that existing quality gates still pass. The first step is the only code-producing step. The second is validation-only.",
+      "evidence": [
+        "tech-research/tech-research.md: 'New file: .github/workflows/auto-tag.yml; Modified files: None'",
+        "diagnosis/diagnosis-statement.md: 'Create a single new workflow file (.github/workflows/auto-tag.yml)'",
+        "ticket.md: 'Add or refactor GitHub Actions in helix-cli to detect a version bump on main'"
+      ]
+    },
+    {
+      "answer": "YAML syntax validation, file structure inspection, quality gates (typecheck, build, test), diff verification that publish.yml is unchanged, and static inspection of error handling and idempotency logic. Actual workflow execution requires a GitHub Actions runner with a push-to-main event, which cannot be simulated in the sandbox.",
+      "evidence": [
+        "package.json scripts: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js)",
+        "The workflow file is YAML — syntax can be validated with python3 yaml or similar tools",
+        "publish.yml is read-only per ticket requirements — diff verification confirms no changes"
+      ]
+    },
+    {
+      "answer": "Step 2 (quality gate validation) depends on Step 1 completing, since npm install must succeed before running typecheck/build/test. However, since Step 1 only adds a YAML file (not TypeScript), the quality gates are expected to pass without any dependency on the new file.",
+      "evidence": [
+        "package.json scripts only process TypeScript files in src/ and dist/",
+        "The new file is .github/workflows/auto-tag.yml — not in the TypeScript compilation scope"
+      ]
+    },
+    {
+      "answer": "No. The implementation is purely additive — one new file. publish.yml must remain unchanged. package.json is read-only (version source of truth). No other files are touched.",
+      "evidence": [
+        "ticket.md: 'The publish workflow must remain tag-triggered'",
+        "diagnosis/apl.json: 'Purely additive. publish.yml must not be modified'",
+        "tech-research/tech-research.md summary table: 'Modified files: None'"
+      ]
+    }
+  ],
+  "statement": "The implementation plan consists of two sequential steps: (1) create .github/workflows/auto-tag.yml — a GitHub Actions workflow that triggers on push to main, reads the package.json version via jq, checks for an existing tag via git ls-remote, and creates/pushes v<version> using a PAT (RELEASE_TOKEN secret) to enable downstream publish.yml triggering; and (2) validate quality gates (typecheck, build, test) still pass. The plan is purely additive with no modifications to existing files. Verification covers YAML syntax validation, structural correctness, quality gates, publish.yml immutability, error handling inspection, and idempotency logic inspection.",
+  "followups": []
+}
