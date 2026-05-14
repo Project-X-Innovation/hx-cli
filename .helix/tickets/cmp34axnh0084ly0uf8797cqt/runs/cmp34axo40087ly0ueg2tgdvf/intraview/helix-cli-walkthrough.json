@@ -1,0 +1,73 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Fix: Resolve Archived Ticket References in hlx CLI",
+  "description": "This tour walks through the fix for a bug where the `resolveTicket()` function in `src/lib/resolve-ticket.ts` only fetched active tickets from the API, causing all 9 commands that route through this shared resolver to report 'ticket not found' for any archived ticket reference. The fix adds a sequential (lazy) fetch strategy — active tickets first, archived fallback on miss — plus combined cross-set numeric ambiguity detection and an optional dependency-injection parameter for testability. No callers were modified; the change is fully backward-compatible.",
+  "steps": [
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 1,
+      "description": "This file contains `resolveTicket()`, the shared resolver used by all 9 ticket-related commands (tickets get, update-description, rerun, continue, artifacts, artifact, bundle, comments list, comments post). Before this fix, line 89 called `hxFetch(config, '/tickets', { basePath: '/api' })` with no query parameters, returning only active tickets. Archived ticket refs always fell through to a 'not found' error. The entire fix is localized here and in the test file — no callers needed to change.",
+      "title": "Overview: The Single Root Cause"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 83,
+      "description": "An optional third parameter `options?: { fetchFn?: typeof hxFetch }` was added to `resolveTicket()`. This enables dependency injection of a mock fetch function in tests without requiring `mock.module` (which was confirmed unavailable in Node 24.14.1 during tech research). All 9 existing call sites pass only 2 arguments, so backward compatibility is fully preserved. When `options.fetchFn` is not provided, the real `hxFetch` is used via a default assignment.",
+      "title": "Updated resolveTicket() Signature — DI Parameter"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 89,
+      "description": "The first API call still fetches only active tickets — `hxFetch(config, '/tickets', { basePath: '/api' })` with no `queryParams`. This preserves the original fast path: if the user's ref matches an active ticket, the function returns immediately without making a second network request. This active-first priority is intentional; it ensures active tickets always win over archived tickets with the same numeric number.",
+      "title": "Step 1: Fetch Active Tickets First (Lazy Strategy)"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 98,
+      "description": "The existing `matchTicket(items, ref)` pure function is called unchanged on the active-only items array. For exact ID or short ID matches, a result here causes an immediate return — critically, this early return happens BEFORE any archived fetch. For numeric matches from the active set, the code does NOT return immediately; instead it falls through to the cross-set ambiguity check. This distinction (exact vs numeric early return) is the key correctness decision that satisfies AC#9 (cross-set numeric ambiguity).",
+      "title": "Step 2: Attempt Match Against Active Set"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 131,
+      "description": "When `matchTicket` returns null for the active set (or returns a numeric match that needs ambiguity validation), the code fetches archived tickets via `hxFetch(config, '/tickets', { basePath: '/api', queryParams: { archived: 'true' } })`. This mirrors the pattern already used by `tickets list` and `tickets latest`. Errors from the archived fetch are caught and re-thrown as distinct 'resolution failure' errors (not 'not found'), giving operators clear signal that the server was reachable but the archived fetch failed.",
+      "title": "Step 3: Archived Fallback Fetch on Active Miss"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 145,
+      "description": "After fetching both active and archived sets, the numeric ambiguity check runs over the combined array (active items concatenated with archived items). Previously, this check only scanned the active-only array, meaning a numeric ref matching one active and one archived ticket would NOT be flagged as ambiguous. Now, if more than one ticket across both sets matches the numeric ref, the resolver throws an ambiguity error. A single match across the combined set is returned. No match in either set produces the 'ticket not found' error.",
+      "title": "Step 4: Combined Cross-Set Ambiguity Detection"
+    },
+    {
+      "file": "src/lib/resolve-ticket.test.ts",
+      "line": 123,
+      "description": "Nine new test cases were added inside the existing `resolveTicket` describe block. They cover: resolving archived tickets by internal ID (AC#1), short ID (AC#2), and numeric number (AC#3); active ticket priority over archived when both match (AC#4 variant); cross-set numeric ambiguity detection (AC#9); archived fetch error producing a resolution-failure error distinct from not-found; and no-match-in-either-set producing the correct not-found error. Each test injects a `fetchFn` mock via `mock.fn()` from `node:test` that inspects `queryParams` to return the appropriate fixture data for active vs archived calls.",
+      "title": "New Tests: Archived Resolution Coverage"
+    },
+    {
+      "file": "src/lib/resolve-ticket.test.ts",
+      "line": 281,
+      "description": "The test suite runs 51 total tests: 42 existing tests (all passing unchanged) plus the 9 new tests. The 42 existing tests exercise the 9 caller commands and the pre-existing `matchTicket` and `resolveTicket` paths — their continued passage confirms the optional DI parameter introduction and the new archived fallback code path do not affect any active-ticket resolution behavior. Zero tests fail.",
+      "title": "Test Count Confirms No Regressions"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 66,
+      "description": "All 7 call sites in `src/tickets/index.ts` call `resolveTicket(config, rawRef)` with exactly 2 arguments — unchanged from before this fix. Because the new `options` parameter is optional with a safe default, each caller transparently gains archived ticket resolution without any modification. Downstream commands receive `resolved.id` and call the server by ID directly (e.g., `GET /api/tickets/${ticketId}`), which already worked for archived IDs; the only broken link was the resolution step, now fixed.",
+      "title": "Caller Confirmation: tickets get (unchanged)"
+    },
+    {
+      "file": "src/comments/index.ts",
+      "line": 32,
+      "description": "The 2 call sites in `src/comments/index.ts` are also unchanged, confirming the full set of 9 affected commands now silently gains archived resolution. No new `--archived` flags were added to any command; archive transparency is handled entirely within `resolveTicket()`. The `tickets list` and `tickets latest` commands were confirmed as boundary files — they call the API directly with their own `--archived` flag and do not use `resolveTicket()` at all, so they are unaffected.",
+      "title": "Caller Confirmation: comments list and comments post (unchanged)"
+    },
+    {
+      "file": "src/lib/resolve-ticket.ts",
+      "line": 167,
+      "description": "The complete resolved data flow is now: (1) fetch active tickets → (2) if exact ID/shortID match, return immediately; (3) if no active match, fetch archived tickets; (4) run combined ambiguity check over active + archived; (5) return single match or throw typed error (not-found vs ambiguous vs resolution-failure). All 10 acceptance criteria are satisfied, all 42 existing tests continue to pass, and the fix is fully contained in `src/lib/resolve-ticket.ts` and its test file with zero changes to callers or downstream commands.",
+      "title": "Summary: Clean Data Flow After Fix"
+    }
+  ]
+}
