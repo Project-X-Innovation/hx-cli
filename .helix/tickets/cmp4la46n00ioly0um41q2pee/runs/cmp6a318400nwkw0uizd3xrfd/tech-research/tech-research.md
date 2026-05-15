@@ -1,195 +1,137 @@
-# Tech Research: helix-cli (Phase 2b) — Library Commands
+# Tech Research: helix-cli — Library Commands (Run 3 Targeted Fix)
 
 ## Technology Foundation
 
 | Technology | Version | Purpose |
 |-----------|---------|---------|
-| TypeScript | tsc (no bundler) | Compilation; .js extension required in imports |
-| Node.js | ES2022 target | Runtime |
-| hxFetch | src/lib/http.ts | HTTP client with auth, retry, basePath |
-| Flag parsing | src/lib/flags.ts | getFlag, hasFlag, getPositionalArgs, requireFlag |
-| SKILL.md | skill-content/ | Agent discoverability documentation |
+| TypeScript | tsc (ES2022) | Compilation; strict mode |
+| Flag parsing | src/lib/flags.ts | `getFlag` (optional) vs `requireFlag` (mandatory) |
 
-No new npm dependencies required. Build is TypeScript-only (`tsc`).
+No new dependencies. Build is TypeScript-only (`tsc`).
 
 ## Architecture Decision
 
-### Module Structure: New src/library/ Module (not Extending Comments)
+### Fix: Rating Optional for Replies — Conditional Flag Requirement
 
 **Options Considered:**
 
 | Option | Description | Verdict |
 |--------|-------------|---------|
-| **A: New src/library/ module (chosen)** | Separate module with own router, resolution, and commands | Clean separation; distinct domain |
-| B: Extend comments module | Add `--library` flag to existing `hlx comments` | Conflates domains; awkward UX; different API endpoints and resolution |
+| **A: Conditional getFlag/requireFlag (chosen)** | Check --reply-to first; if present, use getFlag (optional) for --rating | Minimal change; follows flag utility semantics |
+| B: Always getFlag with manual validation | Use getFlag for --rating always, then manually check/error when top-level | Loses the `requireFlag` error message; more code |
+| C: New flag utility | Create `conditionalRequireFlag` | Over-engineering for one use case |
 
-**Chosen: A** — Library comments have distinct API endpoints (`/library/items/:itemId/comments` vs `/tickets/:ticketId/comments`), distinct resolution (library item vs ticket), and unique features (section anchoring, ratings). The `src/comments/index.ts` module router pattern (52 lines) is directly replicable for the new module.
+**Chosen: A** — The existing flag utilities provide the exact semantics needed. `requireFlag` prints an error and exits if the flag is missing. `getFlag` returns `undefined` if missing. The fix reads `--reply-to` first (already at line 36), then branches:
+- If `--reply-to` is present (reply mode): use `getFlag` for `--rating` — returns the value or `undefined`
+- If `--reply-to` is absent (top-level mode): use `requireFlag` for `--rating` — enforces presence
 
-### Item Resolution: 3-Strategy Adaptation
-
-**Options Considered:**
-
-| Option | Description | Verdict |
-|--------|-------------|---------|
-| **A: Client-side 3-strategy matching (chosen)** | Fetch library items list, match by cuid/shortId/title | Follows resolve-ticket.ts pattern; flexible |
-| B: Server-side resolution | Pass ref to server, let server resolve | Would require new server endpoints or query parameters |
-
-**Chosen: A** — Adapt the `resolve-ticket.ts` pattern (128 lines): fetch items list via `GET /library/items`, then match client-side using three strategies:
-1. **cuid**: Starts with 'c', 25 chars — exact `id` match
-2. **ticket shortId**: Matches `/^[A-Z]+-\d+$/` — find item where ticket shortId matches
-3. **title match**: Fallback — case-insensitive substring match on title
-
-### Nested Router: Library > Comments
-
-**Chosen:** `src/library/index.ts` dispatches to `list`, `show`, and `comments` subcommands. `src/library/comments.ts` is a nested router dispatching to `list` and `post`.
-
-```
-hlx library list              -> src/library/list.ts
-hlx library show <ref>        -> src/library/show.ts
-hlx library comments list <ref> -> src/library/comments-list.ts
-hlx library comments post <ref> -> src/library/comments-post.ts
-```
-
-This two-level routing follows the established pattern where `comments` is itself a dispatcher, mirroring how `src/comments/index.ts` dispatches to its own `list.ts` and `post.ts`.
+**Evidence:**
+- `comments-post.ts:29` — `requireFlag(args, "--rating", "...")` currently always requires
+- `comments-post.ts:36` — `const replyTo = getFlag(args, "--reply-to")` already reads the flag
+- `src/lib/flags.ts` — `getFlag` returns `string | undefined`; `requireFlag` returns `string` or exits
 
 ## Core API/Methods
 
-### Commands
+### Change in comments-post.ts
 
-| Command | API Call | Output |
-|---------|---------|--------|
-| `hlx library list` | `GET /library/items` | Table: ID, title, status, date |
-| `hlx library show <ref>` | `GET /library/items/:id` + `GET /library/items/:id/comments/summary` | Report headings with [slug] annotations and comment summaries |
-| `hlx library comments list <ref> [--section <slug>]` | `GET /library/items/:id/comments[?anchor=slug]` | Comments grouped by section with ratings, authors, text |
-| `hlx library comments post <ref> --section <slug> --rating <value> [message]` | `POST /library/items/:id/comments` | Confirmation with rating, section, and text |
-
-### Item Resolution Utility (src/lib/resolve-library-item.ts)
-
-Adapts the `resolve-ticket.ts` pattern:
-
+**Current flow (broken for replies):**
 ```
-extractLibraryItemRef(args) -> rawRef string
-resolveLibraryItem(config, rawRef) -> { id, title, ticketShortId }
+1. requireFlag(args, "--section", ...)  // always required ✓
+2. requireFlag(args, "--rating", ...)   // always required ✗ (should be optional for replies)
+3. getFlag(args, "--reply-to")          // optional ✓
+4. Build body with { anchor, rating, content?, parentCommentId? }
+5. POST to /library/items/:id/comments
 ```
 
-Resolution strategies:
-1. **cuid detection**: `/^c[a-z0-9]{24}$/` — direct ID lookup
-2. **ticket shortId**: `/^[A-Z]+-\d+$/` — match against item's ticket shortId
-3. **title fallback**: Case-insensitive substring match
+**Fixed flow:**
+```
+1. requireFlag(args, "--section", ...)           // always required ✓
+2. getFlag(args, "--reply-to")                   // read FIRST to determine mode
+3. IF reply mode: getFlag(args, "--rating")      // optional for replies
+   ELSE: requireFlag(args, "--rating", ...)      // required for top-level
+4. Build body:
+   - Always include: { anchor: section }
+   - Include rating ONLY if non-null
+   - Include content if present
+   - Include parentCommentId if reply mode
+5. POST to /library/items/:id/comments
+```
 
-### Section Targeting
+**Body construction update:**
+The body object currently always includes `rating` (line 44). When rating is `undefined` (reply without rating), it must be omitted from the body. The fix:
+- Build body starting with `{ anchor: section }`
+- Conditionally add `rating` only when it has a value
+- Server handles missing rating field correctly for replies (stores null)
 
-The `--section` flag supports two formats:
-- Raw slug: `--section key-findings` (used directly as anchor)
-- Heading text: `--section "Key Findings"` (auto-slugified: lowercase, spaces to hyphens, strip non-alphanumeric)
+### Validation of RATING_MAP when rating is provided
 
-Detection: if the value contains uppercase letters or spaces, slugify. Otherwise use as-is.
-
-### Rating Flag
-
-`--rating` accepts: `thumbs-up`, `up`, `thumbs-down`, `down`, `love`. Normalized to server values: `THUMBS_UP`, `THUMBS_DOWN`, `LOVE`.
-
-### Threading
-
-`--reply-to <commentId>` flag for posting replies to existing comments.
+When `--rating` IS provided (even for replies), it must still be validated against the RATING_MAP (lines 5-11). The validation logic (`if (!rating) { console.error(...); process.exit(1); }`) only runs when a raw rating string was provided. When rating is `undefined` (no flag), the validation is skipped entirely.
 
 ## Technical Decisions
 
-### 1. Resolution: Client-Side Matching
+### 1. Section Still Required for Replies
 
-**Chosen:** Fetch full library items list, then match client-side.
-**Rejected:** Server-side resolution endpoint (would require new API surface).
-**Rationale:** Consistent with resolve-ticket.ts pattern. Library item lists are small (typically <50 items per org). Network overhead of fetching the list is negligible vs. adding server-side resolution logic.
+**Chosen:** Keep `--section` as required even for replies.
+**Rationale:** Replies are always in the context of a section — they respond to a comment on a specific section. The server requires the `anchor` field for all comments. Removing the requirement would break the API contract.
 
-### 2. Section Slug Discovery via `show` Command
+### 2. No Changes to SKILL.md
 
-**Chosen:** `hlx library show` annotates headings with `[slug]` (e.g., `## Key Findings [key-findings] (2 comments: 1 thumbs-up, 1 love)`).
-**Rationale:** Agents need to discover valid `--section` values. Showing the slug inline with the heading makes it immediately usable in subsequent `comments post` commands.
+**Chosen:** SKILL.md remains as-is.
+**Rationale:** The existing documentation at lines 146-172 correctly describes the commands. The `--reply-to` flag is already documented. The change to make `--rating` optional for replies is a behavior refinement that doesn't require new documentation — agents using `--reply-to` will naturally omit `--rating` when posting conversational replies.
 
-### 3. Output Formatting: Simple Console (not JSON by default)
+### 3. No Changes for LOVE Icon/Naming
 
-**Chosen:** Human-readable console output with `padEnd`-based column alignment for tables and bracketed formatting for comments.
-**Rejected (deferred):** `--json` output flag — deferred to a future pass.
-**Rationale:** Agent discoverability (SKILL.md) is the primary concern. Text output is parseable by agents. JSON output is a nice-to-have but not MVP.
-
-### 4. SKILL.md Update: Critical for Agent Discoverability
-
-**Chosen:** Add a `## Library` section to SKILL.md's Available Commands table with all 4 command variants and flag descriptions.
-**Rationale:** Agents read SKILL.md to discover CLI capabilities. Without this update, the library feature is invisible to automated workflows. This is as important as the commands themselves.
-
-### 5. Import Paths: .js Extension Required
-
-**Chosen:** All imports use `.js` extensions (e.g., `import { cmdList } from "./list.js"`).
-**Rationale:** tsconfig targets ES2022 with module resolution that requires explicit extensions. This is the established pattern across all CLI source files.
+**Chosen:** No CLI changes for the LOVE icon update.
+**Rationale:** The CLI uses `love` as a flag value mapped to `LOVE` stored value (comments-post.ts:5-11). This is a data mapping, not a display concern. The icon change from heart to double thumbs up is a UI-only change in helix-global-client. The CLI's `love` flag value remains intuitive and correct.
 
 ## Cross-Platform Considerations
 
-- **Server API dependency**: CLI consumes the Phase 1 server API contract. All commands make HTTP calls via `hxFetch` with `basePath: '/api'`.
-- **Anchor contract**: Section slugs are generated by rehype-slug (server/client) and displayed via `hlx library show`. The CLI auto-slugifies heading text to match.
-- **Auth**: Uses existing `hxFetch` auth (X-API-Key for `hxi_` prefix tokens, Bearer for session tokens). No new auth mechanism needed.
+- **Server compatibility:** When `--reply-to` is present and `--rating` is absent, the POST body omits the `rating` field entirely. The server's Zod schema (`ratingSchema.optional()`) accepts this. The server's validation logic (`library-comment-service.ts:69-73`) only enforces rating for top-level comments (no `parentCommentId`).
+- **Client compatibility:** No interaction between CLI and client for this fix.
 
 ## Performance Expectations
 
-| Operation | Expected Behavior | Mechanism |
-|-----------|-------------------|-----------|
-| `hlx library list` | <500ms | Single API call to /library/items |
-| `hlx library show <ref>` | <1s | Item detail + summary API calls |
-| `hlx library comments list` | <500ms | Single API call with optional anchor filter |
-| `hlx library comments post` | <500ms | Single POST request |
-| Item resolution | <500ms | Fetch list + client-side matching |
+| Operation | Expected | Notes |
+|-----------|----------|-------|
+| `hlx library comments post --reply-to <id>` without `--rating` | <500ms | Same single POST request; no validation overhead |
 
 ## Dependencies
 
 | Dependency | Type | Risk |
 |-----------|------|------|
-| Server Phase 1 API contract | Cross-repo | Low — API shape defined in research report; CLI implements after server |
-| hxFetch HTTP client | Existing utility | None — established in src/lib/http.ts |
-| Flag parsing utilities | Existing utility | None — getFlag/hasFlag/requireFlag in src/lib/flags.ts |
-| resolve-ticket.ts pattern | Existing pattern | None — 128-line pattern adapted for library items |
-| comments/index.ts router | Existing pattern | None — 52-line router pattern directly replicable |
+| Server nullable rating support | API contract | None — server accepts missing rating for replies |
+| getFlag utility | Existing utility | None — already used at line 36 |
+| requireFlag utility | Existing utility | None — already used at line 29 |
 
 ## Deferred to Round 2
 
 | Feature | Why Deferred |
 |---------|-------------|
-| `--json` output flag | Output formatting layer; add in a future pass |
-| Interactive section selection (fzf) | Terminal UI library dependency |
-| Comment editing/deletion from CLI | Read and create are primary agent workflows |
-| SSE streaming in terminal | CLI is request-response; real-time is a UI concern |
-| `hlx library diff <ref1> <ref2>` | Cross-iteration comparison is a significant standalone feature |
+| `--json` output flag | Output formatting layer; future pass |
+| Error message clarity for reply mode | Current getFlag returns undefined silently; could add "posting reply without rating" info message |
 
 ## Summary Table
 
-| Aspect | Decision |
-|--------|----------|
-| Module structure | New src/library/ with own router (not extending comments) |
-| Item resolution | 3-strategy client-side matching (cuid, shortId, title) |
-| Section targeting | Raw slugs and auto-slugified heading text |
-| Routing | Two-level: library > [list, show, comments > [list, post]] |
-| Output | Human-readable console; --json deferred |
-| Agent discoverability | SKILL.md update (critical) |
-| Import convention | .js extensions required |
-| New files | 7 |
-| Modified files | 2 |
-| New dependencies | 0 |
+| Fix | Files Modified | Approach |
+|-----|---------------|----------|
+| Rating optional for replies | comments-post.ts (1 file) | Read --reply-to first; conditionally use getFlag vs requireFlag for --rating |
+| **Total** | **1 existing file** | **Minimal targeted fix** |
 
 ## APL Statement
 
-The CLI (Phase 2b) adds a new src/library/ module with 7 new files following the established comments module router pattern. Item resolution adapts the 3-strategy resolve-ticket.ts pattern for cuid/shortId/title matching. Section targeting supports both raw slugs and auto-slugified heading text. SKILL.md update is critical for agent discoverability. 7 new files, 2 modified files, no new dependencies.
+CLI needs 1 targeted fix: make --rating conditional in comments-post.ts. Read --reply-to first, then use getFlag (optional) instead of requireFlag (mandatory) for --rating when replying. When no --reply-to, keep requireFlag. No other CLI changes needed for the icon or nullable rating updates.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|-------------|
-| ticket.md (Research Report) | Primary specification | 9 CLI implementation steps, command formats, resolution strategies, SKILL.md update |
-| diagnosis/apl.json (cli) | Starting investigation context | No library commands exist; all patterns established |
-| diagnosis/diagnosis-statement.md (cli) | Root cause and scope | 7 new + 2 modified files; greenfield feature |
-| product/product.md (cli) | Product requirements | 8 essential features; agent-first discoverability; section targeting |
-| scout/reference-map.json (cli) | Key file identification | 11 files mapped; no library case in dispatcher |
-| scout/scout-summary.md (cli) | Codebase pattern analysis | Router, resolution, flag, output formatting patterns all established |
-| repo-guidance.json | Repo intent | CLI confirmed as Phase 2b target |
-| src/index.ts:72-124 | Direct code inspection | Switch dispatcher; no library case; comments pattern at 87-91 |
-| src/comments/index.ts:1-52 | Direct code inspection | Module router pattern with subcommand dispatch |
-| src/lib/resolve-ticket.ts | Pattern reference | 3-strategy resolution pattern to adapt |
-| src/lib/flags.ts | Utility reference | getFlag, hasFlag, getPositionalArgs, requireFlag available |
-| src/lib/http.ts | Utility reference | hxFetch with auth, retry, basePath |
+| ticket.md (Research Report) | Primary specification | Rating optional for replies when parentCommentId present |
+| ticket.md (Discussion) | User feedback | Known gaps including rating optionality |
+| diagnosis/apl.json (CLI) | Investigation context | One deviation: requireFlag for --rating when --reply-to present |
+| diagnosis/diagnosis-statement.md (CLI) | Root cause | requireFlag at line 29; getFlag at line 36; conditional logic needed |
+| product/product.md (CLI) | Product requirements | Reply without rating is essential for conversational thread replies |
+| scout/reference-map.json (CLI) | File inventory | Exact line numbers for flag usage |
+| repo-guidance.json | Repo intent | CLI is target with 1 fix |
+| comments-post.ts:1-58 | Direct inspection | Full file: RATING_MAP, requireFlag at 29, getFlag --reply-to at 36, body construction at 42-47 |
+| src/lib/flags.ts | Utility reference | getFlag returns string \| undefined; requireFlag exits on missing |
+| Server library-comment-service.ts:69-73 | Cross-repo validation | Rating required for top-level only (validation correct) |
