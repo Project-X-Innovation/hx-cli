@@ -1,247 +1,77 @@
-# Implementation Plan: helix-cli (Phase 2b) — Library Commands
+# Implementation Plan — helix-cli (Run 3 Targeted Fix)
 
 ## Overview
 
-Add a new `src/library/` module to helix-cli with commands for listing library items, showing reports with section annotations, listing comments, and posting section ratings. Also create a library item resolution utility and update SKILL.md for agent discoverability. This Phase 2b consumes the server API contract established in Phase 1.
+Run 3 targeted fix for the CLI library commands. All 7 new files and 2 modified files exist from prior runs and are structurally complete. One spec deviation needs fixing: `--rating` is required for all `comments post` invocations via `requireFlag`, but should be optional when `--reply-to` is present (reply comments are conversational, not ratings).
 
 ## Implementation Principles
 
-- **Follow established patterns**: Mirror the `src/comments/` module router, `resolve-ticket.ts` resolution utility, and `hxFetch` HTTP client patterns exactly.
-- **No new npm dependencies**: Build is TypeScript-only (`tsc`), no bundler.
-- **Agent-first discoverability**: SKILL.md update is critical — agents read it to discover CLI capabilities.
-- **Import conventions**: All imports use `.js` extensions (e.g., `import { x } from "./list.js"`), matching the established codebase convention.
-- **Distinct module**: Library commands have distinct API endpoints, resolution, and interaction patterns from ticket comments.
+- **Single targeted fix**: Modify only `comments-post.ts` — one file, ~10 lines changed.
+- **Follow existing flag utility semantics**: Use `getFlag` (optional) for reply mode, `requireFlag` (mandatory) for top-level mode.
+- **No new dependencies**: TypeScript-only build.
+- **Preserve all working functionality**: list, show, comments list, comments post (top-level) continue unchanged.
 
 ## Implementation Steps Summary
 
 | Step | Goal | Deliverable |
 |------|------|-------------|
-| 1 | Create item resolution utility | `src/lib/resolve-library-item.ts` |
-| 2 | Create module router | `src/library/index.ts` |
-| 3 | Create list command | `src/library/list.ts` |
-| 4 | Create show command | `src/library/show.ts` |
-| 5 | Create comments router | `src/library/comments.ts` |
-| 6 | Create comments list command | `src/library/comments-list.ts` |
-| 7 | Create comments post command | `src/library/comments-post.ts` |
-| 8 | Register in main dispatcher | `src/index.ts` updated |
-| 9 | Update SKILL.md | `skill-content/SKILL.md` updated |
+| L1 | Make --rating conditional in comments-post.ts | `src/library/comments-post.ts` updated |
+| L2 | Build verification | `tsc` passes |
 
 ## Detailed Implementation Steps
 
-### Step 1: Item Resolution Utility
+### Step L1: Make --rating conditional based on --reply-to
 
-**Goal**: Create a multi-format library item resolution utility.
-
-**What to Build**:
-- Create `src/lib/resolve-library-item.ts` adapting the `resolve-ticket.ts` pattern (128 lines).
-- `extractLibraryItemRef(args)`: extracts ref from positional args (first non-flag arg).
-- `resolveLibraryItem(config, rawRef)`: fetches `GET /library/items` via `hxFetch(config, "/library/items", { basePath: "/api" })`, then matches using 3 strategies:
-  1. **cuid**: `/^c[a-z0-9]{24}$/` — exact id match.
-  2. **ticket shortId**: `/^[A-Z]+-\d+$/` — match against item's ticket shortId (from LibraryItemDetail response).
-  3. **title fallback**: case-insensitive substring match on title.
-- Returns `{ id, title, ticketShortId }`.
-- Error handling: throw descriptive error if no match or multiple matches.
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- Resolution utility exports both functions.
-- `tsc` compiles without errors.
-
-### Step 2: Module Router
-
-**Goal**: Create the library module router dispatching to subcommands.
+**Goal**: When `--reply-to` is present, `--rating` becomes optional. When absent (top-level post), `--rating` remains required.
 
 **What to Build**:
-- Create `src/library/index.ts` following `src/comments/index.ts` pattern (52 lines).
-- `runLibrary(config, args)`:
-  - Parse subcommand from `args[0]`.
-  - Switch: `list` -> `cmdList`, `show` -> resolve item then `cmdShow`, `comments` -> resolve item then `runLibraryComments`.
-  - Usage function with help text for `hlx library list|show|comments`.
-  - Help flag detection.
+- Edit `src/library/comments-post.ts`:
+  1. Move the `--reply-to` flag read (currently line 36) BEFORE the `--rating` flag read (currently line 29)
+  2. Conditionally use `getFlag` vs `requireFlag` for `--rating`:
+     - If `replyTo` is truthy: `const ratingRaw = getFlag(args, "--rating");`
+     - If `replyTo` is falsy: `const ratingRaw = requireFlag(args, "--rating", "...");`
+  3. When `ratingRaw` exists, validate against RATING_MAP (existing logic, lines 30-34)
+  4. When `ratingRaw` is undefined (reply without rating), skip validation
+  5. Update body construction (lines 42-47):
+     - Only include `rating` in the body when it has a value
+     - Change from always setting `rating` to conditionally setting it:
+       ```
+       const body: Record<string, unknown> = { anchor: section };
+       if (rating) body.rating = rating;
+       if (content) body.content = content;
+       if (replyTo) body.parentCommentId = replyTo;
+       ```
+  6. Update the output message (line 55-57) to handle missing rating:
+     - Show `[reply]` instead of `[${ratingLabel}]` when no rating
 
 **Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
+- Read file to confirm changes
+- Run `npx tsc --noEmit` to verify TypeScript compilation
+- Test by examining the logic flow for both modes
 
 **Success Criteria**:
-- Router dispatches to list/show/comments.
-- `tsc` compiles.
+- `hlx library comments post <ref> --section <slug> --reply-to <id> "message"` works without `--rating`
+- `hlx library comments post <ref> --section <slug> --rating thumbs-up` still requires `--rating` for top-level
+- TypeScript compiles
 
-### Step 3: List Command
+---
 
-**Goal**: Create `hlx library list` to display library items.
+### Step L2: Build verification
 
-**What to Build**:
-- Create `src/library/list.ts`.
-- `cmdList(config, args)`:
-  - Fetch `GET /library/items` via `hxFetch(config, "/library/items", { basePath: "/api" })`.
-  - Display as table with columns: ID (truncated), Title, Status, Date.
-  - Use `padEnd`-based column alignment matching `src/tickets/list.ts` pattern.
-  - Handle empty list gracefully.
+**Goal**: Confirm the CLI builds cleanly.
+
+**What to Build**: No new code.
 
 **Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
+- Write the .env file from dev setup config
+- Run `npm install && npx tsc --noEmit` (or `npm run build` if configured)
+- Verify zero TypeScript errors
 
 **Success Criteria**:
-- List command outputs table format.
-- `tsc` compiles.
+- Build passes with zero errors
+- No regressions
 
-### Step 4: Show Command
-
-**Goal**: Create `hlx library show <ref>` to display report with section annotations.
-
-**What to Build**:
-- Create `src/library/show.ts`.
-- `cmdShow(config, resolvedId, args)`:
-  - Fetch item detail: `GET /library/items/:id` for content.
-  - Fetch comment summary: `GET /library/items/:id/comments/summary` for per-section counts.
-  - Parse headings from markdown content (regex for `^#{1,6}\s+(.+)$` lines).
-  - For each heading, generate slug (lowercase, spaces to hyphens, strip non-alphanumeric) and annotate with `[slug]` and comment summary.
-  - Output: `## Heading Text [slug] (N comments: X thumbs-up, Y love, Z thumbs-down)`.
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- Show command displays headings with slug annotations and comment summaries.
-- `tsc` compiles.
-
-### Step 5: Comments Router
-
-**Goal**: Create the nested comments router dispatching to list/post subcommands.
-
-**What to Build**:
-- Create `src/library/comments.ts`.
-- `runLibraryComments(config, resolvedId, args)`:
-  - Parse subcommand from `args[0]`.
-  - Switch: `list` -> `cmdCommentsList`, `post` -> `cmdCommentsPost`.
-  - Usage function with help text.
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- Nested router dispatches to list/post.
-- `tsc` compiles.
-
-### Step 6: Comments List Command
-
-**Goal**: Create `hlx library comments list <ref>` to display comments grouped by section.
-
-**What to Build**:
-- Create `src/library/comments-list.ts`.
-- `cmdCommentsList(config, resolvedId, args)`:
-  - Parse optional `--section` flag (supports both raw slugs and heading text, auto-slugified).
-  - Fetch: `GET /library/items/:id/comments` (with optional `?anchor=` query param if section filter provided).
-  - Group comments by anchor section.
-  - Output format:
-    ```
-    ## section-slug (N comments)
-      [rating] Author (date): "text"
-        -> [reply] Author (date): "text"
-    ```
-  - Handle empty state.
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- Comments list grouped by section with ratings.
-- Section filter via `--section` flag works.
-- `tsc` compiles.
-
-### Step 7: Comments Post Command
-
-**Goal**: Create `hlx library comments post <ref>` to post a section rating.
-
-**What to Build**:
-- Create `src/library/comments-post.ts`.
-- `cmdCommentsPost(config, resolvedId, args)`:
-  - Parse required `--section` flag (auto-slugify heading text if needed).
-  - Parse required `--rating` flag: accepts `thumbs-up`/`up`, `thumbs-down`/`down`, `love`. Normalize to `THUMBS_UP`, `THUMBS_DOWN`, `LOVE`.
-  - Parse optional `--reply-to` flag for threading.
-  - Parse optional positional message text.
-  - POST to `/library/items/:id/comments` with body: `{ anchor, rating, content?, parentCommentId? }`.
-  - Output confirmation: `Posted: [rating] on section: "text"`.
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- Post command sends correct API request.
-- Rating normalization works.
-- `tsc` compiles.
-
-### Step 8: Register in Main Dispatcher
-
-**Goal**: Add `library` case to the main command dispatcher.
-
-**What to Build**:
-- Modify `src/index.ts`:
-  - Add import: `import { runLibrary } from "./library/index.js"`.
-  - Add case in switch statement (around line 91, after `comments`):
-    ```
-    case "library": {
-      const config = configOrHelp(args.slice(1));
-      await runLibrary(config, args.slice(1));
-      break;
-    }
-    ```
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- `library` case added to dispatcher.
-- `tsc` compiles.
-
-### Step 9: SKILL.md Update
-
-**Goal**: Document all library commands for agent discoverability.
-
-**What to Build**:
-- Modify `skill-content/SKILL.md`:
-  - Add library commands to the Available Commands table:
-    - `hlx library list` — List library items with ID, title, status, date.
-    - `hlx library show <ref>` — Show report with section headings annotated with [slug] and comment summaries.
-    - `hlx library comments list <ref> [--section <slug>]` — List comments grouped by section.
-    - `hlx library comments post <ref> --section <slug> --rating <value> [message]` — Post section rating.
-  - Add a Library section to Common Workflows with an agent workflow example:
-    ```bash
-    # Discover sections and feedback status
-    hlx library show RSH-439
-    # Read detailed feedback
-    hlx library comments list RSH-439
-    # Post feedback
-    hlx library comments post RSH-439 --section key-findings --rating love "Expanded with patterns"
-    ```
-  - Document flag conventions: `--section` (slug or heading text), `--rating` (thumbs-up/up, thumbs-down/down, love), `--reply-to` (comment ID).
-
-**Verification (AI Agent Runs)**:
-```bash
-npm run build
-```
-
-**Success Criteria**:
-- SKILL.md includes all library commands.
-- `npm run build` (tsc) passes as final quality gate.
+---
 
 ## Verification Plan
 
@@ -249,49 +79,59 @@ npm run build
 
 | Dependency | Status | Source/Evidence | Affects checks |
 |-----------|--------|-----------------|----------------|
-| Node.js runtime | available | package.json | CHK-01 through CHK-03 |
-| npm dependencies installed | available | Run `npm install` | CHK-01 through CHK-03 |
-| TypeScript compiler (tsc) | available | devDependency in package.json | CHK-01 |
-| Server (Phase 1) running with library comment API | available | `npm run dev` in helix-global-server on port 4000 with .env | CHK-02, CHK-03 |
-| .env file for helix-cli | available | Dev setup config provides HELIX_API_KEY and HELIX_URL | CHK-02, CHK-03 |
-| Library item exists in database | unknown | Requires existing library data from Phase 1 testing | CHK-02, CHK-03 |
+| Node.js + npm installed | available | Dev environment | CHK-01 through CHK-05 |
+| CLI .env written with HELIX_API_KEY and HELIX_URL | available | Dev setup config | CHK-02 through CHK-05 |
+| `npm install` completed | available | Standard setup | CHK-01 through CHK-05 |
+| Server running (staging or local) accessible via HELIX_URL | available | HELIX_URL points to staging server | CHK-02 through CHK-05 |
+| At least one library item exists for the configured organization | unknown | Depends on org data | CHK-02 through CHK-05 |
+| A comment ID to reply to (from comments list) | unknown | Need to create or find a comment | CHK-04, CHK-05 |
 
 ### Required Checks
 
 [CHK-01] TypeScript build passes with zero errors.
-- Action: Run `npm run build` in the helix-cli directory.
-- Expected Outcome: `tsc` completes with exit code 0. No TypeScript errors.
-- Required Evidence: Full command output from `npm run build` showing successful completion.
+- Action: Run `npx tsc --noEmit` in the helix-cli directory.
+- Expected Outcome: Command exits with code 0, zero TypeScript errors.
+- Required Evidence: Terminal output showing successful compilation.
 
-[CHK-02] CLI command execution: `hlx library list` returns library items.
-- Action: Configure the CLI with the .env file (HELIX_API_KEY, HELIX_URL pointing to dev or staging server). Run `node dist/index.js library list`.
-- Expected Outcome: Command outputs a table with ID, Title, Status, and Date columns. If library items exist, they appear in the table. If none exist, an appropriate empty-state message displays.
-- Required Evidence: Command output showing the table format or empty-state message.
+[CHK-02] `hlx library list` still works correctly.
+- Action: Run `npx ts-node src/index.ts library list` (or the equivalent compiled command).
+- Expected Outcome: Command outputs a table of library items with ID, Title, Status, and Date columns.
+- Required Evidence: Command output showing the library items table.
 
-[CHK-03] CLI command execution: `hlx library show <ref>` displays section annotations.
-- Action: If library items were listed in CHK-02, run `node dist/index.js library show <ref>` using an ID or short ID from the list.
-- Expected Outcome: Command outputs report headings annotated with `[slug]` and comment summary counts (e.g., `## Key Findings [key-findings] (N comments: ...)`).
-- Required Evidence: Command output showing annotated section headings.
+[CHK-03] `hlx library comments post` with --rating (top-level) still works.
+- Action: Run `npx ts-node src/index.ts library comments post <ref> --section <slug> --rating thumbs-up "Test comment from CLI"` using a valid library item reference.
+- Expected Outcome: Command posts the comment and prints confirmation: `Posted: [thumbs-up] on <slug>: "Test comment from CLI"`.
+- Required Evidence: Command output showing the successful post confirmation.
+
+[CHK-04] `hlx library comments post` without --rating fails for top-level.
+- Action: Run `npx ts-node src/index.ts library comments post <ref> --section <slug> "No rating"` — no `--rating` flag, no `--reply-to` flag.
+- Expected Outcome: Command prints an error message about `--rating` being required and exits with non-zero code.
+- Required Evidence: Error output showing the rating requirement message.
+
+[CHK-05] `hlx library comments post` with --reply-to works WITHOUT --rating.
+- Action: Run `npx ts-node src/index.ts library comments post <ref> --section <slug> --reply-to <comment-id> "Reply without rating"` — no `--rating` flag but `--reply-to` present.
+- Expected Outcome: Command posts the reply and prints confirmation. The reply is created on the server with `rating: null`.
+- Required Evidence: Command output showing successful post, AND a follow-up `hlx library comments list <ref>` showing the reply exists with no rating.
 
 ## Success Metrics
 
-- 7 new files created, 2 files modified.
-- `npm run build` (tsc) passes with zero errors.
-- All 4 commands functional: list, show, comments list, comments post.
-- Item resolution supports cuid, shortId, and title match.
-- SKILL.md documents all library commands for agent discoverability.
+1. `tsc` / build passes with zero errors
+2. Reply posts without `--rating` when `--reply-to` is present
+3. Top-level posts still require `--rating`
+4. All existing commands (list, show, comments list, comments post with rating) continue working
+5. SKILL.md documentation remains accurate (no changes needed)
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
-|----------|----------|-------------|
-| ticket.md (Research Report) | Primary specification for Phase 2b | 9 CLI steps, command formats, resolution strategies, SKILL.md update |
-| diagnosis/diagnosis-statement.md (cli) | Root cause and scope | 7 new + 2 modified files; no library module exists |
-| product/product.md (cli) | Product requirements | 8 essential features, agent-first discoverability |
-| tech-research/tech-research.md (cli) | Architecture decisions | New module (not extending comments), 3-strategy resolution, nested router, .js imports |
-| scout/reference-map.json (cli) | Key file identification | Dispatcher at index.ts:72-124, comments router at comments/index.ts, flags at lib/flags.ts |
-| scout/scout-summary.md (cli) | Codebase pattern analysis | Router, resolution, flag, output patterns all established |
-| repo-guidance.json | Repo intent | CLI confirmed as Phase 2b target |
-| src/index.ts:72-124 | Direct code inspection | Switch dispatcher, comments at 87-91, no library case |
-| src/comments/index.ts | Direct code inspection | 52-line router pattern directly replicable |
-| src/lib/resolve-ticket.ts | Pattern reference | 3-strategy resolution (128 lines) to adapt |
+|----------|----------|--------------|
+| ticket.md (Research Report) | Primary specification for Phase 2b CLI | Rating optional for replies when parentCommentId present |
+| ticket.md (Discussion) | User feedback from prior runs | Known gaps including rating optionality |
+| scout/scout-summary.md (CLI) | Current implementation state | All files complete; rating optionality is the only gap |
+| scout/reference-map.json (CLI) | File-level details | requireFlag at line 29, getFlag at line 36 |
+| diagnosis/diagnosis-statement.md (CLI) | Root cause | Single fix: conditional flag requirement |
+| product/product.md (CLI) | Product requirements | Reply without rating is essential for conversational replies |
+| tech-research/tech-research.md (CLI) | Architecture decision | Conditional getFlag/requireFlag; read --reply-to first |
+| repo-guidance.json | Repo roles | CLI is target with 1 fix |
+| comments-post.ts (full file) | Direct code inspection | requireFlag at line 29, getFlag at line 36, body at lines 42-47 |
+| src/lib/flags.ts | Utility reference | getFlag returns string or undefined; requireFlag exits on missing |
