@@ -1,0 +1,49 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-457: Library System Architecture – Staging Branch Fix",
+  "description": "This tour walks through the changes introduced by FIX-457, which addresses an oversight in the build process where a staging branch was incorrectly required for all repository types. Libraries do not have a staging concept, so the requirement was causing errors. Additionally, for standard code repositories, the fix removes the need for a user to manually create a staging branch by automatically deriving it from main. The tour covers the ticket context files that describe the problem and the agent's resolution notes.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp5q99og003akw0ulz5xzqep/ticket.md",
+      "line": 1,
+      "description": "This is the initial ticket context file for FIX-457. It establishes the two-part problem: (1) The build process unconditionally requires a staging branch, which is irrelevant and error-producing for library repositories. (2) Even for standard code repositories, forcing the user to manually create a staging branch is unnecessary — it should be automatically branched off main. This file is the starting point for understanding the motivation behind all subsequent changes.",
+      "title": "Overview: Problem Statement"
+    },
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp5q99og003akw0ulz5xzqep/ticket.md",
+      "line": 18,
+      "description": "Lines 18-20 articulate the first root cause: library repositories do not follow a staging workflow, yet the build system was demanding a staging branch unconditionally. This caused a cascade of errors (referenced screenshot attachment) whenever a library repo was processed. The fix must guard against applying staging-branch logic when the repository type is a library.",
+      "title": "Library Repos: Staging Branch Is Irrelevant"
+    },
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp5q99og003akw0ulz5xzqep/ticket.md",
+      "line": 22,
+      "description": "Lines 22-25 articulate the second root cause: even for code repositories that do use a staging branch, there is no reason to burden the user with manually creating it. The correct behavior is to automatically derive the staging branch from main if it does not already exist. This reduces friction and prevents human error in repository setup.",
+      "title": "Code Repos: Auto-Create Staging from Main"
+    },
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp63e0lr00dlkw0ublxa4nur/ticket.md",
+      "line": 1,
+      "description": "This is the second run's ticket context file. It is structurally identical to the first run's ticket but adds a 'Referenced Tickets' section, materializing the artifacts from FIX-441 (the parent 'Library System Architecture Checkup' ticket) at `.helix-refs/FIX-441/`. This gives the agent access to 15 previously materialized artifacts that describe the existing library system architecture, ensuring the fix is consistent with the broader design decisions made in FIX-441.",
+      "title": "Second Run: Referenced Tickets and Context Expansion"
+    },
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp63e0lr00dlkw0ublxa4nur/ticket.md",
+      "line": 28,
+      "description": "Lines 28-35 detail the materialized reference to FIX-441 (DEPLOYED status, 15 artifacts). The agent was expected to read `.helix-refs/FIX-441/_manifest.json` and the associated files to understand what architecture was already in place for library support. This ensures the staging-branch fix does not contradict or regress any of the library system decisions from FIX-441.",
+      "title": "FIX-441 Reference: Grounding the Fix in Prior Architecture"
+    },
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp63e0lr00dlkw0ublxa4nur/ticket.md",
+      "line": 38,
+      "description": "Lines 38-41 contain the discussion entry from the Helix agent acknowledging that changes were applied to 1 repository but that full verification could not be completed automatically. This is an important signal: the agent flagged that manual review of the applied changes is required. As a reviewer, you should inspect the actual source-code changes in the helix-cli repository (outside this ticket metadata) to confirm that the staging-branch guard for library repos and the auto-creation logic for code repos were both correctly implemented.",
+      "title": "Agent Resolution Note and Manual Review Flag"
+    },
+    {
+      "file": ".helix/tickets/cmp5q99nx0035kw0uifo9jkun/runs/cmp63e0lr00dlkw0ublxa4nur/ticket.md",
+      "line": 1,
+      "description": "End-to-end data flow after this fix: When the build process initializes a repository, it should now (1) check repository type — if library, skip all staging-branch logic entirely; (2) if code repo, check whether a staging branch exists — if not, automatically create one from main before proceeding. The critical code paths to verify manually are the repository initialization routine and any CI/CD pipeline step that previously hard-failed when no staging branch was found. With these two guards in place, both library and code repositories should proceed through the build process without staging-branch-related errors.",
+      "title": "Summary: Data Flow and Code Path Validation"
+    }
+  ]
+}
