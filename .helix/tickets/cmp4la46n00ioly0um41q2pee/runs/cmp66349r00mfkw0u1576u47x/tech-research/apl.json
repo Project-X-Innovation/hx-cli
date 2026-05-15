@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Should library commands be added to the existing comments module or a new module?",
+    "How should library item resolution work given three input formats (cuid, shortId, title)?",
+    "Does the CLI need the --section flag to support both raw slugs and heading text?"
+  ],
+  "answers": [
+    {
+      "answer": "New src/library/ module with its own router. Library comments have distinct API endpoints (/library/items/:itemId/comments vs /tickets/:ticketId/comments), distinct resolution (library item vs ticket), and unique features (section anchoring, ratings). Adding --library to existing comments module would conflate domains and create awkward UX. The module router pattern from src/comments/index.ts (52 lines) is directly replicable.",
+      "evidence": [
+        "src/comments/index.ts:1-52 — existing module router pattern with subcommand dispatch",
+        "src/index.ts:87-91 — comments case in switch dispatcher, pattern for adding library case",
+        "Research report: 'New src/library/ module with own router... Distinct domain from ticket comments'"
+      ]
+    },
+    {
+      "answer": "Adapt the 3-strategy pattern from resolve-ticket.ts (128 lines): (1) cuid detection (starts with 'c', 25 chars), (2) ticket shortId match (/^[A-Z]+-\\d+$/), (3) title substring fallback. Fetches library items list via GET /library/items then matches client-side. The existing hxFetch with basePath: '/api' handles auth and retries.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts — extractTicketRef + matchTicket with multi-strategy resolution pattern",
+        "src/lib/http.ts — hxFetch with basePath option, auth headers, retry with backoff",
+        "Research report specifies these exact 3 strategies with detection logic"
+      ]
+    },
+    {
+      "answer": "Yes. The --section flag accepts both raw slugs (key-findings) and heading text ('Key Findings'). When the value contains uppercase or spaces, auto-slugify to lowercase kebab-case. This matches how rehype-slug generates heading IDs on the server and client. The slugification is a simple transformation: lowercase, replace spaces with hyphens, strip non-alphanumeric.",
+      "evidence": [
+        "Research report: '--section \"Key Findings\" -> anchor: \"key-findings\" (auto-slugified)'",
+        "rehype-slug generates heading IDs as lowercase kebab-case from heading text (confirmed by client's rehype-slug usage at markdown-renderer.tsx:95)"
+      ]
+    }
+  ],
+  "statement": "The CLI (Phase 2b) adds a new src/library/ module with 7 new files following the established comments module router pattern. Item resolution adapts the 3-strategy resolve-ticket.ts pattern for cuid/shortId/title matching. Section targeting supports both raw slugs and auto-slugified heading text. SKILL.md update is critical for agent discoverability. 7 new files, 2 modified files, no new dependencies.",
+  "followups": []
+}
