@@ -2,40 +2,36 @@
 
 ## Problem
 
-The CLI displays raw `ticket.status` (e.g., `PREVIEW_READY`) in both `hlx tickets get` and `hlx tickets list` commands. There is no indication when a ticket is pending peer approval. No CLI commands exist for the peer approval workflow.
+The CLI approval status display was addressed in the prior run. Both `hlx tickets list` and `hlx tickets get` now display approval status from the API response. No remaining CLI-specific gaps were identified for approval status visibility.
 
 ## Analysis Summary
 
-### Status Display in CLI
+### Already Implemented (Prior Run)
 
-The `hlx tickets get` command (get.ts lines 46-83) prints `Status: ${ticket.status}` (line 52) and optionally `Merge Status: ${ticket.mergeQueueStatus}` (lines 57-59). The `TicketDetail` type (lines 5-22) has `status: string` and `mergeQueueStatus: string | null` but no approval-related fields.
+- **`hlx tickets list`** (`list.ts` lines 106-107): Shows `[PENDING]` tag appended to ticket row when `approvalStatus` is non-null.
+- **`hlx tickets get`** (`get.ts` lines 61-62): Shows `Approval: ${ticket.approvalStatus}` as a labeled line when non-null.
+- **Type definitions**: Both `TicketItem` (list.ts line 9) and `TicketDetail` (get.ts line 21) include `approvalStatus: string | null`.
 
-The `hlx tickets list` command (list.ts lines 38-107) prints `ticket.status.padEnd(12)` (line 105). The `TicketItem` type (lines 5-12) has `status: string` but no approval field.
+### Current State
 
-### Missing CLI Capabilities
+The CLI correctly surfaces approval status in both list and detail views. The `latest` command reuses `printTicketDetail()` from get.ts, so it also gets approval display.
 
-No commands exist in `src/tickets/index.ts` (subcommand registry) for:
-- Submitting a defense (approval request)
-- Approving/flagging a defense
-- Viewing approval status for a ticket
-
-### Dependency on Server API
-
-The CLI fetches ticket data from `GET /api/tickets/:ticketId` (get.ts line 47) and `GET /api/tickets` (list.ts line 75). These endpoints do not currently include approval data. Any CLI improvement depends on the server exposing approval status in these responses.
+No CLI commands exist for approval workflows (submitting defense, approving), but this appears out of scope for the current ticket which focuses on visibility of pending approval status.
 
 ## Relevant Files
 
 | File | Role |
 |------|------|
-| `src/tickets/get.ts` | `hlx tickets get` — detail display with no approval info |
-| `src/tickets/list.ts` | `hlx tickets list` — list display with no approval info |
-| `src/tickets/index.ts` | Ticket subcommand definitions — no approval commands |
+| `src/tickets/list.ts` | List command with approval tag display |
+| `src/tickets/get.ts` | Detail command with approval line display |
+| `src/tickets/latest.ts` | Latest command reuses get.ts detail format |
+| `src/tickets/index.ts` | Subcommand registry |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md | Problem statement | Approval status must be visible across all surfaces including CLI |
-| src/tickets/get.ts | CLI detail command | Prints status and mergeQueueStatus; no approval field in type |
-| src/tickets/list.ts | CLI list command | Prints status; no approval awareness |
-| src/tickets/index.ts | Command registry | No approval subcommands registered |
+| ticket.md | Problem statement | Status visibility requirement — CLI already addressed |
+| src/tickets/list.ts | CLI list implementation | approvalStatus in type and display |
+| src/tickets/get.ts | CLI detail implementation | approvalStatus in type and display |
+| src/tickets/latest.ts | CLI latest implementation | Reuses get.ts printTicketDetail |
