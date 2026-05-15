@@ -1,33 +1,34 @@
 {
   "questions": [
-    "Does the CLI have any library commands today?",
-    "Are the command dispatch, flag parsing, and HTTP client patterns established?",
-    "Can the item resolution utility follow the existing ticket resolution pattern?"
+    "What CLI-side spec deviations remain after prior implementation runs?",
+    "Should the CLI --rating flag be optional for reply posts?",
+    "Does the SKILL.md need updates for the icon change from heart to double thumbs up?"
   ],
   "answers": [
     {
-      "answer": "No. The main dispatcher (src/index.ts:72-124) has no 'library' case. No src/library/ directory exists. All library command files are new.",
+      "answer": "One confirmed deviation: --rating is required for all posts including replies via requireFlag (comments-post.ts:29). SKILL.md and all other CLI files are complete and correct.",
       "evidence": [
-        "src/index.ts:72-124 — switch statement with no 'library' case; commands: login, token, inspect, comments, org, tickets, skill, update",
-        "No src/library/ directory in the CLI repo"
+        "comments-post.ts:29 — requireFlag(args, '--rating', '...') makes rating mandatory for all posts",
+        "Research report: 'When parentCommentId is present, rating becomes optional'",
+        "All 7 new files and 2 modified files structurally complete per scout"
       ]
     },
     {
-      "answer": "Yes. The comments module (src/comments/index.ts, 52 lines) provides the router pattern: dispatch via switch on args[0]. Flag parsing via getFlag/hasFlag/getPositionalArgs in src/lib/flags.ts. HTTP client hxFetch in src/lib/http.ts with basePath and auth. All patterns are directly replicable.",
+      "answer": "Yes. The spec says rating is optional for replies. When --reply-to is present, --rating should use getFlag instead of requireFlag so it's optional. When --reply-to is absent (top-level post), --rating remains required.",
       "evidence": [
-        "src/comments/index.ts — router dispatching to subcommands",
-        "src/lib/flags.ts — getFlag, hasFlag, getPositionalArgs, requireFlag functions",
-        "src/lib/http.ts — hxFetch with auth, retry, basePath option"
+        "comments-post.ts:29 — requireFlag(args, '--rating', ...) — always required currently",
+        "Server library-comment-service.ts:69-73 — validates rating required only for top-level",
+        "Research report Zod schema: 'When parentCommentId is present, rating becomes optional'"
       ]
     },
     {
-      "answer": "Yes. The ticket resolution utility (src/lib/resolve-ticket.ts, 128 lines) uses 3-strategy resolution (exact ID, shortId, number). Library item resolution adapts this for cuid detection, ticket shortId match (/^[A-Z]+-\\d+$/), and title substring fallback. Fetches library items list then matches.",
+      "answer": "SKILL.md uses 'love' as the CLI flag value which maps to 'LOVE' stored value. The flag name stays 'love' regardless of icon changes (icon is UI-only). SKILL.md description can optionally be updated for clarity but no functional change is needed. The rating taxonomy description at SKILL.md:170 is correct.",
       "evidence": [
-        "src/lib/resolve-ticket.ts — extractTicketRef + matchTicket with multi-strategy resolution",
-        "Research report specifies 3 strategies: cuid (starts with 'c', 25 chars), ticket shortId, title match"
+        "SKILL.md:170 — 'Rating values: thumbs-up (up), thumbs-down (down), love'",
+        "comments-post.ts:5-11 — RATING_MAP: 'love' -> 'LOVE' (correct mapping)"
       ]
     }
   ],
-  "statement": "The CLI needs 7 new files in a new src/library/ module (router, list, show, comments router, comments-list, comments-post) plus a resolve-library-item utility in src/lib/. Two existing files need modification: src/index.ts (add library case) and skill-content/SKILL.md (add library commands section). All patterns are established. No new npm dependencies needed.",
+  "statement": "The CLI needs 1 targeted fix: make --rating optional when --reply-to is present in comments-post.ts. Change requireFlag to conditional getFlag based on whether --reply-to is set. SKILL.md is correct and complete. No new files needed.",
   "followups": []
 }
