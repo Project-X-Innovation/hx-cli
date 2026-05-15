@@ -1,66 +1,57 @@
 {
-  "problem": "CLI has no library commands. Need to add 'hlx library list|show|comments list|comments post' commands with item resolution, section targeting, and SKILL.md documentation for agent discoverability.",
+  "problem": "Implement CLI library commands for section-level feedback (Phase 2b). Prior runs implemented all files. The CLI references 'love' as a rating value — if LOVE rating display changes (heart to double thumbs up), SKILL.md may need updated descriptions.",
   "files": [
     {
+      "path": "src/library/index.ts",
+      "why": "Module router dispatching to list, show, and comments subcommands. Fully implemented."
+    },
+    {
+      "path": "src/library/list.ts",
+      "why": "Lists library items with ID, title, status, date in table format. Fully implemented."
+    },
+    {
+      "path": "src/library/show.ts",
+      "why": "Shows report with section headings annotated with [slug] and comment summaries. Fully implemented."
+    },
+    {
+      "path": "src/library/comments.ts",
+      "why": "Nested router for comments subcommands (list, post). Fully implemented."
+    },
+    {
+      "path": "src/library/comments-list.ts",
+      "why": "Lists comments grouped by section with author, rating, timestamp. Fully implemented."
+    },
+    {
+      "path": "src/library/comments-post.ts",
+      "why": "Posts section rating. RATING_MAP on lines 5-11 includes 'love' -> 'LOVE'. Supports --reply-to for threading."
+    },
+    {
+      "path": "src/lib/resolve-library-item.ts",
+      "why": "Multi-format item resolution: cuid ID, ticket short ID, title substring. Fully implemented."
+    },
+    {
       "path": "src/index.ts",
-      "why": "Main command dispatcher with switch statement at lines 72-124. Add 'library' case following the same pattern as 'comments' (line 87-91) or 'tickets' (line 97-101): configOrHelp + call router."
-    },
-    {
-      "path": "src/comments/index.ts",
-      "why": "Existing command module router pattern (52 lines): imports subcommands, dispatches via switch on args[0]. Library module router follows this exact pattern with list/show/comments subcommands."
-    },
-    {
-      "path": "src/comments/list.ts",
-      "why": "Existing comment list pattern: hxFetch with /api basePath, client-side filtering, line-by-line output formatting. Reference for library comments list."
-    },
-    {
-      "path": "src/comments/post.ts",
-      "why": "Existing comment post pattern: extract positional args as message, POST request with body. Reference for library comments post (adds --section and --rating flags)."
-    },
-    {
-      "path": "src/lib/http.ts",
-      "why": "hxFetch HTTP client: auth via X-API-Key or Bearer, retry with backoff, basePath option. All library commands use hxFetch with basePath: '/api'."
-    },
-    {
-      "path": "src/lib/flags.ts",
-      "why": "Flag parsing utilities: getFlag, hasFlag, getPositionalArgs, isHelpRequested, requireFlag. Library commands use --section, --rating flags and positional ref args."
-    },
-    {
-      "path": "src/lib/resolve-ticket.ts",
-      "why": "Ticket resolution pattern (128 lines): extractTicketRef extracts from --ticket/env/positional, matchTicket resolves via id/shortId/number. Library item resolution adapts this for cuid/shortId/title match strategies."
+      "why": "Main dispatcher. Lines 94-98: 'library' case registered and routes to runLibrary."
     },
     {
       "path": "skill-content/SKILL.md",
-      "why": "Agent discoverability documentation. Available Commands table at lines 32-50. Add library commands section for agent awareness of new CLI capabilities."
-    },
-    {
-      "path": "src/tickets/list.ts",
-      "why": "Table output formatting pattern: padEnd-based column alignment. Reference for library list output."
-    },
-    {
-      "path": "package.json",
-      "why": "Build: 'tsc'. TypeScript strict mode, ES2022 target. No new dependencies needed."
-    },
-    {
-      "path": "tsconfig.json",
-      "why": "Compilation config: strict mode, outDir dist, rootDir src, declaration true. New library module must follow same conventions."
+      "why": "Agent discoverability documentation. Library section (lines 146-172) documents all commands."
     }
   ],
   "facts": [
-    "Main dispatcher uses switch statement with configOrHelp pattern for auth-required commands (src/index.ts:72-124).",
-    "Comments module follows router pattern: index.ts dispatches to subcommand functions, each accepts (config, resolvedId, args).",
-    "Ticket resolution supports 3 strategies: exact ID, exact shortId (case-insensitive), numeric suffix match. Library item resolution needs: cuid, ticket shortId, title match.",
-    "hxFetch uses basePath option — /api/inspect default, /api for comment routes. Library routes will use basePath: '/api'.",
-    "Flag parsing via getFlag/hasFlag/getPositionalArgs/requireFlag functions in src/lib/flags.ts.",
-    "SKILL.md has structured format with Available Commands table. Library section must follow same table format.",
-    "No existing library code in the CLI. No 'library' case in the command dispatcher.",
-    "Output formatting uses padEnd for column alignment and simple console.log for lists.",
-    "Build is TypeScript only ('tsc'), no bundler. .js extension required in imports.",
-    "No new npm dependencies required."
+    "All 7 new files exist and are structurally complete",
+    "Both modified files (src/index.ts, SKILL.md) have expected changes",
+    "RATING_MAP in comments-post.ts: 'thumbs-up'/'up' -> 'THUMBS_UP', 'thumbs-down'/'down' -> 'THUMBS_DOWN', 'love' -> 'LOVE'",
+    "Item resolution: 3 strategies — cuid (starts with 'c', 25 chars), ticket short ID (/^[A-Z]+-\\d+$/), title substring",
+    "Auto-slugification: section flag with spaces gets slugified",
+    "hxFetch uses basePath '/api' for library endpoints",
+    "Build: 'tsc'. Typecheck: 'tsc --noEmit'",
+    "No new npm dependencies",
+    "TypeScript strict mode, ES2022 target, Node16 module resolution",
+    "SKILL.md includes rating values: thumbs-up, thumbs-down, love"
   ],
   "unknowns": [
-    "Whether the server's library items API supports querying by ticket shortId — resolution strategy depends on available API query parameters.",
-    "Whether the library item response includes a 'content' field in list results or only in detail results — affects show command's ability to display section headings.",
-    "Exact API response shape for library comments endpoints (not yet implemented on server) — CLI commands depend on the server's Phase 1 API contract."
+    "Whether 'love' CLI alias needs any description update in SKILL.md given display changing from heart to double-thumbs-up",
+    "Whether rating should be optional for --reply-to posts in comments-post.ts (currently required via requireFlag)"
   ]
 }
