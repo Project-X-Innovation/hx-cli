@@ -1,0 +1,29 @@
+{
+  "problem": "CLI ticket status display shows raw ticket.status (e.g., 'PREVIEW_READY') with no indication of peer approval state. No CLI commands exist for peer approval workflow.",
+  "files": [
+    {
+      "path": "src/tickets/get.ts",
+      "why": "printTicketDetail (lines 46-83) displays ticket.status (line 52), mergeQueueStatus (lines 57-59), and runs. No approval request data is fetched or displayed. TicketDetail type (lines 5-22) has no approval field."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "cmdTicketsList (lines 38-107) displays ticket.status padded to 12 chars (line 105). TicketItem type (lines 5-12) has no approval field. No approval indicator in list output."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Ticket subcommand definitions (lines 43-148). No approval-related subcommands exist."
+    }
+  ],
+  "facts": [
+    "TicketDetail type in get.ts (lines 5-22) has status, mergeQueueStatus, but no approval-related fields.",
+    "TicketItem type in list.ts (lines 5-12) has status but no approval-related fields.",
+    "get command displays 'Status: <status>' and optionally 'Merge Status: <mergeQueueStatus>' — no approval indicator.",
+    "list command displays status padded to 12 chars — no approval indicator.",
+    "No CLI commands exist for submitting defense, approving, or viewing approval requests.",
+    "CLI scripts: build='tsc', typecheck='tsc --noEmit', test='tsc && node --test dist/**/*.test.js'."
+  ],
+  "unknowns": [
+    "Whether CLI needs full approval commands (submit defense, approve, respond) or just display of approval status.",
+    "Whether approval status should come from a new field on the ticket list/detail API response or require a separate API call."
+  ]
+}

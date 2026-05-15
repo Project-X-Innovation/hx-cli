@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-468: Peer Approval Status Visibility in helix-cli",
+  "description": "This tour walks through the changes made to expose peer approval status in the helix-cli 'hlx tickets get' and 'hlx tickets list' commands. The server API was updated to include an 'approvalStatus' field in ticket responses. The CLI needed to (1) add the field to its TypeScript type definitions and (2) conditionally display it in both the detail and list views. The approach follows existing patterns (mergeQueueStatus) to keep changes minimal, additive, and backward compatible with older server versions.",
+  "steps": [
+    {
+      "file": "src/tickets/get.ts",
+      "line": 1,
+      "description": "Two files drive all ticket display logic: get.ts (hlx tickets get — detail view) and list.ts (hlx tickets list — tabular view). Before this change, both had TypeScript types without any approval field, so even if the server returned approvalStatus the CLI would silently ignore it. The fix is purely additive: extend the types to accept the new field and conditionally render it. No new CLI commands are introduced — scope is status visibility only.",
+      "title": "Overview: Why These Two Files"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 21,
+      "description": "The TicketDetail interface is extended with 'approvalStatus: string | null'. It is placed immediately after the existing 'mergeQueueStatus' field to mirror the established pattern. Using 'string | null' (not optional '?') matches the server contract: the field is always present in new responses. When running against an older server that omits the field entirely, 'undefined' is falsy and the conditional display below gracefully skips — preserving backward compatibility.",
+      "title": "TicketDetail Type: Add approvalStatus Field"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 61,
+      "description": "Lines 58-60 already handle mergeQueueStatus with an identical pattern: 'if (ticket.mergeQueueStatus) console.log(...)'. The new block at lines 61-63 replicates this exactly for approvalStatus. When the field is truthy (e.g., 'PENDING', 'APPROVED', 'NEEDS_DEFENSE'), it prints 'Approval:     <STATUS>' aligned with the other label-value rows. When null or undefined it is silently skipped. The '--json' flag outputs the raw server response, so approvalStatus appears there automatically without any additional code.",
+      "title": "printTicketDetail: Conditional Approval Display"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 11,
+      "description": "The TicketItem interface used in the list command receives the same 'approvalStatus: string | null' addition at line 11, after the existing 'status' field. This keeps the type in sync with what the server returns and allows the list rendering logic below to access the field without TypeScript errors. The typecheck (tsc --noEmit) validates this is correct at compile time.",
+      "title": "TicketItem Type: Add approvalStatus Field"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 106,
+      "description": "Line 106 computes 'const approvalTag = ticket.approvalStatus ? ` [${ticket.approvalStatus}]` : '''. When approvalStatus is non-null, this produces a compact bracketed indicator such as ' [PENDING]', ' [APPROVED]', or ' [NEEDS_DEFENSE]'. When null, approvalTag is an empty string and the line renders exactly as before. Line 107 appends approvalTag to the console.log output after the existing padded columns, ensuring the list remains readable and the change is fully backward compatible.",
+      "title": "List Output: Approval Tag Suffix"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 97,
+      "description": "Lines 97-98 handle the '--json' flag by outputting the raw server response object directly. Because approvalStatus is now part of the server response, it appears in '--json' output with zero additional code. All major code paths remain clean: the TypeScript typecheck passes with zero errors (tsc --noEmit exits 0), display changes are purely additive and conditional, older server compatibility is preserved through falsy checks, and no existing commands or types were altered in a breaking way. The implementation follows the established mergeQueueStatus pattern throughout.",
+      "title": "Summary: JSON Output and Clean Code Paths"
+    }
+  ]
+}
