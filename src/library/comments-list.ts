@@ -5,7 +5,7 @@ import { getFlag } from "../lib/flags.js";
 type LibraryComment = {
   id: string;
   anchor: string;
-  rating: string;
+  rating: string | null;
   content: string | null;
   authorUser: { name: string | null; email: string };
   parentCommentId: string | null;
@@ -63,7 +63,7 @@ export async function cmdCommentsList(config: HxConfig, resolvedId: string, args
 
     for (const comment of topLevel) {
       const author = comment.authorUser.name ?? comment.authorUser.email;
-      const ratingLabel = comment.rating.toLowerCase().replace("_", "-");
+      const ratingLabel = comment.rating ? comment.rating.toLowerCase().replace("_", "-") : "reply";
       const text = comment.content ? `: "${comment.content}"` : "";
       console.log(`  [${ratingLabel}] ${author} (${formatDate(comment.createdAt)})${text}`);
 

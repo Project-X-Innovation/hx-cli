@@ -1,23 +1,35 @@
 {
   "questions": [
     "Are there correctness bugs in the CLI library commands?",
-    "Does the item resolution utility handle all specified formats correctly?",
-    "Is SKILL.md updated with comprehensive agent discoverability documentation?"
+    "Does the CLI handle nullable ratings correctly for replies?",
+    "Is SKILL.md updated with comprehensive agent discoverability documentation including --reply-to?"
   ],
   "answers": [
     {
-      "answer": "No bugs found. All 7 new files and 2 modified files compile correctly and follow established CLI patterns (hxFetch, flag parsing, padEnd alignment, .js import extensions).",
-      "evidence": ["npm run build: PASS (tsc exit code 0)"]
+      "answer": "Yes — 1 runtime crash found and fixed. comments-list.ts declared rating as 'string' but server returns null for replies. Calling .toLowerCase() on null crashes. Fixed by widening type to 'string | null' and adding null guard with 'reply' fallback.",
+      "evidence": [
+        "src/library/comments-list.ts:8 — was 'rating: string', now 'rating: string | null'",
+        "src/library/comments-list.ts:66 — was 'comment.rating.toLowerCase()', now 'comment.rating ? comment.rating.toLowerCase().replace(\"_\", \"-\") : \"reply\"'",
+        "Server contract: library-comment-service.ts returns rating: null for replies (effectiveRating ?? null)"
+      ]
     },
     {
-      "answer": "Yes. The resolution utility handles all 3 strategies: (1) exact cuid match, (2) case-insensitive ticket shortId match, (3) case-insensitive title substring match with ambiguity detection. Error messages are descriptive.",
-      "evidence": ["src/lib/resolve-library-item.ts — 3-strategy resolution with extractLibraryItemRef for --item flag or positional arg"]
+      "answer": "Yes, after fix. The comments-post.ts correctly uses getFlag (optional) for --reply-to flow vs requireFlag (mandatory) for top-level. The comments-list.ts now handles null ratings in display. Type alignment with server is correct.",
+      "evidence": [
+        "src/library/comments-post.ts — conditional: if (replyTo) getFlag else requireFlag for rating",
+        "src/library/comments-list.ts:66 — null guard on rating display"
+      ]
     },
     {
-      "answer": "Yes. SKILL.md adds 4 library commands to the Available Commands table and includes a comprehensive Library Reports workflow section with 7 example commands covering list, show, comments list (with --section filter), and comments post (with all rating aliases).",
-      "evidence": ["skill-content/SKILL.md — Library Reports section with examples"]
+      "answer": "Yes, after fix. SKILL.md now includes --reply-to examples (reply without rating, reply with rating) and an explanatory note. Usage text in comments.ts also updated with reply syntax.",
+      "evidence": [
+        "skill-content/SKILL.md:171-178 — 2 reply examples + note about comment IDs",
+        "src/library/comments.ts:11 — reply syntax in commentsUsage()",
+        "src/library/comments.ts:15 — --reply-to description",
+        "src/library/comments.ts:39 — reply syntax in post help"
+      ]
     }
   ],
-  "statement": "Code review of helix-cli found no issues. All 7 new files and 2 modified files are correctly implemented following established patterns. SKILL.md documentation is comprehensive. No code fixes needed. Build passes.",
+  "statement": "Run 3 CLI code review found 3 issues and fixed all of them: (1) CR-CLI01: runtime crash in comments-list.ts from null rating — high severity, (2) CR-CLI02: SKILL.md missing --reply-to documentation — medium severity, (3) CR-CLI03: help text missing reply syntax — low severity. Build passes after all fixes. All prior Run 2 findings were re-evaluated; the original 'no issues found' was incorrect.",
   "followups": []
 }

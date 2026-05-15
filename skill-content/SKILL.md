@@ -167,8 +167,15 @@ hlx library comments post RSH-439 --section market-overview --rating down "Total
 # Post a love rating
 hlx library comments post RSH-439 --section introduction --rating love
 
+# Reply to an existing comment (--rating optional for replies)
+hlx library comments post RSH-439 --section key-findings --reply-to <commentId> "I disagree, this is the right level"
+
+# Reply with a rating
+hlx library comments post RSH-439 --section key-findings --reply-to <commentId> --rating thumbs-up "Good point"
+
 # Rating values: thumbs-up (up), thumbs-down (down), love
 # Section accepts both raw slugs and heading text (auto-slugified)
+# --reply-to accepts a comment ID (from comments list output)
 ```
 
 ## Flag Conventions

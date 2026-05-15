@@ -8,9 +8,11 @@ function commentsUsage(exitCode: number = 1): never {
   output(`Usage:
   hlx library comments list <ref> [--section <slug>]
   hlx library comments post <ref> --section <slug> --rating <value> [message]
+  hlx library comments post <ref> --section <slug> --reply-to <commentId> [--rating <value>] [message]
 
 Rating values: thumbs-up (up), thumbs-down (down), love.
-Section accepts both raw slugs and heading text (auto-slugified).`);
+Section accepts both raw slugs and heading text (auto-slugified).
+--reply-to: reply to an existing comment (--rating becomes optional).`);
   process.exit(exitCode);
 }
 
@@ -34,7 +36,7 @@ export async function runLibraryComments(config: HxConfig, resolvedId: string, a
 
     case "post": {
       if (isHelpRequested(rest)) {
-        console.log("Usage: hlx library comments post <ref> --section <slug> --rating <value> [message]");
+        console.log("Usage: hlx library comments post <ref> --section <slug> --rating <value> [message]\n       hlx library comments post <ref> --section <slug> --reply-to <commentId> [--rating <value>] [message]");
         process.exit(0);
       }
       await cmdCommentsPost(config, resolvedId, rest);
