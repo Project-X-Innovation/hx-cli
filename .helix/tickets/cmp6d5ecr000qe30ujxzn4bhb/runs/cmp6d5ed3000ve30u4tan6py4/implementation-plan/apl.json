@@ -1,0 +1,25 @@
+{
+  "questions": [
+    "What specific files and code locations need to change in helix-cli for approval status visibility?",
+    "How should the CLI implementation be verified?"
+  ],
+  "answers": [
+    {
+      "answer": "Two files: (1) get.ts — add approvalStatus: string | null to TicketDetail type (after mergeQueueStatus on line 20), add conditional console.log for 'Approval:' line in printTicketDetail after mergeQueueStatus display (lines 57-59). (2) list.ts — add approvalStatus: string | null to TicketItem type (lines 5-12), append brief [STATUS] indicator to list output line (line 105) when approvalStatus is present.",
+      "evidence": [
+        "get.ts lines 5-22: TicketDetail type has mergeQueueStatus but no approval field",
+        "get.ts lines 57-59: mergeQueueStatus conditional display — exact pattern to replicate",
+        "list.ts lines 5-12: TicketItem type has status but no approval field",
+        "list.ts line 105: list output with padded columns"
+      ]
+    },
+    {
+      "answer": "TypeScript typecheck (tsc --noEmit) is the primary quality gate. The CLI does not have lint configured as a script. Build (tsc) generates dist/ output. No runtime verification needed since the CLI is a downstream consumer of server API data.",
+      "evidence": [
+        "package.json: typecheck='tsc --noEmit', build='tsc', no lint script"
+      ]
+    }
+  ],
+  "statement": "CLI implementation plan: add approvalStatus to TicketDetail and TicketItem types, display as conditional 'Approval:' line in get and brief indicator in list. Two files changed: get.ts and list.ts. Three steps: L1 (get), L2 (list), L3 (typecheck). No new CLI commands.",
+  "followups": []
+}
