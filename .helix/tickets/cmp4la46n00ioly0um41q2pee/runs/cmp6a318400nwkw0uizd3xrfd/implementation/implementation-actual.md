@@ -1,46 +1,38 @@
-# Implementation Actual - helix-cli
+# Implementation Actual - helix-cli (Run 3)
 
 ## Summary
 
-Implemented the complete CLI Phase 2b Library Commands: multi-format item resolution utility, 6-file library module with nested router, main dispatcher integration, and SKILL.md documentation for agent discoverability. All commands follow existing CLI patterns (hxFetch, flag parsing, padEnd alignment).
+Implemented Run 3 targeted fix for CLI library comments: made `--rating` optional when `--reply-to` is present, keeping it required for top-level comments.
 
 ## Files Changed
 
-### New Files (7)
-
-| File | Description |
-|------|-------------|
-| `src/lib/resolve-library-item.ts` | 3-strategy resolution: cuid detection, ticket shortId matching, title substring fallback. extractLibraryItemRef for --item flag or positional arg |
-| `src/library/index.ts` | Module router dispatching to list/show/comments. Resolves item ref before delegating to show and comments |
-| `src/library/list.ts` | Fetches /library/items, displays padEnd-aligned table (ID, Title, Status, Date) |
-| `src/library/show.ts` | Fetches item detail + comment summary, parses headings from markdown, annotates with [slug] and comment counts |
-| `src/library/comments.ts` | Nested router dispatching to list/post with usage help |
-| `src/library/comments-list.ts` | Lists comments grouped by section with optional --section filter. Top-level comments with replies indented with -> |
-| `src/library/comments-post.ts` | Posts rating with --section (required, auto-slugify), --rating (required, normalized via RATING_MAP), optional --reply-to, optional positional message text |
-
-### Modified Files (2)
+### Modified Files (1)
 
 | File | Change |
 |------|--------|
-| `src/index.ts` | Added library case to switch dispatcher with configOrHelp pattern, imported runLibrary |
-| `skill-content/SKILL.md` | Added 4 library commands to Available Commands table, added Library Reports workflow section with examples |
+| `src/library/comments-post.ts` | Reads `--reply-to` before `--rating`; uses `getFlag` (optional) for replies vs `requireFlag` (mandatory) for top-level; conditional body construction only includes rating if present; output shows `[reply]` when no rating |
 
 ## Verification Commands and Outcomes
 
-| Check ID | Command | Outcome |
-|----------|---------|---------|
-| CHK-01 | `npm run build` | PASS - zero errors |
-| CHK-02 | `hlx library list` | PASS - returns expected output (0 library items in dev) |
-| CHK-03 | `hlx library show` | PASS - correctly reports error when no ref provided |
+| Check ID | Command/Test | Outcome |
+|----------|-------------|---------|
+| CHK-01 | `npx tsc --noEmit` | PASS - zero errors |
+| CHK-02 | `hlx library list` | NOT TESTED - requires CLI auth environment |
+| CHK-03 | `hlx library comments post` with rating | NOT TESTED - requires CLI auth; verified via static inspection that requireFlag still enforces --rating for top-level |
+| CHK-04 | Top-level without rating fails | NOT TESTED - verified via static inspection: `requireFlag` throws when `--rating` not provided and `--reply-to` is absent |
+| CHK-05 | Reply without rating works | NOT TESTED - verified via static inspection: `getFlag` returns undefined, body omits rating field, server accepts null rating for replies |
 
 ## Deviations from Plan
 
-None. Implementation follows the 9-step plan exactly as specified.
+None. Both implementation steps (L1-L2) completed as specified.
+
+## Notes
+
+CLI runtime checks (CHK-02 through CHK-05) require CLI authentication setup against a running server instance. Code logic is verified via TypeScript compilation and static inspection. The server-side behavior for these paths is comprehensively tested via curl in the server verification.
 
 ## Artifact Inputs Used
 
 | Artifact | Location |
 |----------|----------|
-| implementation-plan.md | helix-cli run root /implementation-plan/implementation-plan.md |
-| tech-research.md | helix-cli run root /tech-research/tech-research.md |
-| ticket.md | helix-cli run root /ticket.md |
+| Implementation Plan | `.helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmp6a318400nwkw0uizd3xrfd/implementation-plan/implementation-plan.md` |
+| Comments Post Source | `src/library/comments-post.ts` |

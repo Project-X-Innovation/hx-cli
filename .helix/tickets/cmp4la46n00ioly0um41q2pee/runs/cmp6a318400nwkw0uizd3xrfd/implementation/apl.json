@@ -1,32 +1,22 @@
 {
   "questions": [
-    "How should library item resolution be implemented?",
-    "What module structure should the library commands use?",
-    "How should the CLI commands integrate with the main dispatcher?"
+    "How should --rating be made conditional based on --reply-to?",
+    "Does the TypeScript build pass with the changes?"
   ],
   "answers": [
     {
-      "answer": "Created resolve-library-item.ts adapting the resolve-ticket.ts 3-strategy pattern: (1) cuid detection via /^c[a-z0-9]{24}$/ regex for exact id match, (2) ticket shortId matching via case-insensitive comparison against item's ticket shortId (e.g. RSH-439), (3) title substring fallback with case-insensitive matching. extractLibraryItemRef extracts ref from --item flag or first positional arg.",
+      "answer": "Modified comments-post.ts to read --reply-to flag first via getFlag (always optional). If replyTo is present, uses getFlag for --rating (optional, returns undefined if absent). If replyTo is absent, uses requireFlag for --rating (throws error if missing). Body construction conditionally includes rating only when present. Output message shows [reply] label when rating is null.",
       "evidence": [
-        "src/lib/resolve-library-item.ts: 3-strategy resolution with extractLibraryItemRef"
+        "src/library/comments-post.ts: conditional getFlag vs requireFlag based on replyTo presence"
       ]
     },
     {
-      "answer": "Created new src/library/ module with nested router structure: index.ts dispatches to list/show/comments subcommands, comments.ts is a nested router dispatching to comments-list and comments-post. For comments subcommand, resolves library item first via resolveLibraryItem then delegates to runLibraryComments. Six files total in the module.",
+      "answer": "Yes, npx tsc --noEmit passes with zero errors after the change.",
       "evidence": [
-        "src/library/index.ts: router with list/show/comments dispatch",
-        "src/library/comments.ts: nested router for list/post",
-        "src/library/list.ts, show.ts, comments-list.ts, comments-post.ts: individual command implementations"
-      ]
-    },
-    {
-      "answer": "Added 'library' case to main switch dispatcher in src/index.ts with configOrHelp pattern matching other authenticated commands. Added runLibrary import. Updated SKILL.md with 4 new commands in Available Commands table and Library Reports workflow section.",
-      "evidence": [
-        "src/index.ts: library case with configOrHelp + runLibrary",
-        "skill-content/SKILL.md: 4 library commands and workflow examples"
+        "npx tsc --noEmit exit code 0"
       ]
     }
   ],
-  "statement": "All CLI Phase 2b changes implemented: resolve-library-item utility, 6-file library module with nested router, main dispatcher integration, and SKILL.md documentation. Build passes with zero errors. CLI library list command verified functional against dev server.",
+  "statement": "Run 3 CLI fix implemented: --rating is now optional when --reply-to is present, required otherwise. TypeScript build passes. Runtime tests deferred to Verification Agent.",
   "followups": []
 }

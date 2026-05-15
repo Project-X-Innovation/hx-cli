@@ -26,23 +26,36 @@ export async function cmdCommentsPost(config: HxConfig, resolvedId: string, args
     section = slugify(section);
   }
 
-  const ratingRaw = requireFlag(args, "--rating", "--rating <value> is required. Values: thumbs-up, thumbs-down, love, up, down.");
-  const rating = RATING_MAP[ratingRaw.toLowerCase()];
-  if (!rating) {
-    console.error(`Error: Unknown rating "${ratingRaw}". Valid values: thumbs-up (up), thumbs-down (down), love.`);
-    process.exit(1);
-  }
-
+  // Read --reply-to first to determine if --rating is required
   const replyTo = getFlag(args, "--reply-to");
+
+  let rating: string | undefined;
+  if (replyTo) {
+    // Reply mode: --rating is optional
+    const ratingRaw = getFlag(args, "--rating");
+    if (ratingRaw) {
+      rating = RATING_MAP[ratingRaw.toLowerCase()];
+      if (!rating) {
+        console.error(`Error: Unknown rating "${ratingRaw}". Valid values: thumbs-up (up), thumbs-down (down), love.`);
+        process.exit(1);
+      }
+    }
+  } else {
+    // Top-level mode: --rating is required
+    const ratingRaw = requireFlag(args, "--rating", "--rating <value> is required. Values: thumbs-up, thumbs-down, love, up, down.");
+    rating = RATING_MAP[ratingRaw.toLowerCase()];
+    if (!rating) {
+      console.error(`Error: Unknown rating "${ratingRaw}". Valid values: thumbs-up (up), thumbs-down (down), love.`);
+      process.exit(1);
+    }
+  }
 
   // Remaining positional args = message text
   const positional = getPositionalArgs(args, ["--section", "--rating", "--reply-to", "--item"]);
   const content = positional.length > 0 ? positional.join(" ") : undefined;
 
-  const body: Record<string, unknown> = {
-    anchor: section,
-    rating,
-  };
+  const body: Record<string, unknown> = { anchor: section };
+  if (rating) body.rating = rating;
   if (content) body.content = content;
   if (replyTo) body.parentCommentId = replyTo;
 
@@ -52,7 +65,7 @@ export async function cmdCommentsPost(config: HxConfig, resolvedId: string, args
     body,
   });
 
-  const ratingLabel = ratingRaw.toLowerCase();
+  const label = rating ? `[${Object.entries(RATING_MAP).find(([, v]) => v === rating)?.[0] ?? rating}]` : "[reply]";
   const textPart = content ? `: "${content}"` : "";
-  console.log(`Posted: [${ratingLabel}] on ${section}${textPart}`);
+  console.log(`Posted: ${label} on ${section}${textPart}`);
 }
