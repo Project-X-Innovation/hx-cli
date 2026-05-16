@@ -15,19 +15,6 @@ Bug In Chaining
 
 check this out. This was built from a research ticket that was itself done after another ticket. There are a few different relationships between these tickets. Bottom line, it was not implemented properly. The artifacts were made properly but the code actually was not relevant to what was supposed to be implemented.
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### BLD-444: Implement: Library Comments and Iteration
-- Mode: BUILD | Status: PREVIEW_READY
-- Completed runs: 3 (run-1, run-2, run-3)
-- Materialized files: 99 artifacts
-- Path: `.helix-refs/BLD-444/`
-- Manifest: `.helix-refs/BLD-444/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - (none)
 

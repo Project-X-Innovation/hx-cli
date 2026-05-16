@@ -1,0 +1,41 @@
+{
+  "problem": "The CLI has no command to fetch a ticket's research report. The user expects agents to be able to independently look up research reports via CLI during runs. Currently only hlx tickets get, hlx tickets artifacts, and hlx tickets artifact exist — none fetch the report content from GET /tickets/:ticketId/report.",
+  "files": [
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Lines 15-32: Registers all ticket subcommands. No 'report' subcommand exists."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Lines 5-22: TicketDetail type includes id, shortId, title, description, status, branchName, reporter, repositories, runs — does NOT include implementFromTicketId, referencedTicketIds, or report content. Lines 46-83: printTicketDetail outputs metadata but no report."
+    },
+    {
+      "path": "src/tickets/artifacts.ts",
+      "why": "Lines 25-78: Lists step artifacts from run summary. Separate from research reports — step artifacts are per-step outputs, not the consolidated research report."
+    },
+    {
+      "path": "src/tickets/artifact.ts",
+      "why": "Fetches individual step artifact by stepId and repoKey. Cannot fetch research reports."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "hxFetch utility for authenticated API calls. Could be used by a new report command to call GET /tickets/:ticketId/report."
+    }
+  ],
+  "facts": [
+    "The CLI exports: list, latest, get, create, update-description, rerun, continue, artifacts, artifact, bundle — no report command",
+    "The server API endpoint GET /tickets/:ticketId/report exists and returns { report: { content, filename, generatedAt } | null }",
+    "The CLI has hxFetch utility for authenticated API calls, making a new report command straightforward to implement",
+    "The CLI is published as @projectxinnovation/helix-cli npm package with bin entry hlx"
+  ],
+  "unknowns": [
+    "Whether the CLI should add a dedicated 'hlx tickets report <ticket-ref>' command",
+    "Whether agents running in sandbox have CLI access and authentication to call hlx commands during runs",
+    "Whether the CLI report command would be used by agents, users, or both"
+  ],
+  "qualityGates": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test dist/**/*.test.js"
+  }
+}
