@@ -1,0 +1,25 @@
+{
+  "questions": [
+    "What is the server API response shape for GET /tickets/:ticketId/report?",
+    "What existing CLI command pattern should the report command follow?"
+  ],
+  "answers": [
+    {
+      "answer": "The endpoint returns { report: { content: string; filename: string; generatedAt: string } | null; errorMessage?: string | null }. When no report exists, report is null.",
+      "evidence": [
+        "helix-global-server/src/controllers/report-controller.ts: handler calls getTicketReportForOrganization",
+        "helix-global-server/src/services/ticket-service.ts lines 1876-1927: returns { report: { content, filename, generatedAt } | null }",
+        "scout/reference-map.json (helix-cli): server endpoint confirmed at GET /tickets/:ticketId/report"
+      ]
+    },
+    {
+      "answer": "The artifact.ts command is the closest pattern. It resolves a ticket ref, calls hxFetch with basePath '/api', handles the response, and outputs content to stdout. The report command follows the same structure: resolve ticket ref → fetch report → output content or 'no report' message.",
+      "evidence": [
+        "helix-cli/src/tickets/artifact.ts: uses extractTicketRef + resolveTicket + hxFetch + stdout output",
+        "helix-cli/src/tickets/index.ts: switch-case registration pattern with help text"
+      ]
+    }
+  ],
+  "statement": "The CLI report command is a straightforward new file (src/tickets/report.ts) following the artifact.ts pattern. It resolves a ticket ref, calls GET /tickets/:ticketId/report via hxFetch, and outputs report.content to stdout or a clear 'no report' message. Registration in index.ts follows the existing switch-case pattern.",
+  "followups": []
+}
