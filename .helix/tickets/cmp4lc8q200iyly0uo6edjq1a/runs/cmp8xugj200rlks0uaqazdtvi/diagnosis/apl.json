@@ -1,0 +1,25 @@
+{
+  "questions": [
+    "Does the CLI provide a command to fetch research reports?",
+    "Does the server API endpoint for reports exist and is it wrappable?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The CLI ticket subcommands (list, latest, get, create, update-description, rerun, continue, artifacts, artifact, bundle) do not include a report command. The get command doesn't output report content, relationship fields, or ticket mode.",
+      "evidence": [
+        "src/tickets/index.ts lines 15-32: no report subcommand registered",
+        "src/tickets/get.ts: TicketDetail type lacks implementFromTicketId, referencedTicketIds, mode, and report content"
+      ]
+    },
+    {
+      "answer": "Yes. The server has GET /tickets/:ticketId/report returning { report: { content, filename, generatedAt } | null }. The CLI's hxFetch utility (src/lib/http.ts) handles authenticated API calls, making a report command straightforward to implement.",
+      "evidence": [
+        "helix-global-server/src/routes/api.ts line 299: GET /tickets/:ticketId/report endpoint",
+        "helix-global-server/src/controllers/report-controller.ts: handler calls getTicketReportForOrganization",
+        "helix-cli/src/lib/http.ts: hxFetch provides authenticated API calls"
+      ]
+    }
+  ],
+  "statement": "The CLI lacks a report command despite the server API endpoint existing. Adding 'hlx tickets report <ticket-ref>' provides an independent report access path for both users and potentially agents. This is secondary to the server-side auto-populate fix but addresses the user's expectation that reports should be accessible via multiple mechanisms.",
+  "followups": []
+}
