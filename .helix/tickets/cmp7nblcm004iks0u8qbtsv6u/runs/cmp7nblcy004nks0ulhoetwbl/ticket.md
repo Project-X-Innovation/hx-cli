@@ -17,19 +17,6 @@ Bug With ticket status
 
 Shows "Preview ready" but is on another run
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### FIX-467: Bug creating first library ticket
-- Mode: FIX | Status: PREVIEW_READY
-- Completed runs: 4 (run-1, run-2, run-3, run-4)
-- Materialized files: 68 artifacts
-- Path: `.helix-refs/FIX-467/`
-- Manifest: `.helix-refs/FIX-467/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - Screenshot_20260515_210511_Chrome.jpg (image/jpeg, 355616 bytes)
 - Screenshot_20260515_210504_Chrome.jpg (image/jpeg, 354162 bytes)
