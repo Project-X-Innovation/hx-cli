@@ -1,0 +1,32 @@
+{
+  "problem": "CLI approval status display was addressed in the prior run. The list command shows [PENDING] tags and the get command shows Approval: lines. No remaining gaps identified in the CLI for approval status visibility.",
+  "files": [
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Lines 5-13: TicketItem type includes approvalStatus: string | null (line 9). Line 106: approvalTag constructed from ticket.approvalStatus. Line 107: appended to row output. Already implemented."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Lines 5-23: TicketDetail type includes approvalStatus: string | null (line 21). Line 62: displays 'Approval: ${ticket.approvalStatus}' conditionally. Already implemented."
+    },
+    {
+      "path": "src/tickets/latest.ts",
+      "why": "Lines 6-14: TicketItem type includes status. Uses printTicketDetail() from get.ts for detail display, which includes approval."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Central router for ticket subcommands. No approval subcommands registered."
+    }
+  ],
+  "facts": [
+    "TicketItem type in list.ts (line 9) includes approvalStatus: string | null — implemented in prior run.",
+    "TicketDetail type in get.ts (line 21) includes approvalStatus: string | null — implemented in prior run.",
+    "list command (line 106-107) shows [PENDING] tag appended to row when approvalStatus is non-null.",
+    "get command (line 62) shows 'Approval: ${ticket.approvalStatus}' when approvalStatus is non-null.",
+    "No CLI commands exist for approval workflows (submit defense, approve). This may be out of scope for this ticket.",
+    "CLI scripts: build='tsc', typecheck='tsc --noEmit', test='tsc && node --test dist/**/*.test.js'."
+  ],
+  "unknowns": [
+    "Whether CLI needs approval workflow commands (submit, approve) or if display-only is sufficient for this ticket."
+  ]
+}

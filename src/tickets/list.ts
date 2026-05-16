@@ -8,6 +8,7 @@ type TicketItem = {
   title: string;
   status: string;
   updatedAt: string;
+  approvalStatus: string | null;
   reporter: { id: string; email: string; name: string | null };
 };
 
@@ -102,6 +103,7 @@ export async function cmdTicketsList(config: HxConfig, args: string[]): Promise<
     const reporter = ticket.reporter.name ?? ticket.reporter.email;
     const updated = new Date(ticket.updatedAt).toLocaleString();
     const idAbbr = ticket.id.slice(0, 8) + "...";
-    console.log(`${ticket.shortId}  ${idAbbr}  ${ticket.status.padEnd(12)}  ${reporter.padEnd(20)}  ${updated}  ${ticket.title}`);
+    const approvalTag = ticket.approvalStatus ? ` [${ticket.approvalStatus}]` : "";
+    console.log(`${ticket.shortId}  ${idAbbr}  ${ticket.status.padEnd(12)}  ${reporter.padEnd(20)}  ${updated}  ${ticket.title}${approvalTag}`);
   }
 }

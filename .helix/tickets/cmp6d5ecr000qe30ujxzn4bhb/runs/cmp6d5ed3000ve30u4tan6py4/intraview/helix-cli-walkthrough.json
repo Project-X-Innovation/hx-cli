@@ -1,0 +1,55 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-468: Peer Approval Status Visibility in helix-cli",
+  "description": "This tour walks through the changes made to surface peer approval status in the helix-cli tooling. The server API was updated to return an `approvalStatus` field on ticket responses, and the CLI needed to consume and display that field in both the `hlx tickets get` (detail view) and `hlx tickets list` (tabular view) commands. The implementation follows the existing `mergeQueueStatus` pattern exactly, is fully backward-compatible with older servers, and required changes to only two files: `src/tickets/get.ts` and `src/tickets/list.ts`.",
+  "steps": [
+    {
+      "file": "src/tickets/get.ts",
+      "line": 1,
+      "description": "This file implements `hlx tickets get`, which fetches and pretty-prints a single ticket's full detail. Before this change, the `TicketDetail` type (lines 5–22) included `mergeQueueStatus: string | null` but had no approval-related field. The server now returns `approvalStatus` alongside `mergeQueueStatus`, so the type and display function both need updating. The approach mirrors the existing `mergeQueueStatus` pattern to keep the codebase internally consistent.",
+      "title": "Overview: TicketDetail type and get command"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 21,
+      "description": "A new field `approvalStatus: string | null` is added to the `TicketDetail` interface immediately after `mergeQueueStatus`. Using `string | null` (rather than `string | undefined`) mirrors the server contract: the field is always present in responses but may be null when no approval request exists. If an older server omits the field entirely, `undefined` is falsy and the conditional display below will gracefully skip it — ensuring full backward compatibility.",
+      "title": "Step 1a: Add approvalStatus to TicketDetail type"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 61,
+      "description": "Inside `printTicketDetail`, three lines are added immediately after the existing `mergeQueueStatus` conditional block (lines 58–60). The pattern is identical: `if (ticket.approvalStatus) { console.log('Approval:     ' + ticket.approvalStatus); }`. This means `hlx tickets get` will print a line like `Approval:     PENDING` when the field is truthy, and nothing when it is null or absent. The `--json` flag path is unaffected because it outputs the raw server response object, which automatically includes the new field.",
+      "title": "Step 1b: Conditionally display Approval status in printTicketDetail"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 1,
+      "description": "This file implements `hlx tickets list`, which prints a paginated table of tickets. Before this change, the `TicketItem` type (lines 5–12) only had `status: string` and the display row simply printed `ticket.status.padEnd(12)`. The goal here is to append a short bracketed tag — e.g., `[PENDING]` or `[APPROVED]` — to the status column when `approvalStatus` is non-null, without breaking the column alignment for tickets that have no approval status.",
+      "title": "Overview: TicketItem type and list command"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 10,
+      "description": "The `TicketItem` interface gains `approvalStatus: string | null` at line 10, following the same rationale as `TicketDetail` in `get.ts`. The field is typed as `string | null` to match the server response shape and allow falsy-check logic downstream. No other type changes are needed — the `--json` branch already outputs the raw server payload.",
+      "title": "Step 2a: Add approvalStatus to TicketItem type"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 106,
+      "description": "A one-liner computes `approvalTag`: `const approvalTag = ticket.approvalStatus ? ` [${ticket.approvalStatus}]` : ''`. When `approvalStatus` is non-null (e.g., `'PENDING'`, `'APPROVED'`, `'NEEDS_DEFENSE'`), the tag is a space-prefixed bracketed string. When null or absent, it is an empty string. This keeps the no-approval case visually identical to the pre-change output, avoiding any regression in existing table formatting.",
+      "title": "Step 2b: Build approvalTag suffix for list rows"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 107,
+      "description": "The `approvalTag` variable is concatenated at the end of the `console.log` call that renders each ticket row. For example, a ticket with status `PREVIEW_READY` and approval status `PENDING` renders as `PREVIEW_READY  [PENDING]`. A ticket with no approval activity renders exactly as before. This is the final data-flow step: server response → TicketItem type → approvalTag computation → CLI output.",
+      "title": "Step 2c: Append approvalTag to list row output"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 1,
+      "description": "All changes are purely additive. The TypeScript typecheck (`npx tsc --noEmit`) exits with code 0 and zero errors, confirming type safety across the codebase. No existing code paths were modified — only new conditional branches were added, each guarded by a falsy check. The `--json` output mode in both commands is unchanged and automatically includes `approvalStatus` via the raw server response passthrough. Backward compatibility with older servers is maintained because `undefined` is falsy. The implementation plan's three steps (L1: get.ts type+display, L2: list.ts type+display, L3: typecheck) are all complete and verified.",
+      "title": "Summary: Codebase health and major code paths"
+    }
+  ]
+}

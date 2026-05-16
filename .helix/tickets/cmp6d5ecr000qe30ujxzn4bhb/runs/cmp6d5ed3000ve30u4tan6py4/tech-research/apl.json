@@ -1,0 +1,19 @@
+{
+  "questions": [
+    "How should approval status be displayed in CLI ticket get and list commands?"
+  ],
+  "answers": [
+    {
+      "answer": "Display as a separate 'Approval:' line in hlx tickets get (matching the existing mergeQueueStatus pattern at lines 57-59), and as a brief indicator appended to list output. The field is optional — shown only when present and non-null. No new CLI commands needed. JSON output includes the field automatically from the server response.",
+      "evidence": [
+        "get.ts lines 57-59: mergeQueueStatus displayed as separate conditional line — same pattern for approval",
+        "get.ts lines 5-22: TicketDetail type needs approvalStatus?: string | null",
+        "list.ts lines 5-12: TicketItem type needs approvalStatus?: string | null",
+        "list.ts line 105: status column with padEnd(12) — approval indicator follows",
+        "product/product.md: 'CLI hlx tickets get shows approval line'"
+      ]
+    }
+  ],
+  "statement": "CLI adds optional approvalStatus field to TicketDetail and TicketItem types. Displays as a separate 'Approval:' line in get and a brief indicator in list. No new commands. Two files changed: get.ts and list.ts.",
+  "followups": []
+}
