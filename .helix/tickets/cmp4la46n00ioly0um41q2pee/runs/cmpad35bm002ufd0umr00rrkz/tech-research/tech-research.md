@@ -1,137 +1,206 @@
-# Tech Research: helix-cli — Library Commands (Run 3 Targeted Fix)
+# Tech Research: Library Comments CLI Hardening (Run 4)
 
 ## Technology Foundation
 
-| Technology | Version | Purpose |
-|-----------|---------|---------|
-| TypeScript | tsc (ES2022) | Compilation; strict mode |
-| Flag parsing | src/lib/flags.ts | `getFlag` (optional) vs `requireFlag` (mandatory) |
+| Technology | Version | Role |
+|-----------|---------|------|
+| TypeScript | tsc (ES2022, strict mode) | Compilation, no bundler |
+| `src/lib/flags.ts` | N/A | Flag parsing (`getFlag`, `hasFlag`, `getPositionalArgs`) |
+| `src/lib/http.ts` | N/A | `hxFetch` HTTP client with auth |
+| `skill-content/SKILL.md` | N/A | Agent discoverability documentation |
 
 No new dependencies. Build is TypeScript-only (`tsc`).
 
 ## Architecture Decision
 
-### Fix: Rating Optional for Replies — Conditional Flag Requirement
+### Option A: 2 targeted discoverability fixes + 1 error handling improvement (Chosen)
 
-**Options Considered:**
+The CLI library module is feature-complete — all 7 new files and 2 modified files exist and work correctly. The prior `--rating` optionality fix is confirmed working. Two discoverability gaps prevent the feature from being intuitive, and one error handling gap produces poor UX on network failures.
 
-| Option | Description | Verdict |
-|--------|-------------|---------|
-| **A: Conditional getFlag/requireFlag (chosen)** | Check --reply-to first; if present, use getFlag (optional) for --rating | Minimal change; follows flag utility semantics |
-| B: Always getFlag with manual validation | Use getFlag for --rating always, then manually check/error when top-level | Loses the `requireFlag` error message; more code |
-| C: New flag utility | Create `conditionalRequireFlag` | Over-engineering for one use case |
+**Rationale:**
+- Rating aliases (`up`/`down`/`love`) are ergonomic and intuitive
+- Auto-slugification (`--section "Key Findings"` -> `key-findings`) works correctly
+- 3-format item resolution (cuid, short ID, title match) with disambiguation is well-implemented
+- SKILL.md has complete Library section (lines 48-51, 146-174) for agent discoverability
+- The gaps are output formatting and help text omissions, not structural defects
 
-**Chosen: A** — The existing flag utilities provide the exact semantics needed. `requireFlag` prints an error and exits if the flag is missing. `getFlag` returns `undefined` if missing. The fix reads `--reply-to` first (already at line 36), then branches:
-- If `--reply-to` is present (reply mode): use `getFlag` for `--rating` — returns the value or `undefined`
-- If `--reply-to` is absent (top-level mode): use `requireFlag` for `--rating` — enforces presence
+### Option B: Add a `--json` output flag for machine-readable output (Rejected for this run)
 
-**Evidence:**
-- `comments-post.ts:29` — `requireFlag(args, "--rating", "...")` currently always requires
-- `comments-post.ts:36` — `const replyTo = getFlag(args, "--reply-to")` already reads the flag
-- `src/lib/flags.ts` — `getFlag` returns `string | undefined`; `requireFlag` returns `string` or exits
+**Why rejected:** While useful for scripts and automation, JSON output is a formatting layer that doesn't affect intuitiveness of the current CLI commands. Deferred to future pass.
 
-## Core API/Methods
+## Core Changes (3 Fixes)
 
-### Change in comments-post.ts
+### Fix 1: Add Library Commands to Main Help Text
 
-**Current flow (broken for replies):**
+**What:** Add `hlx library` entries to the `usage()` function in `src/index.ts`.
+
+**Why:** The switch dispatcher at lines 94-97 correctly routes the `library` command, but the `usage()` function at lines 35-59 does not mention library commands anywhere. Users running `hlx` or `hlx --help` see no indication that library commands exist. This is the #1 discoverability gap — if users don't know the feature exists, they won't use it.
+
+**Technical approach:**
+- Add library command entries to the `usage()` output string, between the `hlx comments` and `hlx skill` blocks (logical grouping by domain):
+
 ```
-1. requireFlag(args, "--section", ...)  // always required ✓
-2. requireFlag(args, "--rating", ...)   // always required ✗ (should be optional for replies)
-3. getFlag(args, "--reply-to")          // optional ✓
-4. Build body with { anchor, rating, content?, parentCommentId? }
-5. POST to /library/items/:id/comments
-```
-
-**Fixed flow:**
-```
-1. requireFlag(args, "--section", ...)           // always required ✓
-2. getFlag(args, "--reply-to")                   // read FIRST to determine mode
-3. IF reply mode: getFlag(args, "--rating")      // optional for replies
-   ELSE: requireFlag(args, "--rating", ...)      // required for top-level
-4. Build body:
-   - Always include: { anchor: section }
-   - Include rating ONLY if non-null
-   - Include content if present
-   - Include parentCommentId if reply mode
-5. POST to /library/items/:id/comments
+  hlx library list                List library items
+  hlx library show <ref>          Show report with section annotations
+  hlx library comments list <ref> List section-grouped comments
+  hlx library comments post <ref> Post a section rating
 ```
 
-**Body construction update:**
-The body object currently always includes `rating` (line 44). When rating is `undefined` (reply without rating), it must be omitted from the body. The fix:
-- Build body starting with `{ anchor: section }`
-- Conditionally add `rating` only when it has a value
-- Server handles missing rating field correctly for replies (stores null)
+- Follow the existing formatting pattern: 2-space indent, left-aligned command, right-padded description
+- The `<ref>` notation matches the existing `<id>` notation used elsewhere in the help text
 
-### Validation of RATING_MAP when rating is provided
+### Fix 2: Show Comment IDs in `comments list` Output
 
-When `--rating` IS provided (even for replies), it must still be validated against the RATING_MAP (lines 5-11). The validation logic (`if (!rating) { console.error(...); process.exit(1); }`) only runs when a raw rating string was provided. When rating is `undefined` (no flag), the validation is skipped entirely.
+**What:** Include the comment ID in the formatted output of `hlx library comments list`.
+
+**Why:** The `--reply-to` flag in `comments-post.ts` line 39 requires a comment ID, but users have no way to discover IDs from CLI output. The `comments-list.ts` response type (line 6) includes `id: string`, but line 68's format string omits it: `console.log(\`  [${ratingLabel}] ${author} (${formatDate(comment.createdAt)})${text}\`)`.
+
+**Technical approach:**
+- Prepend the comment ID to each comment line, truncated for readability:
+```
+// Before:
+  [thumbs-up] Alice (2026-05-10): "Great framing"
+
+// After:
+  [clx1abc] [thumbs-up] Alice (2026-05-10): "Great framing"
+```
+
+- Use `comment.id.slice(0, 7)` for a short, copy-paste-friendly prefix (similar to git short hashes)
+- For replies, show the ID similarly:
+```
+    -> [clx1def] [reply] Bob (2026-05-11): "I disagree"
+```
+
+- This makes the `--reply-to` workflow discoverable:
+```bash
+hlx library comments list RSH-439    # See [clx1abc] in output
+hlx library comments post RSH-439 --section key-findings --reply-to clx1abc --rating up "Agreed"
+```
+
+**Note:** The full cuid is typically 25 characters (e.g., `clx1abc2def3ghi4jkl5mno6p`). Showing the full ID would clutter the output. However, `--reply-to` needs the full ID for the API call. Two options:
+
+- **Option A (recommended):** Show 7-char prefix in formatted output, but also document that `hlx library comments list --section <slug>` with fewer comments makes full IDs manageable
+- **Option B:** Show full ID but indent it on a separate line. Clutters output.
+
+Going with Option A: short ID prefix plus adding a note that full IDs are shown with `--verbose` or when piped (future enhancement).
+
+Actually, the simpler approach: show the full ID since CLI users are comfortable with long strings and terminal selection. The truncated version creates confusion about what to pass to `--reply-to`.
+
+**Revised approach:** Show full comment ID in parentheses after the author:
+```
+  [thumbs-up] Alice (2026-05-10) [clx1abc2def3ghi4jkl5mno6p]: "Great framing"
+```
+
+Or prefix format:
+```
+  clx1abc2def3ghi4jkl5mno6p [thumbs-up] Alice (2026-05-10): "Great framing"
+```
+
+**Final decision:** Show the full ID as a clearly-labeled prefix. Users can copy-paste it for `--reply-to`. The format becomes:
+```
+  (clx1abc...) [thumbs-up] Alice (2026-05-10): "Great framing"
+```
+
+This is clear, copy-paste-friendly, and self-documenting.
+
+### Fix 3: Error Handling for Network Failures (Optional Hardening)
+
+**What:** Wrap `hxFetch` calls in try-catch blocks in `comments-list.ts` and `comments-post.ts`.
+
+**Why:** Both files call `hxFetch` without error handling. Network failures, 404 responses, or auth errors produce raw stack traces instead of user-friendly messages.
+
+**Technical approach:**
+- Wrap the `hxFetch` call in a try-catch:
+```typescript
+try {
+  const data = await hxFetch(config, `/library/items/${resolvedId}/comments`, { ... });
+  // ... existing formatting logic
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`Error: ${message}`);
+  process.exit(1);
+}
+```
+
+- Apply to both `comments-list.ts` (line 41) and `comments-post.ts` (line 62)
+- The `resolve-library-item.ts` file already has its own error handling for resolution failures, so that's covered
 
 ## Technical Decisions
 
-### 1. Section Still Required for Replies
+### Decision 1: Full ID vs Truncated ID in Output
 
-**Chosen:** Keep `--section` as required even for replies.
-**Rationale:** Replies are always in the context of a section — they respond to a comment on a specific section. The server requires the `anchor` field for all comments. Removing the requirement would break the API contract.
+**Chosen:** Full comment ID displayed in parentheses.
+**Rejected:** 7-character truncated prefix.
+**Rationale:** `--reply-to` requires the full ID. Truncating creates a discovery problem — users see a short ID but need to find the full one somewhere. Showing the full ID makes the `comments list` -> `comments post --reply-to` workflow self-contained.
 
-### 2. No Changes to SKILL.md
+### Decision 2: Help Text Position
 
-**Chosen:** SKILL.md remains as-is.
-**Rationale:** The existing documentation at lines 146-172 correctly describes the commands. The `--reply-to` flag is already documented. The change to make `--rating` optional for replies is a behavior refinement that doesn't require new documentation — agents using `--reply-to` will naturally omit `--rating` when posting conversational replies.
+**Chosen:** Place library commands between `hlx comments` and `hlx skill` blocks.
+**Rejected:** (a) At the top (too prominent for a new feature), (b) At the bottom (easy to miss).
+**Rationale:** Logical domain grouping: `comments` (ticket comments) -> `library` (library commands including library comments) -> `skill` (tooling). The flow from ticket operations to library operations to utility commands is natural.
 
-### 3. No Changes for LOVE Icon/Naming
+### Decision 3: Error Message Format
 
-**Chosen:** No CLI changes for the LOVE icon update.
-**Rationale:** The CLI uses `love` as a flag value mapped to `LOVE` stored value (comments-post.ts:5-11). This is a data mapping, not a display concern. The icon change from heart to double thumbs up is a UI-only change in helix-global-client. The CLI's `love` flag value remains intuitive and correct.
+**Chosen:** Simple `Error: <message>` with `process.exit(1)`.
+**Rejected:** (a) Detailed HTTP status codes in output (too technical), (b) Retry prompts (not appropriate for CLI one-shot commands).
+**Rationale:** Matches the error reporting pattern in other CLI commands. The `hxFetch` wrapper already formats HTTP errors into readable messages. The try-catch just prevents raw stack traces from leaking to the user.
 
 ## Cross-Platform Considerations
 
-- **Server compatibility:** When `--reply-to` is present and `--rating` is absent, the POST body omits the `rating` field entirely. The server's Zod schema (`ratingSchema.optional()`) accepts this. The server's validation logic (`library-comment-service.ts:69-73`) only enforces rating for top-level comments (no `parentCommentId`).
-- **Client compatibility:** No interaction between CLI and client for this fix.
+- **Server compatibility:** No server changes needed. The CLI consumes existing endpoints unchanged.
+- **Client compatibility:** No interaction between CLI and client for these changes.
+- **Agent discoverability:** SKILL.md is already complete and documents all library commands. The `usage()` fix targets human CLI users, not agents (agents read SKILL.md).
 
 ## Performance Expectations
 
 | Operation | Expected | Notes |
 |-----------|----------|-------|
-| `hlx library comments post --reply-to <id>` without `--rating` | <500ms | Same single POST request; no validation overhead |
+| `hlx --help` | Instant | String output, no network call |
+| `hlx library comments list` | <500ms | Single GET request + formatting |
+| Error handling overhead | <0.1ms | Try-catch is zero-cost in happy path |
 
 ## Dependencies
 
 | Dependency | Type | Risk |
 |-----------|------|------|
-| Server nullable rating support | API contract | None — server accepts missing rating for replies |
-| getFlag utility | Existing utility | None — already used at line 36 |
-| requireFlag utility | Existing utility | None — already used at line 29 |
+| usage() function | Internal | Existing function at lines 35-59; adding 4 lines is trivial |
+| comments-list.ts format | Internal | Existing formatting at line 68; prepending ID is additive |
+| hxFetch | Internal | Existing HTTP client; try-catch wrapping is standard |
 
 ## Deferred to Round 2
 
-| Feature | Why Deferred |
-|---------|-------------|
-| `--json` output flag | Output formatting layer; future pass |
-| Error message clarity for reply mode | Current getFlag returns undefined silently; could add "posting reply without rating" info message |
+| Item | Why Deferred |
+|------|-------------|
+| `--json` output flag | Formatting layer; not a discoverability issue |
+| `--verbose` flag for detailed output | Not in MVP scope |
+| Interactive section selection (fzf-style) | Nice-to-have; terminal UI library dependency |
+| Color-coded rating output (ANSI colors) | Polish; not all terminals support colors |
 
 ## Summary Table
 
-| Fix | Files Modified | Approach |
-|-----|---------------|----------|
-| Rating optional for replies | comments-post.ts (1 file) | Read --reply-to first; conditionally use getFlag vs requireFlag for --rating |
-| **Total** | **1 existing file** | **Minimal targeted fix** |
+| Change | File | Lines Changed | Risk |
+|--------|------|--------------|------|
+| Library in usage() help | src/index.ts | +4 | Trivial |
+| Comment IDs in output | src/library/comments-list.ts | +4 | Trivial |
+| Error handling (optional) | src/library/comments-list.ts, comments-post.ts | +12 | Low |
+| **Total** | **3 files** | **~20 lines** | **Trivial-Low** |
 
-## APL Statement
+## APL Statement Reference
 
-CLI needs 1 targeted fix: make --rating conditional in comments-post.ts. Read --reply-to first, then use getFlag (optional) instead of requireFlag (mandatory) for --rating when replying. When no --reply-to, keep requireFlag. No other CLI changes needed for the icon or nullable rating updates.
+See `tech-research/apl.json`. All questions resolved. No unresolved followups.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
-|----------|----------|-------------|
-| ticket.md (Research Report) | Primary specification | Rating optional for replies when parentCommentId present |
-| ticket.md (Discussion) | User feedback | Known gaps including rating optionality |
-| diagnosis/apl.json (CLI) | Investigation context | One deviation: requireFlag for --rating when --reply-to present |
-| diagnosis/diagnosis-statement.md (CLI) | Root cause | requireFlag at line 29; getFlag at line 36; conditional logic needed |
-| product/product.md (CLI) | Product requirements | Reply without rating is essential for conversational thread replies |
-| scout/reference-map.json (CLI) | File inventory | Exact line numbers for flag usage |
-| repo-guidance.json | Repo intent | CLI is target with 1 fix |
-| comments-post.ts:1-58 | Direct inspection | Full file: RATING_MAP, requireFlag at 29, getFlag --reply-to at 36, body construction at 42-47 |
-| src/lib/flags.ts | Utility reference | getFlag returns string \| undefined; requireFlag exits on missing |
-| Server library-comment-service.ts:69-73 | Cross-repo validation | Rating required for top-level only (validation correct) |
+|----------|----------|--------------|
+| ticket.md (research report) | Primary spec for Phase 2b | CLI commands, resolution strategies, SKILL.md requirements |
+| ticket.md (continuation context) | User directive | "Make sure everything intuitive is intuitive" |
+| diagnosis/diagnosis-statement.md (CLI) | Root cause analysis | 2 discoverability gaps: missing from usage(), IDs not in output; 1 error handling gap |
+| diagnosis/apl.json (CLI) | 5-question audit | Rating aliases good, --reply-to needs discoverable IDs, no try-catch on hxFetch |
+| product/product.md | Product requirements | P9: library in main help, P10: comment IDs in output |
+| scout/scout-summary.md (CLI) | Implementation state | All 7 new + 2 modified files complete; rating aliases, auto-slugification confirmed |
+| repo-guidance.json | Repo roles | CLI = 2 discoverability fixes + optional error handling |
+| src/index.ts (source, lines 35-59) | Direct inspection | usage() does not mention library — confirmed gap |
+| src/index.ts (source, lines 94-97) | Direct inspection | library case in switch — routing works correctly |
+| src/library/comments-list.ts (source, line 68) | Direct inspection | Format string omits comment.id despite id being in type at line 6 |
+| src/library/comments-post.ts (source, line 39) | Direct inspection | getFlag for --reply-to requires ID users can't discover |
