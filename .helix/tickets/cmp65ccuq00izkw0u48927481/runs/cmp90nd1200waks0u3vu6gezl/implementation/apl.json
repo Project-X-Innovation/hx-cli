@@ -1,0 +1,22 @@
+{
+  "questions": [
+    "Is the collateral merge conflict in tickets/index.ts resolved?",
+    "Does CLI typecheck pass?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. Zero conflict markers in tickets/index.ts. All subcommands preserved from both sides.",
+      "evidence": [
+        "grep for <<<<<<<|=======|>>>>>>> in tickets/index.ts: no matches"
+      ]
+    },
+    {
+      "answer": "Yes. CLI typecheck (tsc --noEmit) exits 0 with no type errors.",
+      "evidence": [
+        "npm run typecheck: exit 0"
+      ]
+    }
+  ],
+  "statement": "Collateral merge conflict in tickets/index.ts resolved. Typecheck passes. No library involvement in CLI.",
+  "followups": []
+}

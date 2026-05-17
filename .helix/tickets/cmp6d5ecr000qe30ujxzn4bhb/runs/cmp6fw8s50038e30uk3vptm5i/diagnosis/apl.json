@@ -1,0 +1,18 @@
+{
+  "questions": [
+    "What ticket data does the CLI currently display and how would it show approval status?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI's TicketDetail type (get.ts lines 5-22) has status and mergeQueueStatus but no approval field. The TicketItem type (list.ts lines 5-12) has only status. Both commands display raw status strings. Once the server adds approval status to ticket list/detail responses, the CLI needs to: (1) add the field to its types, and (2) display it alongside status in both get and list output.",
+      "evidence": [
+        "src/tickets/get.ts lines 5-22: TicketDetail has status, mergeQueueStatus — no approval field",
+        "src/tickets/get.ts line 52: prints 'Status: ${ticket.status}'",
+        "src/tickets/list.ts lines 5-12: TicketItem has status — no approval field",
+        "src/tickets/list.ts line 105: prints ticket.status padded to 12 chars"
+      ]
+    }
+  ],
+  "statement": "CLI needs to consume the new approvalStatus field from server responses and display it in both hlx tickets get and hlx tickets list. Changes are minimal: update type definitions and add conditional display lines. No new CLI commands needed for this ticket — the scope is status visibility, not approval workflow commands.",
+  "followups": []
+}

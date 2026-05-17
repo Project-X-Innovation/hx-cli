@@ -18,6 +18,7 @@ type TicketDetail = {
     finishedAt: string | null;
   }>;
   mergeQueueStatus: string | null;
+  approvalStatus: string | null;
   isArchived: boolean;
 };
 
@@ -56,6 +57,9 @@ export async function printTicketDetail(config: HxConfig, ticketId: string): Pro
 
   if (ticket.mergeQueueStatus) {
     console.log(`Merge Status: ${ticket.mergeQueueStatus}`);
+  }
+  if (ticket.approvalStatus) {
+    console.log(`Approval:     ${ticket.approvalStatus}`);
   }
 
   if (ticket.repositories.length > 0) {
