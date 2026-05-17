@@ -1,0 +1,17 @@
+{
+  "questions": [
+    "Do any merge conflict markers remain in the listed conflicted file (src/tickets/index.ts)?"
+  ],
+  "answers": [
+    {
+      "answer": "No conflict markers remain in src/tickets/index.ts. Grep for <<<<<<<, =======, >>>>>>> returned zero matches. The file is 149 lines with 10 subcommands including both ticket (HLX-342 CLI improvements) and staging additions.",
+      "evidence": [
+        "Grep scan of src/tickets/index.ts: no matches for conflict marker patterns",
+        "File is 149 lines with list, latest, get, create, update-description, rerun, continue, artifacts, artifact, bundle subcommands",
+        "Scout reference-map: 'No conflict markers (<<<<<<< / ======= / >>>>>>>) remain in index.ts'"
+      ]
+    }
+  ],
+  "statement": "The merge conflict in src/tickets/index.ts (HLX-342 CLI ticket improvements vs staging) is already resolved. No conflict markers remain. The CLI has no involvement in library credential routing. No code changes needed.",
+  "followups": []
+}

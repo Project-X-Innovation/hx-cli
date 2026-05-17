@@ -1,0 +1,23 @@
+{
+  "questions": [
+    "Are merge conflict markers resolved in tickets/index.ts?",
+    "Are all CLI subcommands preserved from both sides?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. Zero conflict markers remain. Grep scan returned no matches for <<<<<<< , ======= , or >>>>>>>.",
+      "evidence": [
+        "grep for conflict markers in tickets/index.ts: no matches"
+      ]
+    },
+    {
+      "answer": "Yes. All 10 subcommands are present: list, latest, get, create, update-description, rerun, continue, artifacts, artifact, bundle. All imports (lines 4-13) and switch cases (lines 43-148) are correctly preserved.",
+      "evidence": [
+        "tickets/index.ts lines 4-13: all 10 handler imports present",
+        "tickets/index.ts lines 43-148: all 10 switch cases present with help text and handlers"
+      ]
+    }
+  ],
+  "statement": "Collateral merge conflict in tickets/index.ts is resolved. All 10 CLI subcommands correctly preserved. Typecheck passes. No code changes needed.",
+  "followups": []
+}
