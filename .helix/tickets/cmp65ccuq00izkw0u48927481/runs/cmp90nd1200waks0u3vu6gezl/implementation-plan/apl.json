@@ -1,0 +1,26 @@
+{
+  "questions": [
+    "Is the collateral conflict in tickets/index.ts resolved?",
+    "Does the CLI have any library credential routing logic?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. Grep scan of src/tickets/index.ts returned zero matches for conflict marker patterns. Both the ticket's help/JSON output improvements (HLX-342) and staging's additions are preserved.",
+      "evidence": [
+        "Grep scan of src/tickets/index.ts: zero matches for <<<<<<<, =======, >>>>>>>",
+        "File has 149 lines with 10 subcommands including update-description",
+        "All subcommand cases present and syntactically correct"
+      ]
+    },
+    {
+      "answer": "No. The CLI is a command-line tool for interacting with the Helix API. It has no library repo creation, no GitHub API calls for repo provisioning, and no auth mode logic. The conflict was purely collateral from HLX-342 (CLI improvements) landing alongside a staging change.",
+      "evidence": [
+        "Diagnosis: 'collateral conflict — the CLI has no involvement in library credential routing'",
+        "repo-guidance.json: CLI intent = 'context'",
+        "File only contains subcommand routing (list, latest, get, create, etc.) — no GitHub operations"
+      ]
+    }
+  ],
+  "statement": "CLI collateral conflict in tickets/index.ts is already resolved with zero markers. No code changes needed. Typecheck must pass to confirm the resolved merge compiles correctly.",
+  "followups": []
+}
