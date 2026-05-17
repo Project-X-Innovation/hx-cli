@@ -19,19 +19,6 @@ Before you start make sure to run all tests and that all tests pass. Make sure y
 
 #FIX-475
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### FIX-475: Establish Platform Abstraction Test Coverage for helix-global-client and helix-global-serverNetsuite, and Helix SMB. Ticket
-- Mode: FIX | Status: STAGING_MERGED
-- Completed runs: 4 (run-1, run-2, run-3, run-4)
-- Materialized files: 111 artifacts
-- Path: `.helix-refs/FIX-475/`
-- Manifest: `.helix-refs/FIX-475/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Research Report
 
 # Platform Abstraction: Risks, Implementation, and Testing Plan
