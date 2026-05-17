@@ -1,57 +1,59 @@
 {
-  "problem": "Implement CLI library commands for section-level feedback (Phase 2b). Prior runs implemented all files. The CLI references 'love' as a rating value — if LOVE rating display changes (heart to double thumbs up), SKILL.md may need updated descriptions.",
+  "problem": "Run 4 of library comments CLI implementation (Phase 2b). Prior runs built the complete CLI module (7 new files, 2 modified). All prior issues resolved (rating optional for replies via conditional require). This run focuses on hardening and verification.",
   "files": [
     {
       "path": "src/library/index.ts",
-      "why": "Module router dispatching to list, show, and comments subcommands. Fully implemented."
+      "why": "Module router (73 lines). Dispatches to list, show, comments subcommands. Handles help display and item reference extraction."
     },
     {
       "path": "src/library/list.ts",
-      "why": "Lists library items with ID, title, status, date in table format. Fully implemented."
+      "why": "List command (49 lines). Fetches and formats library items as table with ID, title, status, date."
     },
     {
       "path": "src/library/show.ts",
-      "why": "Shows report with section headings annotated with [slug] and comment summaries. Fully implemented."
+      "why": "Show command (66 lines). Displays report with section headings annotated with [slug] and comment summaries."
     },
     {
       "path": "src/library/comments.ts",
-      "why": "Nested router for comments subcommands (list, post). Fully implemented."
+      "why": "Comments nested router (51 lines). Dispatches to list/post subcommands."
     },
     {
       "path": "src/library/comments-list.ts",
-      "why": "Lists comments grouped by section with author, rating, timestamp. Fully implemented."
+      "why": "Comments list command (80 lines). Groups comments by section anchor. Shows threading with reply indentation."
     },
     {
       "path": "src/library/comments-post.ts",
-      "why": "Posts section rating. RATING_MAP on lines 5-11 includes 'love' -> 'LOVE'. Supports --reply-to for threading."
+      "why": "Comments post command (72 lines). RATING_MAP with aliases (up, down, love). Rating optional for --reply-to (conditional require). Auto-slugifies heading text."
     },
     {
       "path": "src/lib/resolve-library-item.ts",
-      "why": "Multi-format item resolution: cuid ID, ticket short ID, title substring. Fully implemented."
+      "why": "Item resolution utility (82 lines). 3-format matching: cuid, ticket short ID (case-insensitive), title substring with disambiguation."
     },
     {
       "path": "src/index.ts",
-      "why": "Main dispatcher. Lines 94-98: 'library' case registered and routes to runLibrary."
+      "why": "Modified: Added 'library' case to switch dispatcher at lines 94-97."
     },
     {
       "path": "skill-content/SKILL.md",
-      "why": "Agent discoverability documentation. Library section (lines 146-172) documents all commands."
+      "why": "Modified: Library section in Available Commands table (lines 48-51) and Library Reports workflow section (lines 146-174) with full command examples."
     }
   ],
   "facts": [
-    "All 7 new files exist and are structurally complete",
-    "Both modified files (src/index.ts, SKILL.md) have expected changes",
-    "RATING_MAP in comments-post.ts: 'thumbs-up'/'up' -> 'THUMBS_UP', 'thumbs-down'/'down' -> 'THUMBS_DOWN', 'love' -> 'LOVE'",
-    "Item resolution: 3 strategies — cuid (starts with 'c', 25 chars), ticket short ID (/^[A-Z]+-\\d+$/), title substring",
-    "Auto-slugification: section flag with spaces gets slugified",
-    "hxFetch uses basePath '/api' for library endpoints",
-    "Build: 'tsc'. Typecheck: 'tsc --noEmit'",
-    "No new npm dependencies",
-    "TypeScript strict mode, ES2022 target, Node16 module resolution",
-    "SKILL.md includes rating values: thumbs-up, thumbs-down, love"
+    "All 7 new files and 2 modified files exist and are complete",
+    "Item resolution supports 3 formats: cuid, ticket short ID (/^[A-Z]+-\\d+$/i), title substring with disambiguation",
+    "--section flag accepts both raw slugs and heading text (auto-slugified if contains spaces)",
+    "RATING_MAP provides aliases: thumbs-up/up -> THUMBS_UP, thumbs-down/down -> THUMBS_DOWN, love -> LOVE",
+    "--rating is optional when --reply-to is present (conditional getFlag vs requireFlag in comments-post.ts lines 29-51)",
+    "SKILL.md has Library section with all commands plus complete workflow examples at lines 146-174",
+    "Quality gates: npm run build = 'tsc', npm run typecheck = 'tsc --noEmit', npm test = 'tsc && node --test dist/**/*.test.js'",
+    "No new npm dependencies — uses existing http.ts (hxFetch), flags.ts, config.ts",
+    "hxFetch uses basePath: '/api' for library endpoints",
+    "TypeScript strict mode, ES2022 target, Node16 module resolution"
   ],
   "unknowns": [
-    "Whether 'love' CLI alias needs any description update in SKILL.md given display changing from heart to double-thumbs-up",
-    "Whether rating should be optional for --reply-to posts in comments-post.ts (currently required via requireFlag)"
+    "No library-specific test files exist (flags.test.ts and resolve-ticket.test.ts exist as patterns but no library/*.test.ts)",
+    "TypeScript compilation not verified this run",
+    "hxFetch error handling for library-specific 404/400 responses not verified",
+    "show command markdown heading extraction regex robustness with edge cases (inline code, links in headings) not tested"
   ]
 }

@@ -1,42 +1,57 @@
-# Scout Summary — helix-cli
+# Scout Summary: helix-cli
 
 ## Problem
 
-Implement CLI library commands for section-level feedback (Phase 2b). Prior runs implemented all 7 new files and 2 modified files. The CLI is structurally complete. Rating taxonomy uses 'love' which maps to the LOVE stored value — if the display changes from heart to double thumbs up, this remains internally consistent but SKILL.md descriptions may need updates.
+Run 4 of the Library Comments and Iteration feature (Phase 2b: CLI). Prior runs built the complete CLI module (7 new files, 2 modified). All prior issues resolved. This run focuses on hardening, intuitiveness, and verification.
 
 ## Analysis Summary
 
-All CLI files exist and are structurally complete from prior runs:
+### Implementation State: Complete — All Prior Issues Resolved
 
-- **Module router**: `src/library/index.ts` dispatches to list, show, comments.
-- **Commands**: `list` (table), `show` (annotated headings with [slug] and summaries), `comments list` (grouped by section), `comments post` (rating + optional text + --reply-to).
-- **Item resolution**: `resolve-library-item.ts` — cuid, ticket short ID, title substring.
-- **Rating map**: `comments-post.ts` lines 5-11 — thumbs-up/up, thumbs-down/down, love.
-- **Dispatcher**: `src/index.ts` lines 94-98 — 'library' case registered.
-- **SKILL.md**: Library section (lines 146-172) documents all commands.
+All planned CLI files exist and are fully implemented:
 
-**Potential adjustments needed:**
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/library/index.ts` | 73 | Module router for list/show/comments |
+| `src/library/list.ts` | 49 | Table-formatted library item listing |
+| `src/library/show.ts` | 66 | Report display with [slug] annotations + comment summaries |
+| `src/library/comments.ts` | 51 | Comments subcommand dispatcher |
+| `src/library/comments-list.ts` | 80 | Grouped comment listing with threading |
+| `src/library/comments-post.ts` | 72 | Rating post with aliases and auto-slugification |
+| `src/lib/resolve-library-item.ts` | 82 | 3-format item resolution |
 
-| Area | Details |
-|------|---------|
-| SKILL.md rating description | If 'love' semantics change, description may need update |
-| Rating optionality for replies | `requireFlag(args, "--rating", ...)` makes rating mandatory even for replies — spec says optional for reply comments |
+### Prior Issue Resolution
 
-**Build/quality gates**: Build: `tsc` (strict, ES2022). No new dependencies.
+| Issue | Status | Evidence |
+|-------|--------|----------|
+| Rating mandatory for replies | Fixed | `comments-post.ts` uses conditional getFlag vs requireFlag based on `--reply-to` presence |
+
+### Key Features
+
+| Feature | Evidence |
+|---------|----------|
+| 3-format item resolution | cuid, short ID, title match in `resolve-library-item.ts:51-79` |
+| Rating aliases | `RATING_MAP`: up, down, love, thumbs-up, thumbs-down |
+| Auto-slugification | `--section "Key Findings"` -> `key-findings` (space detection) |
+| SKILL.md docs | Full Library section with command table + workflow examples (lines 48-51, 146-174) |
+| Thread replies | `--reply-to <commentId>` with optional rating |
+
+### Intuitiveness Aspects
+
+1. **Rating aliases** — `up`/`down`/`love` are shorter alternatives (agent-friendly)
+2. **Heading text to slug** — `--section "Key Findings"` auto-converts
+3. **Disambiguation** — Multiple title matches list candidates with IDs
+4. **Error messages** — Invalid ratings list valid values; missing flags show usage
+5. **Show annotations** — `[slug]` next to headings for easy copy-paste to `--section`
 
 ## Relevant Files
 
 | File | Role |
 |------|------|
-| `src/library/index.ts` | Module router |
-| `src/library/list.ts` | List library items |
-| `src/library/show.ts` | Show report with section annotations |
-| `src/library/comments.ts` | Comments subcommand router |
-| `src/library/comments-list.ts` | List comments grouped by section |
-| `src/library/comments-post.ts` | Post rating with optional text |
-| `src/lib/resolve-library-item.ts` | Multi-strategy item resolution |
-| `src/index.ts` | Main dispatcher with library case |
-| `skill-content/SKILL.md` | Agent discoverability documentation |
+| `src/library/` (7 files) | Complete command module |
+| `src/lib/resolve-library-item.ts` | Item resolution |
+| `src/index.ts` (lines 94-97) | Dispatcher registration |
+| `skill-content/SKILL.md` (lines 48-51, 146-174) | Agent documentation |
 | `src/lib/http.ts` | hxFetch HTTP client |
 | `src/lib/flags.ts` | Flag parsing utilities |
 
@@ -44,9 +59,9 @@ All CLI files exist and are structurally complete from prior runs:
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md | Spec + discussion history | CLI Phase 2b complete; icon change from heart to double thumbs up requested |
-| comments-post.ts | Verify rating map and flags | RATING_MAP includes love -> LOVE; --rating is required via requireFlag |
-| src/index.ts | Verify dispatcher | 'library' case registered at lines 94-98 |
-| SKILL.md | Verify agent documentation | Library section with all commands documented at lines 146-172 |
-| src/lib/http.ts | Verify HTTP client | hxFetch with retry, basePath support |
-| src/lib/flags.ts | Verify flag parsing | requireFlag used for --rating (makes it mandatory) |
+| ticket.md (Research Report) | Primary specification for Phase 2b | Defined CLI commands, resolution strategies, section targeting, agent workflows |
+| repo-guidance.json | Advisory shared metadata | Confirmed CLI target; rating optional fix now resolved |
+| Discussion thread (ticket.md) | Prior run context | No CLI-specific issues in recent runs |
+| SKILL.md | Agent documentation verification | Library section present with all commands, flag descriptions, and examples |
+| comments-post.ts (lines 5-11, 29-51) | Rating handling verification | RATING_MAP aliases + conditional require for replies |
+| resolve-library-item.ts | Resolution format verification | All 3 formats (cuid, short ID, title) confirmed |
