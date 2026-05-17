@@ -51,6 +51,10 @@ Usage:
   hlx inspect api --repo <name> <path>
   hlx comments list [--ticket <id>] [--helix-only] [--since <iso-date>]
   hlx comments post [--ticket <id>] <message>
+  hlx library list                List library items
+  hlx library show <ref>          Show report with section annotations
+  hlx library comments list <ref> List section-grouped comments
+  hlx library comments post <ref> Post a section rating
   hlx skill show                Print the bundled hlx-cli skill to stdout
   hlx skill install [flags]     Install the skill to an agent's skills directory
   hlx update                    Check for and apply updates from npm

@@ -59,13 +59,19 @@ export async function cmdCommentsPost(config: HxConfig, resolvedId: string, args
   if (content) body.content = content;
   if (replyTo) body.parentCommentId = replyTo;
 
-  await hxFetch(config, `/library/items/${resolvedId}/comments`, {
-    basePath: "/api",
-    method: "POST",
-    body,
-  });
+  try {
+    await hxFetch(config, `/library/items/${resolvedId}/comments`, {
+      basePath: "/api",
+      method: "POST",
+      body,
+    });
 
-  const label = rating ? `[${Object.entries(RATING_MAP).find(([, v]) => v === rating)?.[0] ?? rating}]` : "[reply]";
-  const textPart = content ? `: "${content}"` : "";
-  console.log(`Posted: ${label} on ${section}${textPart}`);
+    const label = rating ? `[${Object.entries(RATING_MAP).find(([, v]) => v === rating)?.[0] ?? rating}]` : "[reply]";
+    const textPart = content ? `: "${content}"` : "";
+    console.log(`Posted: ${label} on ${section}${textPart}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Error posting comment: ${message}`);
+    process.exit(1);
+  }
 }

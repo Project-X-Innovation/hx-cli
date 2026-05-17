@@ -38,10 +38,17 @@ export async function cmdCommentsList(config: HxConfig, resolvedId: string, args
   const queryParams: Record<string, string> = {};
   if (sectionFilter) queryParams.anchor = sectionFilter;
 
-  const data = (await hxFetch(config, `/library/items/${resolvedId}/comments`, {
-    basePath: "/api",
-    queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-  })) as CommentsResponse;
+  let data: CommentsResponse;
+  try {
+    data = (await hxFetch(config, `/library/items/${resolvedId}/comments`, {
+      basePath: "/api",
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    })) as CommentsResponse;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Error fetching comments: ${message}`);
+    process.exit(1);
+  }
 
   const comments = data.comments;
 
@@ -65,14 +72,14 @@ export async function cmdCommentsList(config: HxConfig, resolvedId: string, args
       const author = comment.authorUser.name ?? comment.authorUser.email;
       const ratingLabel = comment.rating ? comment.rating.toLowerCase().replace("_", "-") : "reply";
       const text = comment.content ? `: "${comment.content}"` : "";
-      console.log(`  [${ratingLabel}] ${author} (${formatDate(comment.createdAt)})${text}`);
+      console.log(`  (${comment.id}) [${ratingLabel}] ${author} (${formatDate(comment.createdAt)})${text}`);
 
       // Show replies
       const replies = sectionComments.filter((c) => c.parentCommentId === comment.id);
       for (const reply of replies) {
         const replyAuthor = reply.authorUser.name ?? reply.authorUser.email;
         const replyText = reply.content ? `: "${reply.content}"` : "";
-        console.log(`    -> [reply] ${replyAuthor} (${formatDate(reply.createdAt)})${replyText}`);
+        console.log(`    -> (${reply.id}) [reply] ${replyAuthor} (${formatDate(reply.createdAt)})${replyText}`);
       }
     }
   }

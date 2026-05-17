@@ -1,38 +1,57 @@
-# Implementation Actual - helix-cli (Run 3)
+# Implementation Actual — helix-cli
 
-## Summary
+## Summary of Changes
 
-Implemented Run 3 targeted fix for CLI library comments: made `--rating` optional when `--reply-to` is present, keeping it required for top-level comments.
+Run 4 hardening pass for Library Comments & Iteration (BLD-448). Added library commands to CLI usage text and improved error handling in comments-list and comments-post commands with try-catch wrappers and comment ID display.
 
 ## Files Changed
 
-### Modified Files (1)
-
 | File | Change |
 |------|--------|
-| `src/library/comments-post.ts` | Reads `--reply-to` before `--rating`; uses `getFlag` (optional) for replies vs `requireFlag` (mandatory) for top-level; conditional body construction only includes rating if present; output shows `[reply]` when no rating |
+| `src/index.ts` | Added 4 lines of library command help text (list, show, comments list, comments post) |
+| `src/library/comments-list.ts` | Wrapped hxFetch in try-catch, added comment IDs to output format `(id) [rating] author (date): text` |
+| `src/library/comments-post.ts` | Wrapped hxFetch in try-catch with user-friendly error message and process.exit(1) |
 
-## Verification Commands and Outcomes
+## Steps Executed
 
-| Check ID | Command/Test | Outcome |
-|----------|-------------|---------|
-| CHK-01 | `npx tsc --noEmit` | PASS - zero errors |
-| CHK-02 | `hlx library list` | NOT TESTED - requires CLI auth environment |
-| CHK-03 | `hlx library comments post` with rating | NOT TESTED - requires CLI auth; verified via static inspection that requireFlag still enforces --rating for top-level |
-| CHK-04 | Top-level without rating fails | NOT TESTED - verified via static inspection: `requireFlag` throws when `--rating` not provided and `--reply-to` is absent |
-| CHK-05 | Reply without rating works | NOT TESTED - verified via static inspection: `getFlag` returns undefined, body omits rating field, server accepts null rating for replies |
+1. Read existing CLI source files
+2. Added library command entries to usage text in index.ts
+3. Added try-catch error handling to comments-list.ts
+4. Added comment ID display to both top-level and reply output
+5. Added try-catch error handling to comments-post.ts
+
+## Verification Commands Run & Outcomes
+
+| Command | Outcome |
+|---------|---------|
+| `npx tsc` | Pass — zero errors |
+| `node dist/index.js --help` | Help text includes library commands |
+
+## Test/Build Results
+
+- TypeScript compilation: PASS
 
 ## Deviations from Plan
 
-None. Both implementation steps (L1-L2) completed as specified.
+None — all planned changes implemented as specified.
 
-## Notes
+## Known Limitations
 
-CLI runtime checks (CHK-02 through CHK-05) require CLI authentication setup against a running server instance. Code logic is verified via TypeScript compilation and static inspection. The server-side behavior for these paths is comprehensively tested via curl in the server verification.
+None identified.
+
+## Verification Plan Results
+
+| CHK ID | Description | Status | Notes |
+|--------|-------------|--------|-------|
+| CHK-08 | CLI tsc | PASS | `npx tsc` — 0 errors |
+
+## APL Statement Reference
+
+See `implementation/apl.json` in this run root.
 
 ## Artifact Inputs Used
 
-| Artifact | Location |
-|----------|----------|
-| Implementation Plan | `.helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmp6a318400nwkw0uizd3xrfd/implementation-plan/implementation-plan.md` |
-| Comments Post Source | `src/library/comments-post.ts` |
+| Artifact | Path | Purpose |
+|----------|------|---------|
+| Implementation Plan | implementation-plan/implementation-plan.md | Source of changes to implement |
+| Scout Reference Map | scout/reference-map.json | File locations and dependencies |
