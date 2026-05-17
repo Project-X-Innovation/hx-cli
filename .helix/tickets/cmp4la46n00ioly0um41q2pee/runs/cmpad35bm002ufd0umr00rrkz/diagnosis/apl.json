@@ -1,34 +1,49 @@
 {
   "questions": [
-    "What CLI-side spec deviations remain after prior implementation runs?",
-    "Should the CLI --rating flag be optional for reply posts?",
-    "Does the SKILL.md need updates for the icon change from heart to double thumbs up?"
+    "Q1: Is the 'library' command discoverable from CLI main help?",
+    "Q2: Are comment IDs shown in 'comments list' output for use with --reply-to?",
+    "Q3: Is the rating alias system intuitive?",
+    "Q4: Are error messages helpful when commands fail?",
+    "Q5: Is the prior --rating optionality fix for replies still working?"
   ],
   "answers": [
     {
-      "answer": "One confirmed deviation: --rating is required for all posts including replies via requireFlag (comments-post.ts:29). SKILL.md and all other CLI files are complete and correct.",
+      "answer": "No. The 'library' case exists in src/index.ts switch (lines 94-97) but is NOT listed in the usage() function (lines 37-59). Users running 'hlx' or 'hlx --help' won't discover the library command.",
       "evidence": [
-        "comments-post.ts:29 — requireFlag(args, '--rating', '...') makes rating mandatory for all posts",
-        "Research report: 'When parentCommentId is present, rating becomes optional'",
-        "All 7 new files and 2 modified files structurally complete per scout"
+        "src/index.ts lines 37-59: usage() does not include any 'hlx library' entry",
+        "src/index.ts lines 94-97: 'library' case exists in switch dispatcher"
       ]
     },
     {
-      "answer": "Yes. The spec says rating is optional for replies. When --reply-to is present, --rating should use getFlag instead of requireFlag so it's optional. When --reply-to is absent (top-level post), --rating remains required.",
+      "answer": "No. The comments-list.ts output format (line 68) shows [rating] author (date): 'content' but omits the comment ID. Users need the comment ID for --reply-to but have no way to discover it from CLI output.",
       "evidence": [
-        "comments-post.ts:29 — requireFlag(args, '--rating', ...) — always required currently",
-        "Server library-comment-service.ts:69-73 — validates rating required only for top-level",
-        "Research report Zod schema: 'When parentCommentId is present, rating becomes optional'"
+        "comments-list.ts line 68: console.log format omits comment.id",
+        "comments-post.ts: --reply-to flag expects a comment ID",
+        "comments-list.ts type line 6: id: string is in the type but not printed"
       ]
     },
     {
-      "answer": "SKILL.md uses 'love' as the CLI flag value which maps to 'LOVE' stored value. The flag name stays 'love' regardless of icon changes (icon is UI-only). SKILL.md description can optionally be updated for clarity but no functional change is needed. The rating taxonomy description at SKILL.md:170 is correct.",
+      "answer": "Yes. RATING_MAP provides 5 aliases: thumbs-up, thumbs-down, love, up, down. The short aliases (up/down) are ergonomic for CLI use. Invalid ratings produce an error listing valid values.",
       "evidence": [
-        "SKILL.md:170 — 'Rating values: thumbs-up (up), thumbs-down (down), love'",
-        "comments-post.ts:5-11 — RATING_MAP: 'love' -> 'LOVE' (correct mapping)"
+        "comments-post.ts lines 5-11: RATING_MAP with all aliases",
+        "comments-post.ts lines 47-50: error message lists valid values"
+      ]
+    },
+    {
+      "answer": "Partially. resolve-library-item.ts provides helpful multi-format matching and disambiguation. However, no try-catch blocks around hxFetch calls in comments-list.ts or comments-post.ts — network errors produce raw stack traces.",
+      "evidence": [
+        "resolve-library-item.ts lines 71-76: disambiguation lists matching items",
+        "comments-list.ts line 41: hxFetch with no try-catch",
+        "comments-post.ts line 62: hxFetch with no try-catch"
+      ]
+    },
+    {
+      "answer": "Yes. comments-post.ts uses conditional logic: getFlag when --reply-to is present, requireFlag when not. Rating is optional for replies, required for top-level posts.",
+      "evidence": [
+        "comments-post.ts lines 29-51: conditional getFlag vs requireFlag based on --reply-to"
       ]
     }
   ],
-  "statement": "The CLI needs 1 targeted fix: make --rating optional when --reply-to is present in comments-post.ts. Change requireFlag to conditional getFlag based on whether --reply-to is set. SKILL.md is correct and complete. No new files needed.",
+  "statement": "CLI needs 2 discoverability fixes: (1) Add 'hlx library' commands to main usage() help text in src/index.ts, and (2) Show comment IDs in 'comments list' output so --reply-to is usable. Optional hardening: wrap hxFetch calls in try-catch for user-friendly error messages. Prior --rating optionality fix is working correctly.",
   "followups": []
 }
