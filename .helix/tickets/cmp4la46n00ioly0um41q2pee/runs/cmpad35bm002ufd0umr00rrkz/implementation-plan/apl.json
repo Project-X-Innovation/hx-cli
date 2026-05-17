@@ -1,0 +1,26 @@
+{
+  "questions": [
+    "What is the exact CLI change needed for Run 3?",
+    "How should --rating be made conditional based on --reply-to?"
+  ],
+  "answers": [
+    {
+      "answer": "One targeted fix: make --rating conditional in comments-post.ts. When --reply-to is present, use getFlag (optional) for --rating. When --reply-to is absent, keep requireFlag (mandatory). Also conditionally include rating in the request body.",
+      "evidence": [
+        "comments-post.ts:29 — requireFlag for --rating (always required)",
+        "comments-post.ts:36 — getFlag for --reply-to (already optional)",
+        "src/lib/flags.ts — getFlag returns string | undefined; requireFlag exits on missing"
+      ]
+    },
+    {
+      "answer": "Read --reply-to FIRST (move from line 36 to before line 29). Then conditionally use getFlag vs requireFlag for --rating. Update body construction to only include rating when it has a value. Update output message for reply mode.",
+      "evidence": [
+        "comments-post.ts:29 — requireFlag currently always requires --rating",
+        "Server library-comment-service.ts:69-73 — rating required for top-level only",
+        "tech-research: conditional getFlag/requireFlag pattern chosen"
+      ]
+    }
+  ],
+  "statement": "CLI needs 1 targeted fix to comments-post.ts: make --rating conditional on --reply-to presence. Read --reply-to first, then conditionally use getFlag (optional) vs requireFlag (mandatory) for --rating. Update body construction and output message. Plan includes 5 required verification checks covering build, all command modes, and the specific reply-without-rating scenario.",
+  "followups": []
+}

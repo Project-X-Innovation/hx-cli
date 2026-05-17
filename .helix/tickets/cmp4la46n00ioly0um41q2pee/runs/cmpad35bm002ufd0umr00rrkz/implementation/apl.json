@@ -1,0 +1,22 @@
+{
+  "questions": [
+    "How should --rating be made conditional based on --reply-to?",
+    "Does the TypeScript build pass with the changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Modified comments-post.ts to read --reply-to flag first via getFlag (always optional). If replyTo is present, uses getFlag for --rating (optional, returns undefined if absent). If replyTo is absent, uses requireFlag for --rating (throws error if missing). Body construction conditionally includes rating only when present. Output message shows [reply] label when rating is null.",
+      "evidence": [
+        "src/library/comments-post.ts: conditional getFlag vs requireFlag based on replyTo presence"
+      ]
+    },
+    {
+      "answer": "Yes, npx tsc --noEmit passes with zero errors after the change.",
+      "evidence": [
+        "npx tsc --noEmit exit code 0"
+      ]
+    }
+  ],
+  "statement": "Run 3 CLI fix implemented: --rating is now optional when --reply-to is present, required otherwise. TypeScript build passes. Runtime tests deferred to Verification Agent.",
+  "followups": []
+}
