@@ -1,0 +1,23 @@
+{
+  "questions": [
+    "Does the auto-resolved merge of tickets/index.ts preserve both ticket-side and staging-side changes?",
+    "Are there any remaining git conflict markers in the CLI source code?",
+    "Does the TypeScript build pass after the merge?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The merged file at src/tickets/index.ts (150 lines) correctly includes all 10 subcommand imports at lines 4-13 and a complete switch statement handling list, latest, get, create, update-description, rerun, continue, artifacts, artifact, and bundle. resolveTicket is properly used for ref-based commands. Both ticket-side (library commands integration) and staging-side changes are preserved.",
+      "evidence": ["src/tickets/index.ts:4-13 imports", "src/tickets/index.ts:43-148 switch statement with all 10 cases"]
+    },
+    {
+      "answer": "No. A recursive grep for '<<<<<<<' across src/ returned zero matches. No conflict markers remain in any CLI source file.",
+      "evidence": ["grep -r '<<<<<<<' src/ returned no files"]
+    },
+    {
+      "answer": "Yes. Running tsc --noEmit completed with zero errors, confirming all imports resolve and types are correct after the merge.",
+      "evidence": ["tsc --noEmit exit code 0"]
+    }
+  ],
+  "statement": "The helix-cli merge from staging was auto-resolved cleanly. No conflict markers remain, all 10 subcommands are preserved in tickets/index.ts including the ticket-side library commands, the TypeScript build passes, and no code changes were needed from code review.",
+  "followups": []
+}
