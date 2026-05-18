@@ -1,0 +1,24 @@
+{
+  "questions": [
+    "Q1: Does the resolved tickets/index.ts preserve both ticket (library CLI dispatch) and staging (ticket command updates) intents?",
+    "Q2: Are there any technical changes required for the CLI repo beyond build verification?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The resolved tickets/index.ts (150 lines) has all 10 subcommand handler imports (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description) and the standard switch-based dispatcher. Both ticket's library integration and staging's ticket command updates coexist.",
+      "evidence": [
+        "Read tickets/index.ts lines 1-40: all 10 imports at lines 1-13, ticketsUsage function, switch dispatcher",
+        "Grep ^<<<<<<< in tickets/index.ts: 0 matches"
+      ]
+    },
+    {
+      "answer": "No. All 6 library CLI command files exist in src/library/. Resolution utility exists. Main entry point has library case. SKILL.md has Library section. Only npm run build verification needed.",
+      "evidence": [
+        "scout/reference-map.json: all 6 library files + resolve-library-item.ts present",
+        "scout/scout-summary.md: main entry src/index.ts has library case at line ~98-100"
+      ]
+    }
+  ],
+  "statement": "The CLI repo's single conflict (tickets/index.ts) is pre-resolved with zero markers. Both ticket and staging intents are preserved. No code changes required — build verification only.",
+  "followups": []
+}

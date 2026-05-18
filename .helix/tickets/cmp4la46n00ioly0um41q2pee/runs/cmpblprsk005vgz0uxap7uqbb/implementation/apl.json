@@ -1,0 +1,16 @@
+{
+  "questions": [
+    "Were there actual merge conflicts in helix-cli that needed resolution?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The merge-conflicts.json listed src/tickets/index.ts, but the file contained no conflict markers when inspected. The merge was auto-resolved cleanly.",
+      "evidence": [
+        "Grep for conflict markers in src/tickets/index.ts returned no matches",
+        "Broad grep across all *.ts files in the repo returned no conflict markers"
+      ]
+    }
+  ],
+  "statement": "Conflict resolution run for helix-cli completed. No actual conflict markers were present in the listed file (src/tickets/index.ts) or anywhere else in the repository. No code changes were needed.",
+  "followups": []
+}
