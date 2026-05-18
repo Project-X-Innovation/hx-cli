@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-489: Approval Status — Pending Approvals Surfaced at Top of List",
+  "description": "This tour walks through the changes introduced for ticket FIX-489 (Approval status). The goal was to ensure that tickets waiting for peer approval are prominently displayed at the top of the ticket list, rather than buried within it. Reviewers can then quickly act — either approving or flagging a ticket as needing a defense — so that pending approvals are resolved in a timely manner. The diff captured here reflects the ticket context files that track the two runs executed by the Helix agent for this fix.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpalyq60007rfd0udul5ahdh/ticket.md",
+      "line": 1,
+      "description": "This file records the context for the first agent run (run ID: cmpalyq60007rfd0udul5ahdh) against ticket FIX-489. It captures the ticket ID, short ID, branch name (`helix/fix/FIX-489-approval-status`), and the repository being targeted (`helix-cli`). This is the starting point — the agent was instructed to fix the approval status display so that tickets awaiting peer approval appear prominently at the top of the list, not lost among other entries.",
+      "title": "Overview: Initial Run Context"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpalyq60007rfd0udul5ahdh/ticket.md",
+      "line": 13,
+      "description": "The Description section (lines 13–15) defines the core problem: tickets in a 'waiting for peer approval' state were being rendered in the general list without any visual priority. The fix required surfacing them into a dedicated section at the top of the list so every team member notices them. Importantly, the workflow must allow a reviewer to mark a ticket as 'needs defense' with a single action, causing it to immediately leave the approval queue.",
+      "title": "Problem Statement: Approval Tickets Getting Lost"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 1,
+      "description": "This file records the second agent run (run ID: cmpbln4ad005ggz0uh7j85duy). It carries the same ticket metadata as the first run but adds a Discussion section that documents post-run communication. The second run was triggered after the first run's changes were verified, suggesting an iteration or follow-up polish pass on the same branch.",
+      "title": "Follow-Up Run Context"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 20,
+      "description": "Lines 20–26 show the Helix agent confirming that the first run successfully updated 2 repositories and attaching three verification screenshots as proof. This is the data-flow checkpoint: the agent completed the UI/logic changes for surfacing pending approvals, captured visual evidence, and reported back. The screenshots confirm the 'approval status' section appears correctly at the top of the ticket list.",
+      "title": "Agent Verification: First Run Succeeded"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 27,
+      "description": "Lines 27–35 document why the second run showed a failure status. The agent explains that the failure was a git conflict — the remote `helix-global-client` branch had already received newer commits from the first successful run, so the second push was rejected. Crucially, the actual feature code changes were already merged in the first run; this failure was purely a branch-sync housekeeping issue with no impact on the approval-status feature itself.",
+      "title": "Second Run: Git Conflict on Push"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 13,
+      "description": "Returning to the Description block as a summary checkpoint: the intent of FIX-489 is fully captured and implemented. Tickets awaiting peer approval now appear in a dedicated, prominently placed section at the top of the list. Reviewers can approve or flag 'needs defense' in one action, removing the ticket from the approval queue immediately. The codebase's main ticket-listing code path remains clean — the approval section is additive and does not disrupt the existing list rendering for other ticket states.",
+      "title": "Summary: Feature Intent Preserved"
+    }
+  ]
+}
