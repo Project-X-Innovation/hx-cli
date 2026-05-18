@@ -1,0 +1,49 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-468: Peer Approval Status Visibility in helix-cli",
+  "description": "This tour walks through the changes made to surface peer approval status in the helix-cli. The server API was extended to include an approvalStatus field on ticket responses. The CLI needed to (1) add the field to its TypeScript types and (2) conditionally display it in both the 'hlx tickets get' detail view and the 'hlx tickets list' command. Changes are purely additive and backward compatible — when approvalStatus is absent or null, no indicator is shown. The implementation follows the existing mergeQueueStatus pattern throughout.",
+  "steps": [
+    {
+      "file": "src/tickets/get.ts",
+      "line": 1,
+      "description": "Two files were changed to expose the new server-provided approvalStatus field to CLI users: src/tickets/get.ts (detail view) and src/tickets/list.ts (list view). Before this change, TicketDetail and TicketItem types had no approval-related fields, and neither command displayed any approval information. The server now returns approvalStatus (e.g., PENDING, APPROVED, NEEDS_DEFENSE) on ticket responses. The CLI needed to consume and display this data. The mergeQueueStatus pattern already present in get.ts was the direct template for both changes.",
+      "title": "Overview: What Changed and Why"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 20,
+      "description": "approvalStatus: string | null is added to the TicketDetail interface, placed immediately after the existing mergeQueueStatus field. Using string | null (rather than optional ?) matches the server contract — the server always includes the field, returning null when no approval is active. If the CLI is run against an older server that omits the field entirely, undefined is falsy and the conditional display below will gracefully skip rendering, ensuring backward compatibility.",
+      "title": "TicketDetail Type: approvalStatus Field Added"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 61,
+      "description": "Inside printTicketDetail, after the existing mergeQueueStatus conditional block (lines 58-60), a new conditional block checks if ticket.approvalStatus is truthy and, if so, logs 'Approval:     <STATUS>'. This mirrors the mergeQueueStatus pattern exactly in structure and formatting. When approvalStatus is null or undefined, this block is skipped and the output is identical to the pre-change behavior. The --json flag path outputs the raw server response object, so approvalStatus appears there automatically without any extra code.",
+      "title": "printTicketDetail: Conditional Approval Display"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 10,
+      "description": "approvalStatus: string | null is added to the TicketItem interface used by the list command. This is the type that models each row returned from the tickets list API endpoint. Adding the field here tells TypeScript to expect and permit this property on list response objects, enabling the display logic added in the next step.",
+      "title": "TicketItem Type: approvalStatus Field Added"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 106,
+      "description": "A local constant approvalTag is computed: when ticket.approvalStatus is non-null and non-empty, it is set to ' [STATUS]' (e.g., ' [PENDING]', ' [APPROVED]', ' [NEEDS_DEFENSE]'); otherwise it is an empty string. On line 107, approvalTag is appended to the existing console.log output for each list row. This approach keeps the existing column layout intact — the tag is a simple suffix that only appears when relevant, preserving readability for tickets without an active approval request.",
+      "title": "List Output: Approval Tag Appended"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 97,
+      "description": "The --json flag branch (around line 97) outputs the raw server response directly via JSON.stringify. Because the server now includes approvalStatus in list responses, this field appears automatically in JSON output without any additional code changes. This is a key design property: structured output consumers get the new field for free, while human-readable output gets the conditional tag added above.",
+      "title": "JSON Output Path: Automatic Inclusion"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 58,
+      "description": "The implementation is complete and clean. Both changes follow the established mergeQueueStatus conditional pattern (visible here at lines 58-60 in get.ts) — a pattern already proven correct and reviewed in the codebase. TypeScript typecheck (tsc --noEmit) passes with zero errors. All display changes are conditional, meaning no existing output is altered when approvalStatus is absent. The --json paths in both commands include the new field automatically. No new CLI commands were added — scope was strictly status visibility as specified in FIX-468.",
+      "title": "Summary: Pattern Consistency and Clean Code Paths"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "title": "CLI: Approval Status Display",
+  "description": "Adds approval status to hlx tickets get and list commands",
+  "steps": [
+    {
+      "file": "src/tickets/get.ts",
+      "line": 20,
+      "title": "TicketDetail type: add approvalStatus",
+      "description": "Added approvalStatus: string | null to TicketDetail type, placed after mergeQueueStatus."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 61,
+      "title": "Display: Approval line in get output",
+      "description": "Added conditional display of 'Approval:' line, following the exact same pattern as mergeQueueStatus."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 10,
+      "title": "TicketItem type: add approvalStatus",
+      "description": "Added approvalStatus: string | null to TicketItem type."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 106,
+      "title": "Display: approval tag in list output",
+      "description": "Appends [PENDING], [APPROVED], or [NEEDS_DEFENSE] tag to the end of each list line when approvalStatus is present."
+    }
+  ]
+}

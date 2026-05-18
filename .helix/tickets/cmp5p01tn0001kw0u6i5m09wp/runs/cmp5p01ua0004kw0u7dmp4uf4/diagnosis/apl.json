@@ -1,0 +1,52 @@
+{
+  "questions": [
+    "Why doesn't merging a version bump to main result in an npm publish?",
+    "What workflows currently exist and what are their triggers?",
+    "Will using the default GITHUB_TOKEN to push a tag trigger the existing publish workflow?",
+    "What is the minimum file-change set required to close the automation gap?",
+    "Does any existing file need modification, or is this purely additive?"
+  ],
+  "answers": [
+    {
+      "answer": "No workflow exists that triggers on pushes to main to create a Git tag from the package.json version. The only workflow (publish.yml) triggers exclusively on pushed tags matching 'v*'. This creates a manual gap: merging a version bump to main does nothing unless someone manually creates and pushes the tag.",
+      "evidence": [
+        ".github/workflows/publish.yml lines 3-6: triggers on push tags 'v*' only",
+        "Directory listing of .github/workflows/ shows only publish.yml",
+        "package.json version is 1.3.3 — the acceptance criteria example version"
+      ]
+    },
+    {
+      "answer": "Only .github/workflows/publish.yml exists. It triggers on push of tags matching 'v*', runs on ubuntu-latest with Node 24, installs deps, runs tests, validates tag-version match against package.json, packs/validates tarball, and publishes to npm with provenance via OIDC. Permissions: id-token:write, contents:read.",
+      "evidence": [
+        ".github/workflows/publish.yml: full file read confirms single workflow",
+        "ls -la .github/workflows/ shows only publish.yml"
+      ]
+    },
+    {
+      "answer": "No. GitHub Actions documentation explicitly states: 'Events triggered by the repository's GITHUB_TOKEN will not create a new workflow run, except for workflow_dispatch and repository_dispatch events.' A tag pushed using the default GITHUB_TOKEN will NOT trigger publish.yml. The solution requires using a Personal Access Token (PAT) or GitHub App installation token in the actions/checkout token parameter, so the resulting git push operations create events that DO trigger other workflows.",
+      "evidence": [
+        "GitHub Actions docs (Context7 /websites/github_en_actions): 'Events triggered by the repository's GITHUB_TOKEN will not create a new workflow run, except for workflow_dispatch and repository_dispatch events'",
+        "GitHub community discussions #25617, #27194: confirm tag pushes from GITHUB_TOKEN do not trigger tag-push workflows",
+        "actions/checkout docs (Context7 /actions/checkout): token parameter defaults to github.token; PAT can be passed instead to enable downstream workflow triggering"
+      ]
+    },
+    {
+      "answer": "One new file: .github/workflows/auto-tag.yml. No modifications to existing files. publish.yml is preserved unchanged. package.json is read-only (version source of truth).",
+      "evidence": [
+        "Ticket explicitly requires: 'Leave the existing npm publish workflow tag-triggered'",
+        "Ticket scope: 'Add or refactor GitHub Actions in helix-cli to detect a version bump on main'",
+        "publish.yml already validates tag-version match (lines 31-38), providing a safety net"
+      ]
+    },
+    {
+      "answer": "Purely additive. publish.yml must not be modified. The new auto-tag workflow is a standalone file with no dependencies on changes to existing files. The only prerequisite is a repository secret containing a PAT or GitHub App token with contents:write permission.",
+      "evidence": [
+        "Ticket: 'The publish workflow must remain tag-triggered'",
+        "Ticket: 'Do not broadening this into a general release-management refactor'",
+        "publish.yml permissions are id-token:write + contents:read — these are unchanged"
+      ]
+    }
+  ],
+  "statement": "The root cause is the absence of a GitHub Actions workflow that bridges merge-to-main events to the tag-triggered npm publish flow. The single existing workflow (publish.yml) triggers only on pushed tags matching 'v*', so merging a version bump to main has no automated path to tag creation or npm publication. The fix requires creating one new workflow file (.github/workflows/auto-tag.yml) that triggers on pushes to main, reads the package.json version, checks for an existing tag, and creates/pushes 'v<version>' when the tag does not already exist. The critical design constraint is that the default GITHUB_TOKEN cannot be used for the tag push because GitHub Actions suppresses downstream workflow triggers from GITHUB_TOKEN-initiated events. A PAT or GitHub App token must be used instead, passed via the actions/checkout token parameter, so the tag push triggers the existing publish workflow chain.",
+  "followups": []
+}

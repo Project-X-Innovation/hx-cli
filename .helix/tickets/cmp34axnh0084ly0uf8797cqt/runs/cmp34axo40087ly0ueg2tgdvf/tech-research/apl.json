@@ -1,0 +1,54 @@
+{
+  "questions": [
+    "Should the active and archived ticket fetches run in parallel or sequentially?",
+    "How should resolveTicket() be made testable without external mocking libraries?",
+    "How should numeric ambiguity detection work across both active and archived ticket sets?",
+    "What error handling strategy applies when the archived fetch fails after the active fetch succeeds?",
+    "Does the API's archived=true parameter return only archived tickets, or both active and archived?"
+  ],
+  "answers": [
+    {
+      "answer": "Sequential (lazy) fetching is the correct choice. Fetch active tickets first; only fetch archived tickets if no active match is found. Active matches are the common case, so this avoids an unnecessary API call for the majority of resolutions. Parallel fetching would add latency to every resolution (two network calls always) for marginal benefit in the archived-fallback case. The product spec describes archived as a 'fallback,' which aligns with lazy evaluation.",
+      "evidence": [
+        "product/product.md Core Workflow steps 2-3: 'resolver searches active tickets for a match. If no active match is found, the resolver searches archived tickets.'",
+        "ticket.md Required Behavior #1: 'If active lookup succeeds, do not override it with archived data.'",
+        "resolve-ticket.ts:89 — current single fetch takes ~1 network round-trip; adding a second sequential fetch only when needed keeps the common case fast"
+      ]
+    },
+    {
+      "answer": "Use dependency injection via an optional third parameter on resolveTicket(). Add options?: { fetchFn?: typeof hxFetch } as the third parameter, defaulting to hxFetch. Tests pass a mock.fn() from node:test that inspects queryParams to return different items for active vs. archived calls. This is backward-compatible (all 9 existing call sites pass only 2 args), requires no external libraries, and keeps the function pure for testing. mock.module is not available in the runtime (confirmed undefined in Node 24.14.1), and mock.method requires an object target — neither fits the standalone function import pattern.",
+      "evidence": [
+        "Runtime check: node:test mock.fn is available with mockImplementation support; mock.module is undefined",
+        "resolve-ticket.ts:83-86 — current signature is (config: HxConfig, ref: string); adding optional third param is backward-compatible",
+        "package.json:42-43 — devDependencies are @types/node and typescript only; no external test framework available",
+        "src/tickets/index.ts, src/comments/index.ts — all 9 call sites use resolveTicket(config, rawRef) with exactly 2 args"
+      ]
+    },
+    {
+      "answer": "Combine both the active and archived item arrays when checking for numeric ambiguity. By the time we reach the ambiguity check, no match was found in either set individually (matchTicket returned null for both). The combined set must be scanned for numeric matches: if >1 items share the same numeric suffix across the combined active+archived sets, report the ambiguity error listing all matching items. This is required by acceptance criterion #9.",
+      "evidence": [
+        "ticket.md acceptance criterion #9: 'Add a regression test proving numeric ambiguity is detected across active and archived results, not only within active results.'",
+        "ticket.md Batch/Cardinality Rules: 'For numeric ticket refs, ambiguity detection must consider matches across both active and archived tickets, not just one set.'",
+        "resolve-ticket.ts:102-121 — current ambiguity check iterates only over active items; fix must iterate over [...activeItems, ...archivedItems]"
+      ]
+    },
+    {
+      "answer": "If the active fetch succeeds but no active match is found, and the archived fetch then fails due to a network or server error, throw a clear error identifying the resolution stage as the failure point. Do not silently fall through to 'ticket not found.' The error message should indicate that archived ticket lookup failed during resolution, preserving the transport/server error detail. This matches the ticket's Failure Behavior requirement.",
+      "evidence": [
+        "ticket.md Failure Behavior: 'Do not silently drop the archived lookup path on network or parsing errors.'",
+        "ticket.md Failure Behavior: 'If archived lookup is needed and fails due to transport or server error, return a clear error that identifies resolution as the failing stage.'",
+        "product/product.md Essential Feature #6: 'Clear failure on resolution errors — if the archived lookup itself fails (network/server error), the CLI must report a resolution-stage error.'"
+      ]
+    },
+    {
+      "answer": "Based on the usage pattern in list.ts, the archived=true parameter most likely returns only archived tickets, not both active and archived. list.ts uses it as a boolean toggle: either fetch active (no param) or fetch archived (archived=true). This means the two sets are disjoint and no deduplication is needed when combining for ambiguity detection. If this assumption is wrong and the API returns both, the only impact is that matchTicket may find the same item in both sets — but since active match has priority and we return early on active match, the behavior is still correct.",
+      "evidence": [
+        "src/tickets/list.ts:43-44 — hasFlag(args, '--archived') sets queryParams.archived = 'true', used as a toggle",
+        "src/tickets/latest.ts:24-25 — same toggle pattern",
+        "diagnosis/apl.json unknowns[0]: 'Whether GET /api/tickets?archived=true returns ONLY archived tickets or BOTH active and archived tickets. list.ts uses it as a toggle, which suggests it returns only archived tickets when set to true.'"
+      ]
+    }
+  ],
+  "statement": "The fix is localized to resolveTicket() in src/lib/resolve-ticket.ts and its test file. The function should use sequential (lazy) fetching: try active tickets first, fall back to archived tickets only when no active match is found. Dependency injection via an optional third parameter makes the function testable with node:test's mock.fn(). Numeric ambiguity detection must combine both active and archived item sets. Error handling must distinguish between 'not found' and 'resolution failure' when the archived fetch fails. matchTicket() and hxFetch() need no changes. No caller modifications are required.",
+  "followups": []
+}

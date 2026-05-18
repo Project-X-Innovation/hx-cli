@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Does hlx tickets get correctly display approval status?",
+    "Does hlx tickets list correctly show an approval indicator?",
+    "Are there any issues with the CLI implementation?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. printTicketDetail conditionally displays 'Approval: STATUS' when ticket.approvalStatus is truthy, following the exact mergeQueueStatus pattern at lines 58-60.",
+      "evidence": [
+        "get.ts line 21: approvalStatus: string | null in TicketDetail type",
+        "get.ts lines 61-63: if (ticket.approvalStatus) console.log(Approval: ...)"
+      ]
+    },
+    {
+      "answer": "Yes. The list output appends a [STATUS] tag when approvalStatus is non-null. When null, approvalTag is empty string and no indicator is shown.",
+      "evidence": [
+        "list.ts line 11: approvalStatus: string | null in TicketItem type",
+        "list.ts line 106: const approvalTag = ticket.approvalStatus ? ` [${ticket.approvalStatus}]` : ''",
+        "list.ts line 107: approvalTag appended to console.log output"
+      ]
+    },
+    {
+      "answer": "No issues found. Implementation follows existing patterns exactly, handles backward compatibility with older servers (undefined is falsy), and --json output automatically includes the field.",
+      "evidence": [
+        "get.ts lines 58-63: mergeQueueStatus and approvalStatus use identical conditional pattern",
+        "list.ts lines 97-98: --json outputs raw server response",
+        "npx tsc --noEmit: exits code 0"
+      ]
+    }
+  ],
+  "statement": "CLI implementation reviewed and verified correct. No code changes needed. Both get and list commands correctly display approval status following existing patterns. TypeScript typecheck passes.",
+  "followups": []
+}

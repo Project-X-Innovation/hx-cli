@@ -1,0 +1,17 @@
+{
+  "questions": [
+    "Does the CLI have any involvement in library credential routing that needs technical direction?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The CLI provides ticket management commands but has no library repo creation or credential routing logic. The collateral merge conflict in src/tickets/index.ts (HLX-342 CLI improvements vs staging) is already resolved with both sides preserved.",
+      "evidence": [
+        "Grep scan of src/tickets/index.ts: zero conflict markers",
+        "CLI diagnosis: 'collateral conflict — the CLI has no involvement in library credential routing'",
+        "No library credential logic exists in the CLI codebase"
+      ]
+    }
+  ],
+  "statement": "The CLI has no involvement in library credential routing. The collateral merge conflict in src/tickets/index.ts is already resolved. No code changes or technical direction needed for the CLI.",
+  "followups": []
+}

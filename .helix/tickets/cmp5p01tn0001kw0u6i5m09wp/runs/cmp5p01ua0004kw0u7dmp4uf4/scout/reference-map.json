@@ -1,0 +1,89 @@
+{
+  "problem": "No GitHub Actions workflow exists to automatically create a Git tag when a version bump is merged to main. The only workflow (.github/workflows/publish.yml) triggers on tag pushes (v*), so merging a version bump to main currently requires manual tag creation to publish to npm.",
+  "files": [
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "Existing tag-triggered npm publish workflow. Must be preserved unchanged. Triggers on push of tags matching 'v*'. Uses Node 24, runs tests, validates tag-version match against package.json, packs/validates tarball, publishes with provenance. Permissions: id-token:write, contents:read."
+    },
+    {
+      "path": "package.json",
+      "why": "Source of truth for release version (currently 1.3.3). Contains package name @projectxinnovation/helix-cli, publishConfig with public access and provenance. The new workflow must read the version field from this file."
+    },
+    {
+      "path": ".github/workflows/",
+      "why": "Directory where the new auto-tag workflow file must be created. Currently contains only publish.yml."
+    },
+    {
+      "path": "src/update/check.ts",
+      "why": "Contains canonical repo constants (CANONICAL_REPO = 'Project-X-Innovation/helix-cli', CANONICAL_BRANCH = 'main') and version comparison utilities. Confirms the repo identity and main branch convention."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Shows how package.json version is read at runtime via filesystem. Confirms version is a simple string field in package.json."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "Build configuration: target ES2022, module Node16, outDir dist, rootDir src. Relevant for understanding the build step in quality gates."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "The only existing workflow is .github/workflows/publish.yml, triggered on push of tags matching 'v*'.",
+      "source": ".github/workflows/publish.yml:3-6"
+    },
+    {
+      "claim": "The publish workflow already validates that the tag version matches package.json version (lines 31-38), providing a safety net even if the auto-tag workflow were to create an incorrect tag.",
+      "source": ".github/workflows/publish.yml:31-38"
+    },
+    {
+      "claim": "The publish workflow permissions are id-token:write (for npm OIDC provenance) and contents:read.",
+      "source": ".github/workflows/publish.yml:8-10"
+    },
+    {
+      "claim": "The current package.json version is 1.3.3, matching the acceptance criteria example.",
+      "source": "package.json:3"
+    },
+    {
+      "claim": "The package name is @projectxinnovation/helix-cli, published to https://registry.npmjs.org with public access and provenance.",
+      "source": "package.json:36-39"
+    },
+    {
+      "claim": "No .github/workflows/ file other than publish.yml exists. There is no existing auto-tag or main-push workflow.",
+      "source": "Directory listing of .github/workflows/ shows only publish.yml"
+    },
+    {
+      "claim": "Quality gate scripts: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js), prepare (npm run build).",
+      "source": "package.json:16-19"
+    },
+    {
+      "claim": "The repo has no ORM, no database, no migrations. It is a pure TypeScript CLI tool.",
+      "source": "package.json devDependencies contain only @types/node and typescript"
+    },
+    {
+      "claim": "The publish workflow uses Node 24 specifically because npm 11.x supports Trusted Publishing OIDC (comment on line 21).",
+      "source": ".github/workflows/publish.yml:20-21"
+    },
+    {
+      "claim": "The publish workflow runs npm test before publishing, which includes a typecheck + node native test runner.",
+      "source": ".github/workflows/publish.yml:28-29, package.json:18"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "By default, GitHub Actions events triggered by GITHUB_TOKEN do not trigger subsequent workflow runs (to prevent infinite loops). If the new auto-tag workflow pushes a tag using the default GITHUB_TOKEN, the tag push may NOT trigger the publish workflow. This must be verified and may require using a PAT or GitHub App token instead.",
+      "impact": "Critical — if tag pushes from GITHUB_TOKEN don't trigger publish.yml, the entire automation chain breaks silently."
+    },
+    {
+      "question": "Are there branch protection rules or tag protection rules on this repository that might prevent the workflow from pushing tags?",
+      "impact": "High — tag push would fail if protection rules block it."
+    },
+    {
+      "question": "What existing git tags are present in the repository? Is v1.3.3 already tagged?",
+      "impact": "Medium — needed to understand whether the current version is already released and to test idempotency logic."
+    },
+    {
+      "question": "No README or CLAUDE.md exists in the repository. Are there any release process docs elsewhere?",
+      "impact": "Low — no documented release process found beyond what the workflows encode."
+    }
+  ]
+}

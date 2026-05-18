@@ -1,0 +1,73 @@
+{
+  "questions": [
+    "What is the root cause of archived ticket references failing to resolve?",
+    "What is the full scope of commands affected by this bug?",
+    "Can the fix be localized to resolve-ticket.ts without changing callers or downstream commands?",
+    "Does the existing matchTicket() function need modification to support archived tickets?",
+    "Does hxFetch() need modification to support fetching archived tickets?",
+    "How should numeric ambiguity detection work across active and archived ticket sets?",
+    "What test infrastructure is available for testing resolveTicket()?"
+  ],
+  "answers": [
+    {
+      "answer": "resolveTicket() at src/lib/resolve-ticket.ts:89 makes a single API call: hxFetch(config, '/tickets', { basePath: '/api' }) with no query parameters. This returns only active tickets. There is no code path that fetches archived tickets. When an archived ticket ref is passed, matchTicket() searches only the active items and returns null, causing a 'not found' error at line 123-126.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts:89 — hxFetch(config, '/tickets', { basePath: '/api' }) with no queryParams",
+        "src/lib/resolve-ticket.ts:98 — matchTicket(items, ref) operates on active-only items",
+        "src/lib/resolve-ticket.ts:123-126 — throws 'Ticket not found' error when matchTicket returns null",
+        "src/tickets/list.ts:43-44 — demonstrates the API supports queryParams.archived = 'true' for archived tickets",
+        "src/tickets/latest.ts:24-25 — same archived query pattern confirmed"
+      ]
+    },
+    {
+      "answer": "9 commands are affected: tickets get (index.ts:66), update-description (index.ts:85), rerun (index.ts:96), continue (index.ts:107), artifacts (index.ts:118), artifact (index.ts:129), bundle (index.ts:140), comments list (comments/index.ts:32), comments post (comments/index.ts:43). All call resolveTicket() before invoking their downstream endpoint. tickets list, tickets latest, and tickets create do NOT use resolveTicket() and are unaffected.",
+      "evidence": [
+        "src/tickets/index.ts:66,85,96,107,118,129,140 — 7 resolveTicket() call sites",
+        "src/comments/index.ts:32,43 — 2 resolveTicket() call sites",
+        "src/tickets/list.ts — calls hxFetch('/tickets', ...) directly, not resolveTicket()",
+        "src/tickets/latest.ts — calls hxFetch('/tickets', ...) directly, not resolveTicket()"
+      ]
+    },
+    {
+      "answer": "Yes. The fix is fully localized to resolveTicket() in src/lib/resolve-ticket.ts. All 9 callers pass the same (config, ref) signature and receive { id, shortId } back. No caller needs to know whether the resolved ticket was active or archived. Downstream commands call the server by ticket ID, and the server already serves archived tickets by ID (confirmed by get.ts:47 using /tickets/${ticketId}).",
+      "evidence": [
+        "src/tickets/index.ts — all call sites use the pattern: const resolved = await resolveTicket(config, rawRef); then pass resolved.id to the command function",
+        "src/tickets/get.ts:47 — hxFetch(config, `/tickets/${ticketId}`, { basePath: '/api' }) works for any ticket ID",
+        "src/tickets/get.ts:21 — TicketDetail type includes isArchived: boolean, confirming server returns archived ticket details"
+      ]
+    },
+    {
+      "answer": "No. matchTicket() (src/lib/resolve-ticket.ts:44-77) is a pure function that takes an items array and a ref string. It correctly handles all three ref forms (internal ID, short ID, numeric number) on whatever items array it receives. The function needs no modification — it already works for archived ticket items when they are included in the input array.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts:44-77 — matchTicket takes Array<{ id: string; shortId: string }> and ref: string, with no archive-awareness needed",
+        "src/lib/resolve-ticket.test.ts:6-71 — existing tests confirm matchTicket works correctly on any items array"
+      ]
+    },
+    {
+      "answer": "No. hxFetch() already supports the queryParams option (src/lib/http.ts:40,46-49). The call pattern hxFetch(config, '/tickets', { basePath: '/api', queryParams: { archived: 'true' } }) is already proven by list.ts and latest.ts.",
+      "evidence": [
+        "src/lib/http.ts:40 — options parameter includes queryParams?: Record<string, string>",
+        "src/lib/http.ts:46-49 — queryParams are applied to the URL via url.searchParams.set()",
+        "src/tickets/list.ts:43-44,75-78 — queryParams.archived = 'true' used with hxFetch"
+      ]
+    },
+    {
+      "answer": "The ambiguity detection in resolveTicket() at lines 102-121 currently re-scans the same active-only items array. For correct cross-set ambiguity detection, the numeric match check must consider both active and archived items combined. If a numeric ref like '339' matches one active ticket and one archived ticket, that is an ambiguous match and must be reported.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts:102-121 — ambiguity detection iterates only over active 'items'",
+        "Ticket acceptance criterion #9 — 'Add a regression test proving numeric ambiguity is detected across active and archived results, not only within active results'"
+      ]
+    },
+    {
+      "answer": "The project uses Node's built-in test runner (node --test) with node:test and node:assert. There are no external mocking libraries (zero runtime dependencies, devDeps are only @types/node and typescript). resolveTicket() tests will need to mock hxFetch(). Node 18+ provides mock.fn() and mock.method() in node:test. The existing tests only cover the pure functions matchTicket() and extractTicketRef(); no resolveTicket() tests exist.",
+      "evidence": [
+        "package.json:18 — test script: 'tsc && node --test dist/**/*.test.js'",
+        "package.json:42-43 — devDependencies: @types/node ^25.5.0, typescript ^6.0.2 only",
+        "src/lib/resolve-ticket.test.ts:1 — imports from node:test and node:assert",
+        "src/lib/resolve-ticket.test.ts — tests for matchTicket and extractTicketRef only, no resolveTicket tests"
+      ]
+    }
+  ],
+  "statement": "The root cause is that resolveTicket() in src/lib/resolve-ticket.ts fetches only active tickets (GET /api/tickets with no query params) at line 89. Archived tickets are never queried. The fix is to add a second fetch with queryParams: { archived: 'true' }, try matching against active tickets first (preserving priority), fall back to matching archived tickets, and combine both sets for numeric ambiguity detection. matchTicket() and hxFetch() need no changes. The fix is entirely within resolveTicket() and its test file. No callers or downstream commands need modification.",
+  "followups": []
+}

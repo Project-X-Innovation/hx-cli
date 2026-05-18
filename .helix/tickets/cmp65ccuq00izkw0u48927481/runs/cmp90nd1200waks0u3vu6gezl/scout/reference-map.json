@@ -1,0 +1,37 @@
+{
+  "problem": "Conflict resolution run: merge-conflicts.json lists src/tickets/index.ts with 4 ticket commits (HLX-342 CLI improvements) vs 1 staging commit. No conflict markers remain in the file. The CLI ticket router is unrelated to the library creation bug but was modified by both branches.",
+  "files": [
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Listed in merge-conflicts.json. 149-line CLI ticket subcommand router. 10 subcommands: list, latest, get, create, update-description, rerun, continue, artifacts, artifact, bundle. No conflict markers present."
+    },
+    {
+      "path": "src/tickets/update-description.ts",
+      "why": "Recently added subcommand imported by index.ts. Handles PATCH to /api/tickets/{id} for description updates."
+    },
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Ticket creation command. Creates tickets via POST /api/tickets with --title, --repos, --mode flags."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket reference resolver. extractTicketRef and resolveTicket used by all subcommands that take a ticket-ref argument."
+    }
+  ],
+  "facts": [
+    "merge-conflicts.json lists index.ts with 4 ticket commits (HLX-342) vs 1 staging commit.",
+    "No conflict markers (<<<<<<< / ======= / >>>>>>>) remain in index.ts or any .ts file in the repo.",
+    "File is 149 lines with 10 subcommands. All 10 imported modules exist and export the expected functions.",
+    "The CLI has no involvement in library repo creation, clone, or credential routing — this is a collateral conflict.",
+    "Quality gates: typecheck (tsc --noEmit), build (tsc), test (tsc && node --test). No lint script defined."
+  ],
+  "unknowns": [
+    "Whether both the ticket's help/JSON output improvements and staging's changes are fully preserved — needs typecheck verification.",
+    "Which specific changes came from the staging commit vs the 4 ticket commits."
+  ],
+  "qualityGates": {
+    "typecheck": "npm run typecheck",
+    "build": "npm run build",
+    "test": "npm run test"
+  }
+}

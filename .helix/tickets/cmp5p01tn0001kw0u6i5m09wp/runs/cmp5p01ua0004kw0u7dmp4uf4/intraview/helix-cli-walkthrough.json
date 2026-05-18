@@ -1,0 +1,49 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Auto-tag Release Workflow: Closing the Version-Bump-to-Publish Gap",
+  "description": "This tour walks through the addition of `.github/workflows/auto-tag.yml`, a new GitHub Actions workflow that automatically creates and pushes a `v<version>` Git tag whenever a commit lands on `main`. Before this change, the only workflow (`publish.yml`) triggered exclusively on pushed `v*` tags, meaning a merged version bump in `package.json` would never automatically trigger an npm publish — someone had to manually create and push the tag. The new workflow closes that gap: it reads the version from `package.json`, checks idempotently whether the tag already exists on the remote, and pushes the tag only when absent. Crucially, it uses a PAT (`secrets.RELEASE_TOKEN`) rather than the default `GITHUB_TOKEN`, because GitHub Actions explicitly does not allow `GITHUB_TOKEN`-pushed tags to trigger other workflow runs — using the PAT ensures the tag push is treated as an external event and correctly fires `publish.yml`.",
+  "steps": [
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 1,
+      "description": "The workflow is named `Auto-tag release` and triggers on every push to `main` with no path filter. This is intentional: any push to `main` — whether or not `package.json` changed — runs the workflow. The tag-existence check in a later step makes the workflow idempotent, so running it on pushes that do not change the version is harmless. A path filter would risk missing a version bump if the filter were misconfigured, so the simpler trigger was chosen deliberately.",
+      "title": "Overview: Workflow name and trigger"
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 8,
+      "description": "The `permissions` block restricts the workflow's default `GITHUB_TOKEN` to `contents: read`. Because the tag push uses a PAT (`secrets.RELEASE_TOKEN`) that was injected during checkout, the `GITHUB_TOKEN` never needs write access. Setting it to `read` here follows the principle of least privilege: even if the PAT were misconfigured or absent, the workflow cannot accidentally write to the repository using the default token.",
+      "title": "Least-privilege GITHUB_TOKEN permissions"
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 14,
+      "description": "The `actions/checkout@v4` step is configured with `token: ${{ secrets.RELEASE_TOKEN }}`. This is the critical design choice that makes workflow chaining work. GitHub Actions documentation states that events triggered by the repository's default `GITHUB_TOKEN` will NOT create new workflow runs. By passing a PAT here, subsequent `git push` commands in this job use the PAT's credentials, so the resulting tag-push event is treated as an external actor event and DOES trigger `publish.yml`. Without this, the entire automation chain would silently break at the publish step.",
+      "title": "Checkout with PAT to enable downstream workflow triggering"
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 19,
+      "description": "The `Read version from package.json` step uses `set -euo pipefail` so any unexpected error — such as `jq` not being available or the file being malformed — immediately fails the workflow rather than silently continuing with an empty value. `jq -r '.version' package.json` extracts the raw version string. An explicit `[ -z \"$VERSION\" ] || [ \"$VERSION\" = \"null\" ]` guard catches the two failure modes that `set -e` alone would miss: an empty string or a literal JSON `null` value. If either condition is true, the step emits a GitHub Actions error annotation and exits non-zero. On success, the version is written to `$GITHUB_OUTPUT` as `version=<value>` for use in subsequent steps.",
+      "title": "Version extraction from package.json with fail-closed guard"
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 32,
+      "description": "The `Check existing tag` step constructs `TAG=v${{ steps.version.outputs.version }}` and calls `git ls-remote --tags origin refs/tags/$TAG`. This queries the remote authoritatively — it works correctly even with a shallow clone (which `actions/checkout@v4` performs by default) because it does not inspect local history. If the remote reports the tag, `grep -q` exits 0, the `if` branch sets `exists=true`, and the create-and-push step is skipped. If the tag is absent, `grep -q` exits 1; importantly, `set -e` does NOT treat this as an error because the command is in the test position of an `if` statement — Bash explicitly exempts `if` conditions from `set -e`. This is a correctness detail verified in the code review. The idempotency result (`exists=true` or `exists=false`) is written to `$GITHUB_OUTPUT`.",
+      "title": "Idempotent remote tag existence check via git ls-remote"
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 44,
+      "description": "The `Create and push tag` step is gated by `if: steps.check-tag.outputs.exists == 'false'`, so it only runs when the remote does not already have this tag. Inside, `set -euo pipefail` ensures that a failed `git tag` or `git push` immediately fails the workflow (fail-closed behavior). `git tag \"$TAG\"` creates the lightweight tag locally, and `git push origin \"$TAG\"` pushes it to the remote using the PAT credentials established at checkout. A success message is echoed for log visibility. When this push completes, the `v*`-triggered `publish.yml` workflow fires automatically because the PAT is the actor, not `GITHUB_TOKEN`.",
+      "title": "Conditional tag creation and push"
+    },
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 1,
+      "description": "The single new file `.github/workflows/auto-tag.yml` fully closes the automation gap. The data flow is: push to `main` → extract version from `package.json` → check remote tag existence (idempotent) → create and push `v<version>` tag via PAT → existing `publish.yml` fires on the `v*` tag push → npm publish with provenance. All acceptance criteria are met: the trigger is correct, version extraction is fail-closed, tag creation is idempotent, the PAT is used for workflow chaining, and permissions are least-privilege. The code review confirmed that `publish.yml`, `package.json`, and all other repository files are entirely unchanged. No existing code paths were modified.",
+      "title": "Summary: Complete automation chain and unchanged files confirmed"
+    }
+  ]
+}

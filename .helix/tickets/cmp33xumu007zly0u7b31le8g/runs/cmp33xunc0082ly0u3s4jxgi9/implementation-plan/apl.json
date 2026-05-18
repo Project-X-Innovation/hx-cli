@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "What is the correct method to bump the version atomically in both package.json and package-lock.json?",
+    "Are there any files beyond package.json and package-lock.json that need updating?",
+    "What quality gates must pass after the version bump?"
+  ],
+  "answers": [
+    {
+      "answer": "Use `npm version 1.3.3 --no-git-tag-version` to atomically update both package.json and package-lock.json. The --no-git-tag-version flag prevents npm from creating a git tag or commit. Direct edits to both files are an acceptable fallback.",
+      "evidence": [
+        "tech-research/tech-research.md chose Option A: npm version command as the preferred approach",
+        "product/product.md notes both methods produce valid results",
+        "package.json line 3 and package-lock.json lines 3, 9 are the only locations needing '1.3.2' → '1.3.3'"
+      ]
+    },
+    {
+      "answer": "No. Only package.json and package-lock.json need changes. No hardcoded version string exists in source code, no CHANGELOG or README exists, and the publish workflow reads the version dynamically.",
+      "evidence": [
+        "diagnosis/diagnosis-statement.md: repo-wide grep confirmed '1.3.2' only in package.json, package-lock.json, and .helix/ artifacts",
+        "scout/scout-summary.md: 'No other files contain a hardcoded version string'",
+        "src/update/version.ts reads version dynamically from package.json at runtime"
+      ]
+    },
+    {
+      "answer": "`npm run typecheck` (tsc --noEmit) and `npm run build` (tsc) must both pass after the version bump.",
+      "evidence": [
+        "package.json scripts: build='tsc', typecheck='tsc --noEmit'",
+        "ticket.md acceptance criteria: 'The repo still passes the normal local validation used for a release prep change'",
+        "diagnosis/diagnosis-statement.md success criteria items 4 and 5"
+      ]
+    }
+  ],
+  "statement": "The implementation plan specifies 4 sequential steps: (1) install dependencies via npm ci, (2) bump version using npm version 1.3.3 --no-git-tag-version, (3) validate typecheck, (4) validate build. Only package.json and package-lock.json are modified. The verification plan includes 5 required checks covering version correctness in both files, no unrelated changes, typecheck, and build success.",
+  "followups": []
+}

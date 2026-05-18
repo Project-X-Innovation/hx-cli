@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "What is the correct implementation sequence for fixing resolveTicket()?",
+    "How should the plan handle testability without external mocking libraries?",
+    "What verification checks are needed to confirm the fix is complete and regression-free?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation has 4 sequential steps: (1) Add optional fetchFn parameter for DI testability, (2) Implement archived ticket fetch fallback with active-first priority, combined ambiguity detection, and archived-fetch error handling, (3) Add resolveTicket() unit tests covering all acceptance criteria, (4) Run all quality gates to confirm regression-free. Steps 1-2 modify only src/lib/resolve-ticket.ts. Step 3 modifies only src/lib/resolve-ticket.test.ts. Step 4 is verification only.",
+      "evidence": [
+        "tech-research/tech-research.md — Sequential/lazy fetch chosen; DI via optional param; combined array for ambiguity",
+        "diagnosis/diagnosis-statement.md — Fix localized to resolveTicket() and its test file; no caller changes needed",
+        "src/lib/resolve-ticket.ts:83-127 — Current resolveTicket() implementation; lines 89, 98-99, 102-121 are the three areas to modify"
+      ]
+    },
+    {
+      "answer": "Add an optional third parameter options?: { fetchFn?: typeof hxFetch } to resolveTicket(). Tests create a mock.fn() from node:test that inspects queryParams to distinguish active vs archived API calls and return appropriate test data. This is backward-compatible (all 9 callers pass only 2 args), requires no external dependencies, and was validated by tech-research confirming mock.module is unavailable in the runtime.",
+      "evidence": [
+        "tech-research/tech-research.md — 'mock.module returned undefined in Node 24.14.1'; DI via optional param chosen",
+        "tech-research/apl.json — Confirmed DI pattern, mock.fn availability, no external mocking library",
+        "src/lib/resolve-ticket.test.ts:1 — Existing tests use node:test describe/it/beforeEach/afterEach pattern"
+      ]
+    },
+    {
+      "answer": "7 required checks: (1) TypeScript typecheck passes, (2) Full build succeeds, (3) Existing tests pass unchanged, (4) New resolveTicket tests pass covering 9 scenarios (archived by ID/shortId/number, active priority, missing ticket, cross-set ambiguity, archived-only regression, archived fetch error, active fetch error), (5) Only 2 files modified, (6) resolveTicket signature is backward-compatible, (7) Archived fetch error handling does not produce 'not found'.",
+      "evidence": [
+        "ticket.md acceptance criteria #1-#10 — Maps to test cases and verification checks",
+        "package.json:16-18 — build: tsc, typecheck: tsc --noEmit, test: tsc && node --test",
+        "diagnosis/diagnosis-statement.md — Files to Change: resolve-ticket.ts and resolve-ticket.test.ts only"
+      ]
+    }
+  ],
+  "statement": "The implementation plan has 4 atomic steps modifying only 2 files (src/lib/resolve-ticket.ts and src/lib/resolve-ticket.test.ts). Step 1 adds an optional fetchFn parameter for testability. Step 2 implements the core fix: sequential active-first fetch, archived fallback, combined ambiguity detection, and resolution-stage error handling. Step 3 adds 9 test cases covering all acceptance criteria. Step 4 verifies quality gates. The verification plan has 7 required checks covering typecheck, build, tests, file scope, backward compatibility, and error handling.",
+  "followups": []
+}
