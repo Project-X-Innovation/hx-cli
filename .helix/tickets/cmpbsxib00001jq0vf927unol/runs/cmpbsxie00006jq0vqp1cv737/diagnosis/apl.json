@@ -1,0 +1,50 @@
+{
+  "questions": [
+    "Why can't the CLI create tickets with dependency/reference relationships that the UI supports?",
+    "Does the server API already support the relationship fields, or would server changes be needed?",
+    "Does the server's ticket detail response include relationship data for display in CLI get/list?",
+    "Does the existing resolveTicket() utility support the resolution pattern needed for --after/--reference flags?",
+    "Are there any cross-repo changes required (server, client, library)?"
+  ],
+  "answers": [
+    {
+      "answer": "The CLI's create.ts POST body only sends { title, description, repositoryIds, mode }. The three relationship fields (afterTicketId, referencedTicketIds, implementFromTicketId) were never wired into the CLI command. No --after, --reference, or --implement-from flags exist anywhere in the helix-cli codebase.",
+      "evidence": [
+        "helix-cli/src/tickets/create.ts lines 89-93: body sends only { title, description, repositoryIds, mode }",
+        "Grep for afterTicketId|referencedTicketIds|implementFromTicketId across helix-cli returned zero matches (confirmed by scout)"
+      ]
+    },
+    {
+      "answer": "The server API is fully ready. POST /api/tickets accepts afterTicketId (optional string), referencedTicketIds (optional array, max 5), and implementFromTicketId (optional string) via Zod schema. Server-side validation includes: same-org existence checks, circular dependency detection (up to 20 ancestors), predecessor status checks, and RESEARCH/REPORT_READY validation for implementFromTicketId.",
+      "evidence": [
+        "helix-global-server/src/controllers/ticket-controller.ts lines 29-40: createTicketSchemaGeneral Zod schema includes all three fields",
+        "helix-global-server/src/services/ticket-service.ts lines 668-685: implementFromTicketId validation (RESEARCH mode, REPORT_READY status)",
+        "helix-global-server/src/services/ticket-service.ts lines 689-736: afterTicketId validation (existence, status, circular dependency walk)",
+        "helix-global-server/src/services/ticket-service.ts lines 760-777: referencedTicketIds validation (all exist in same org)"
+      ]
+    },
+    {
+      "answer": "Yes. The GET /api/tickets/:id response (getTicketDetailForOrganization) returns afterTicketId, afterTicket (nested: id, title, status, shortId, mode, approvalStatus), implementFromTicketId, implementFromTicket (nested), referencedTicketIds, and referencedTickets (array of nested objects). The list endpoint also returns afterTicketId per item but not nested objects or referencedTicketIds.",
+      "evidence": [
+        "helix-global-server/src/services/ticket-service.ts lines 1789-1828: getTicketDetailForOrganization return object includes all relationship fields with nested objects",
+        "helix-global-server/src/services/ticket-service.ts lines 1500-1533: listTicketsForOrganization return type includes afterTicketId: string | null"
+      ]
+    },
+    {
+      "answer": "Yes. resolveTicket() already resolves ticket references from internal ID, shortId, or numeric ticket number against active and archived tickets via API. This is the exact pattern needed for resolving --after and --reference flag values to internal IDs before POSTing.",
+      "evidence": [
+        "helix-cli/src/lib/resolve-ticket.ts lines 86-167: resolveTicket() handles ID, shortId, number with active/archived fallback"
+      ]
+    },
+    {
+      "answer": "No cross-repo changes are needed. The server already accepts and validates all three relationship fields. The client already displays them. Only helix-cli needs changes: create command (add flags and body fields), get command (extend type and display), list command (show dependency indicator), and documentation surfaces.",
+      "evidence": [
+        "helix-global-server/src/controllers/ticket-controller.ts lines 29-40: server schema already supports all fields",
+        "helix-global-client/src/routes/ticket-detail.tsx lines 2117-2144: client already renders Related Tickets section",
+        "helix-global-client/src/types/api.ts: CreateTicketRequest type includes afterTicketId, implementFromTicketId"
+      ]
+    }
+  ],
+  "statement": "The hlx CLI lacks ticket relationship support because create.ts was implemented with only the minimum required fields. The server API already fully supports afterTicketId, referencedTicketIds, and implementFromTicketId with comprehensive validation. The fix is entirely within helix-cli: add --after, --reference, and --implement-from flags to the create command using the existing resolveTicket() utility for reference resolution, extend the get/list display types to render relationship data, and update all documentation surfaces.",
+  "followups": []
+}
