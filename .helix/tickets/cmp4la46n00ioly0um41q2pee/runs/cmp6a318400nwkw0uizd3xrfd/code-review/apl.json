@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "Are there correctness bugs in the CLI library commands?",
+    "Does the CLI handle nullable ratings correctly for replies?",
+    "Is SKILL.md updated with comprehensive agent discoverability documentation including --reply-to?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes — 1 runtime crash found and fixed. comments-list.ts declared rating as 'string' but server returns null for replies. Calling .toLowerCase() on null crashes. Fixed by widening type to 'string | null' and adding null guard with 'reply' fallback.",
+      "evidence": [
+        "src/library/comments-list.ts:8 — was 'rating: string', now 'rating: string | null'",
+        "src/library/comments-list.ts:66 — was 'comment.rating.toLowerCase()', now 'comment.rating ? comment.rating.toLowerCase().replace(\"_\", \"-\") : \"reply\"'",
+        "Server contract: library-comment-service.ts returns rating: null for replies (effectiveRating ?? null)"
+      ]
+    },
+    {
+      "answer": "Yes, after fix. The comments-post.ts correctly uses getFlag (optional) for --reply-to flow vs requireFlag (mandatory) for top-level. The comments-list.ts now handles null ratings in display. Type alignment with server is correct.",
+      "evidence": [
+        "src/library/comments-post.ts — conditional: if (replyTo) getFlag else requireFlag for rating",
+        "src/library/comments-list.ts:66 — null guard on rating display"
+      ]
+    },
+    {
+      "answer": "Yes, after fix. SKILL.md now includes --reply-to examples (reply without rating, reply with rating) and an explanatory note. Usage text in comments.ts also updated with reply syntax.",
+      "evidence": [
+        "skill-content/SKILL.md:171-178 — 2 reply examples + note about comment IDs",
+        "src/library/comments.ts:11 — reply syntax in commentsUsage()",
+        "src/library/comments.ts:15 — --reply-to description",
+        "src/library/comments.ts:39 — reply syntax in post help"
+      ]
+    }
+  ],
+  "statement": "Run 3 CLI code review found 3 issues and fixed all of them: (1) CR-CLI01: runtime crash in comments-list.ts from null rating — high severity, (2) CR-CLI02: SKILL.md missing --reply-to documentation — medium severity, (3) CR-CLI03: help text missing reply syntax — low severity. Build passes after all fixes. All prior Run 2 findings were re-evaluated; the original 'no issues found' was incorrect.",
+  "followups": []
+}

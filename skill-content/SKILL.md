@@ -45,6 +45,10 @@ The `hlx` CLI authenticates via one of two methods:
 | `hlx inspect api --repo <name> <path>` | Make a read-only API inspection call |
 | `hlx comments list` | List ticket comments |
 | `hlx comments post <message>` | Post a comment to a ticket |
+| `hlx library list` | List library items with ID, title, status, date |
+| `hlx library show <ref>` | Show report with section headings annotated with [slug] and comment summaries |
+| `hlx library comments list <ref> [--section <slug>]` | List comments grouped by section |
+| `hlx library comments post <ref> --section <slug> --rating <value> [message]` | Post section rating with optional text |
 | `hlx update` | Check for and apply CLI updates |
 | `hlx skill show` | Print the bundled hlx-cli skill to stdout |
 | `hlx skill install` | Install the skill to an agent's skills directory |
@@ -137,6 +141,41 @@ hlx skill install --target /path/to/skills
 
 # Overwrite existing installation
 hlx skill install --force
+```
+
+### Library Reports
+
+```bash
+# List all library items
+hlx library list
+
+# Show report with section annotations and comment summaries
+hlx library show RSH-439
+
+# List comments grouped by section
+hlx library comments list RSH-439
+
+# Filter comments by section
+hlx library comments list RSH-439 --section key-findings
+
+# Post a section rating
+hlx library comments post RSH-439 --section key-findings --rating thumbs-up "Dive deeper into this"
+
+# Post a thumbs-down rating
+hlx library comments post RSH-439 --section market-overview --rating down "Totally extra"
+
+# Post a love rating
+hlx library comments post RSH-439 --section introduction --rating love
+
+# Reply to an existing comment (--rating optional for replies)
+hlx library comments post RSH-439 --section key-findings --reply-to <commentId> "I disagree, this is the right level"
+
+# Reply with a rating
+hlx library comments post RSH-439 --section key-findings --reply-to <commentId> --rating thumbs-up "Good point"
+
+# Rating values: thumbs-up (up), thumbs-down (down), love
+# Section accepts both raw slugs and heading text (auto-slugified)
+# --reply-to accepts a comment ID (from comments list output)
 ```
 
 ## Flag Conventions

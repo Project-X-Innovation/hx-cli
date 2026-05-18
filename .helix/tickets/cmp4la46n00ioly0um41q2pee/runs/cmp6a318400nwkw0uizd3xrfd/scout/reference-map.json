@@ -1,0 +1,57 @@
+{
+  "problem": "Implement CLI library commands for section-level feedback (Phase 2b). Prior runs implemented all files. The CLI references 'love' as a rating value — if LOVE rating display changes (heart to double thumbs up), SKILL.md may need updated descriptions.",
+  "files": [
+    {
+      "path": "src/library/index.ts",
+      "why": "Module router dispatching to list, show, and comments subcommands. Fully implemented."
+    },
+    {
+      "path": "src/library/list.ts",
+      "why": "Lists library items with ID, title, status, date in table format. Fully implemented."
+    },
+    {
+      "path": "src/library/show.ts",
+      "why": "Shows report with section headings annotated with [slug] and comment summaries. Fully implemented."
+    },
+    {
+      "path": "src/library/comments.ts",
+      "why": "Nested router for comments subcommands (list, post). Fully implemented."
+    },
+    {
+      "path": "src/library/comments-list.ts",
+      "why": "Lists comments grouped by section with author, rating, timestamp. Fully implemented."
+    },
+    {
+      "path": "src/library/comments-post.ts",
+      "why": "Posts section rating. RATING_MAP on lines 5-11 includes 'love' -> 'LOVE'. Supports --reply-to for threading."
+    },
+    {
+      "path": "src/lib/resolve-library-item.ts",
+      "why": "Multi-format item resolution: cuid ID, ticket short ID, title substring. Fully implemented."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main dispatcher. Lines 94-98: 'library' case registered and routes to runLibrary."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Agent discoverability documentation. Library section (lines 146-172) documents all commands."
+    }
+  ],
+  "facts": [
+    "All 7 new files exist and are structurally complete",
+    "Both modified files (src/index.ts, SKILL.md) have expected changes",
+    "RATING_MAP in comments-post.ts: 'thumbs-up'/'up' -> 'THUMBS_UP', 'thumbs-down'/'down' -> 'THUMBS_DOWN', 'love' -> 'LOVE'",
+    "Item resolution: 3 strategies — cuid (starts with 'c', 25 chars), ticket short ID (/^[A-Z]+-\\d+$/), title substring",
+    "Auto-slugification: section flag with spaces gets slugified",
+    "hxFetch uses basePath '/api' for library endpoints",
+    "Build: 'tsc'. Typecheck: 'tsc --noEmit'",
+    "No new npm dependencies",
+    "TypeScript strict mode, ES2022 target, Node16 module resolution",
+    "SKILL.md includes rating values: thumbs-up, thumbs-down, love"
+  ],
+  "unknowns": [
+    "Whether 'love' CLI alias needs any description update in SKILL.md given display changing from heart to double-thumbs-up",
+    "Whether rating should be optional for --reply-to posts in comments-post.ts (currently required via requireFlag)"
+  ]
+}

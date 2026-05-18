@@ -1,0 +1,33 @@
+{
+  "questions": [
+    "Does the CLI have any library commands today?",
+    "Are the command dispatch, flag parsing, and HTTP client patterns established?",
+    "Can the item resolution utility follow the existing ticket resolution pattern?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The main dispatcher (src/index.ts:72-124) has no 'library' case. No src/library/ directory exists. All library command files are new.",
+      "evidence": [
+        "src/index.ts:72-124 — switch statement with no 'library' case; commands: login, token, inspect, comments, org, tickets, skill, update",
+        "No src/library/ directory in the CLI repo"
+      ]
+    },
+    {
+      "answer": "Yes. The comments module (src/comments/index.ts, 52 lines) provides the router pattern: dispatch via switch on args[0]. Flag parsing via getFlag/hasFlag/getPositionalArgs in src/lib/flags.ts. HTTP client hxFetch in src/lib/http.ts with basePath and auth. All patterns are directly replicable.",
+      "evidence": [
+        "src/comments/index.ts — router dispatching to subcommands",
+        "src/lib/flags.ts — getFlag, hasFlag, getPositionalArgs, requireFlag functions",
+        "src/lib/http.ts — hxFetch with auth, retry, basePath option"
+      ]
+    },
+    {
+      "answer": "Yes. The ticket resolution utility (src/lib/resolve-ticket.ts, 128 lines) uses 3-strategy resolution (exact ID, shortId, number). Library item resolution adapts this for cuid detection, ticket shortId match (/^[A-Z]+-\\d+$/), and title substring fallback. Fetches library items list then matches.",
+      "evidence": [
+        "src/lib/resolve-ticket.ts — extractTicketRef + matchTicket with multi-strategy resolution",
+        "Research report specifies 3 strategies: cuid (starts with 'c', 25 chars), ticket shortId, title match"
+      ]
+    }
+  ],
+  "statement": "The CLI needs 7 new files in a new src/library/ module (router, list, show, comments router, comments-list, comments-post) plus a resolve-library-item utility in src/lib/. Two existing files need modification: src/index.ts (add library case) and skill-content/SKILL.md (add library commands section). All patterns are established. No new npm dependencies needed.",
+  "followups": []
+}
