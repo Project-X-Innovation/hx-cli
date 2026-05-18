@@ -1,59 +1,61 @@
 {
-  "problem": "Run 4 of library comments CLI implementation (Phase 2b). Prior runs built the complete CLI module (7 new files, 2 modified). All prior issues resolved (rating optional for replies via conditional require). This run focuses on hardening and verification.",
+  "problem": "Continuation run for library comments CLI (Phase 2b). merge-conflicts.json lists src/tickets/index.ts but no conflict markers exist (pre-resolved). CLI implementation is complete from prior runs. This run focuses on conflict verification, hardening, and intuitiveness.",
   "files": [
     {
+      "path": "src/tickets/index.ts",
+      "why": "Listed in merge-conflicts.json (4 ticket commits vs 1 staging commit). NO conflict markers found. This is the tickets module, not the library module — conflict is from unrelated ticket changes."
+    },
+    {
       "path": "src/library/index.ts",
-      "why": "Module router (73 lines). Dispatches to list, show, comments subcommands. Handles help display and item reference extraction."
+      "why": "Module router (73 lines). Dispatches to list, show, comments subcommands."
     },
     {
       "path": "src/library/list.ts",
-      "why": "List command (49 lines). Fetches and formats library items as table with ID, title, status, date."
+      "why": "List command (49 lines). Table-formatted library item listing."
     },
     {
       "path": "src/library/show.ts",
-      "why": "Show command (66 lines). Displays report with section headings annotated with [slug] and comment summaries."
+      "why": "Show command (66 lines). Annotates headings with [slug] and comment summaries."
     },
     {
       "path": "src/library/comments.ts",
-      "why": "Comments nested router (51 lines). Dispatches to list/post subcommands."
+      "why": "Comments nested router (51 lines). Dispatches to list/post."
     },
     {
       "path": "src/library/comments-list.ts",
-      "why": "Comments list command (80 lines). Groups comments by section anchor. Shows threading with reply indentation."
+      "why": "Comments list command (87 lines). Groups by section, shows threading."
     },
     {
       "path": "src/library/comments-post.ts",
-      "why": "Comments post command (72 lines). RATING_MAP with aliases (up, down, love). Rating optional for --reply-to (conditional require). Auto-slugifies heading text."
+      "why": "Comments post command (78 lines). RATING_MAP with aliases, conditional rating for replies, auto-slugification."
     },
     {
       "path": "src/lib/resolve-library-item.ts",
-      "why": "Item resolution utility (82 lines). 3-format matching: cuid, ticket short ID (case-insensitive), title substring with disambiguation."
+      "why": "Item resolution (82 lines). 3-format: cuid, ticket short ID, title substring."
     },
     {
       "path": "src/index.ts",
-      "why": "Modified: Added 'library' case to switch dispatcher at lines 94-97."
+      "why": "Main dispatcher with 'library' case at lines 98-102."
     },
     {
       "path": "skill-content/SKILL.md",
-      "why": "Modified: Library section in Available Commands table (lines 48-51) and Library Reports workflow section (lines 146-174) with full command examples."
+      "why": "Agent documentation with Library section (lines 146-179)."
     }
   ],
   "facts": [
-    "All 7 new files and 2 modified files exist and are complete",
-    "Item resolution supports 3 formats: cuid, ticket short ID (/^[A-Z]+-\\d+$/i), title substring with disambiguation",
-    "--section flag accepts both raw slugs and heading text (auto-slugified if contains spaces)",
-    "RATING_MAP provides aliases: thumbs-up/up -> THUMBS_UP, thumbs-down/down -> THUMBS_DOWN, love -> LOVE",
-    "--rating is optional when --reply-to is present (conditional getFlag vs requireFlag in comments-post.ts lines 29-51)",
-    "SKILL.md has Library section with all commands plus complete workflow examples at lines 146-174",
-    "Quality gates: npm run build = 'tsc', npm run typecheck = 'tsc --noEmit', npm test = 'tsc && node --test dist/**/*.test.js'",
-    "No new npm dependencies — uses existing http.ts (hxFetch), flags.ts, config.ts",
-    "hxFetch uses basePath: '/api' for library endpoints",
-    "TypeScript strict mode, ES2022 target, Node16 module resolution"
+    "merge-conflicts.json lists src/tickets/index.ts with 4 ticket commits + 1 staging commit, but NO conflict markers found",
+    "Note: the conflicted file (tickets/index.ts) is in the tickets module, NOT the library module — the library code itself has no conflicts",
+    "All 7 new library files and 2 modified files (index.ts, SKILL.md) are present and complete",
+    "RATING_MAP aliases: thumbs-up/up -> THUMBS_UP, thumbs-down/down -> THUMBS_DOWN, love -> LOVE",
+    "--rating is optional when --reply-to is present (conditional getFlag in comments-post.ts)",
+    "--section auto-slugifies heading text if it contains spaces",
+    "Quality gates: 'npm run build' (tsc), 'npm run typecheck' (tsc --noEmit), 'npm test' (tsc && node --test dist/**/*.test.js)",
+    "No new npm dependencies — uses existing http.ts, flags.ts, config.ts",
+    "SKILL.md Library section documents all commands with flag descriptions and workflow examples"
   ],
   "unknowns": [
-    "No library-specific test files exist (flags.test.ts and resolve-ticket.test.ts exist as patterns but no library/*.test.ts)",
-    "TypeScript compilation not verified this run",
-    "hxFetch error handling for library-specific 404/400 responses not verified",
-    "show command markdown heading extraction regex robustness with edge cases (inline code, links in headings) not tested"
+    "Whether tickets/index.ts staging conflict was auto-resolved or needs manual intent verification",
+    "No library-specific test files exist (no src/library/*.test.ts)",
+    "hxFetch error handling for library-specific HTTP errors not verified at runtime"
   ]
 }

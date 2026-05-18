@@ -1,67 +1,65 @@
-# Scout Summary: helix-cli
+# Scout Summary — helix-cli
 
 ## Problem
 
-Run 4 of the Library Comments and Iteration feature (Phase 2b: CLI). Prior runs built the complete CLI module (7 new files, 2 modified). All prior issues resolved. This run focuses on hardening, intuitiveness, and verification.
+Continuation run for library comments CLI (Phase 2b). `merge-conflicts.json` lists `src/tickets/index.ts` as conflicted (4 ticket commits vs 1 staging commit), though no conflict markers exist. Note: the conflicted file is in the tickets module, not the library module — library code itself has no conflicts. CLI implementation is complete from prior runs. This run focuses on conflict verification and hardening.
 
 ## Analysis Summary
 
-### Implementation State: Complete — All Prior Issues Resolved
+### Merge Conflict State
 
-All planned CLI files exist and are fully implemented:
+`merge-conflicts.json` lists `src/tickets/index.ts` with:
+- **Ticket commits**: 4 (from runs cmom4vcdf, cmolkm7e4, plus merge commits)
+- **Staging commits**: 1 (run cmolxmbmj)
+
+**No conflict markers found.** The conflict appears pre-resolved. Notably, this file belongs to the tickets module, not the library module — the library command files themselves are conflict-free.
+
+### Implementation Completeness
+
+All 7 new files and 2 modified files from the research report spec are present:
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `src/library/index.ts` | 73 | Module router for list/show/comments |
-| `src/library/list.ts` | 49 | Table-formatted library item listing |
-| `src/library/show.ts` | 66 | Report display with [slug] annotations + comment summaries |
-| `src/library/comments.ts` | 51 | Comments subcommand dispatcher |
-| `src/library/comments-list.ts` | 80 | Grouped comment listing with threading |
-| `src/library/comments-post.ts` | 72 | Rating post with aliases and auto-slugification |
+| `src/library/index.ts` | 73 | Module router |
+| `src/library/list.ts` | 49 | List command |
+| `src/library/show.ts` | 66 | Show command with slug annotations |
+| `src/library/comments.ts` | 51 | Comments nested router |
+| `src/library/comments-list.ts` | 87 | Grouped comment listing |
+| `src/library/comments-post.ts` | 78 | Rating post with aliases |
 | `src/lib/resolve-library-item.ts` | 82 | 3-format item resolution |
 
-### Prior Issue Resolution
+### Key Intuitiveness Features
 
-| Issue | Status | Evidence |
-|-------|--------|----------|
-| Rating mandatory for replies | Fixed | `comments-post.ts` uses conditional getFlag vs requireFlag based on `--reply-to` presence |
+1. **Rating aliases**: `up`/`down`/`love` are shorter alternatives to `thumbs-up`/`thumbs-down`
+2. **Auto-slugification**: `--section "Key Findings"` auto-converts to `key-findings`
+3. **Multi-format resolution**: cuid, ticket short ID (`RSH-439`), title substring
+4. **Disambiguation**: Multiple title matches list candidates with IDs for disambiguation
+5. **Show annotations**: `[slug]` displayed next to headings for easy copy-paste to `--section`
 
-### Key Features
+### Quality Gates
 
-| Feature | Evidence |
-|---------|----------|
-| 3-format item resolution | cuid, short ID, title match in `resolve-library-item.ts:51-79` |
-| Rating aliases | `RATING_MAP`: up, down, love, thumbs-up, thumbs-down |
-| Auto-slugification | `--section "Key Findings"` -> `key-findings` (space detection) |
-| SKILL.md docs | Full Library section with command table + workflow examples (lines 48-51, 146-174) |
-| Thread replies | `--reply-to <commentId>` with optional rating |
-
-### Intuitiveness Aspects
-
-1. **Rating aliases** — `up`/`down`/`love` are shorter alternatives (agent-friendly)
-2. **Heading text to slug** — `--section "Key Findings"` auto-converts
-3. **Disambiguation** — Multiple title matches list candidates with IDs
-4. **Error messages** — Invalid ratings list valid values; missing flags show usage
-5. **Show annotations** — `[slug]` next to headings for easy copy-paste to `--section`
+- `npm run build` — `tsc`
+- `npm run typecheck` — `tsc --noEmit`
+- `npm test` — `tsc && node --test dist/**/*.test.js`
 
 ## Relevant Files
 
-| File | Role |
-|------|------|
-| `src/library/` (7 files) | Complete command module |
-| `src/lib/resolve-library-item.ts` | Item resolution |
-| `src/index.ts` (lines 94-97) | Dispatcher registration |
-| `skill-content/SKILL.md` (lines 48-51, 146-174) | Agent documentation |
-| `src/lib/http.ts` | hxFetch HTTP client |
-| `src/lib/flags.ts` | Flag parsing utilities |
+| File | Role | Lines |
+|------|------|-------|
+| `src/tickets/index.ts` | Merge-conflicts.json listed (no markers) | - |
+| `src/library/` (7 files) | Complete library command module | 486 total |
+| `src/lib/resolve-library-item.ts` | Item resolution utility | 82 |
+| `src/index.ts` (lines 98-102) | Dispatcher registration | 140 |
+| `skill-content/SKILL.md` (lines 146-179) | Agent documentation | - |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| ticket.md (Research Report) | Primary specification for Phase 2b | Defined CLI commands, resolution strategies, section targeting, agent workflows |
-| repo-guidance.json | Advisory shared metadata | Confirmed CLI target; rating optional fix now resolved |
-| Discussion thread (ticket.md) | Prior run context | No CLI-specific issues in recent runs |
-| SKILL.md | Agent documentation verification | Library section present with all commands, flag descriptions, and examples |
-| comments-post.ts (lines 5-11, 29-51) | Rating handling verification | RATING_MAP aliases + conditional require for replies |
-| resolve-library-item.ts | Resolution format verification | All 3 formats (cuid, short ID, title) confirmed |
+| ticket.md (Research Report) | Primary specification for Phase 2b | Defined CLI commands, resolution strategies, section targeting, SKILL.md |
+| ticket.md (Discussion) | Prior run context | No CLI-specific issues in recent runs |
+| `.helix/merge-conflicts.json` | Conflict identification | `tickets/index.ts` listed; no markers found; unrelated to library module |
+| repo-guidance.json | Prior run scope | CLI target: 2 discoverability fixes + 1 error handling |
+| `src/library/comments-post.ts` (lines 5-11) | Rating handling | RATING_MAP aliases + conditional require for replies |
+| `src/lib/resolve-library-item.ts` | Resolution verification | 3-format matching confirmed |
+| `skill-content/SKILL.md` (lines 146-179) | Agent docs verification | Library section present with all commands |
