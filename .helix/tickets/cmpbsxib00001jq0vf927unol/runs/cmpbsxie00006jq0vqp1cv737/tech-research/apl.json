@@ -1,0 +1,48 @@
+{
+  "questions": [
+    "What is the exact shape of the server's ticket-detail response for relationship fields, and does it match what the CLI needs to display?",
+    "Does the server list endpoint return relationship data per item (afterTicket, implementFromTicketId, referencedTicketIds), or only afterTicketId?",
+    "How should the CLI resolve multiple ticket references for the --reference flag (comma-separated vs. multiple calls)?",
+    "What is the server's error response shape for relationship validation failures, and how does hxFetch surface them to the user?",
+    "Can the existing resolveTicket() utility handle the performance implications of resolving multiple references (up to 5 for --reference)?"
+  ],
+  "answers": [
+    {
+      "answer": "The server detail endpoint (getTicketDetailForOrganization) returns full relationship data: afterTicketId (string|null), afterTicket (nested: {id, title, status, shortId, mode, approvalStatus}|null), implementFromTicketId (string|null), implementFromTicket (nested: same shape|null), referencedTicketIds (string[]), and referencedTickets (array of nested: {id, title, status, shortId, mode, approvalStatus}). This is sufficient for the CLI's get display.",
+      "evidence": [
+        "helix-global-server/src/services/ticket-service.ts lines 1789-1828: getTicketDetailForOrganization return object includes afterTicketId, afterTicket, implementFromTicketId, implementFromTicket, referencedTicketIds, referencedTickets"
+      ]
+    },
+    {
+      "answer": "The list endpoint returns MORE than diagnosis indicated. Each list item includes: afterTicketId (string|null), afterTicket (nested: {id, title, status, shortId, approvalStatus}|null), implementFromTicketId (string|null), and referencedTicketIds (string[]). This means the CLI list view can show rich dependency info without extra API calls.",
+      "evidence": [
+        "helix-global-server/src/services/ticket-service.ts lines 1674-1688: list response per item includes afterTicketId, afterTicket (nested), implementFromTicketId, referencedTicketIds",
+        "helix-global-server/src/services/ticket-service.ts lines 1603-1617: Prisma query includes afterTicket relation in findMany"
+      ]
+    },
+    {
+      "answer": "The CLI should accept comma-separated ticket references for --reference (e.g. --reference RSH-490,RSH-491). Each reference is resolved individually via resolveTicket() to get the internal ID. The server enforces max 5 via Zod schema (z.array().max(5)). Comma-separated avoids shell quoting issues and matches the --repos flag pattern already established in the CLI.",
+      "evidence": [
+        "helix-cli/src/tickets/create.ts lines 61-62: --repos uses comma-separated with split/trim/filter pattern",
+        "helix-global-server/src/controllers/ticket-controller.ts line 39: referencedTicketIds: z.array(z.string().trim().min(1)).max(5).optional()"
+      ]
+    },
+    {
+      "answer": "Server validation errors are returned as JSON { error: 'message' } with appropriate HTTP status codes (400 for most validation failures). hxFetch's buildErrorMessage extracts response text and formats it as 'HTTP 400 Bad Request - message'. The raw error messages from the server are human-readable (e.g. 'Circular dependency detected.', 'implementFromTicketId must reference a RESEARCH mode ticket.'). The CLI should catch these and strip the 'HTTP 400 Bad Request - ' prefix to present clean error text.",
+      "evidence": [
+        "helix-global-server/src/app.ts lines 93-97: HttpError handler returns res.status(error.statusCode).json({ error: error.message })",
+        "helix-global-server/src/services/ticket-service.ts lines 668-685, 689-736, 760-777: Specific validation error messages for each relationship type",
+        "helix-cli/src/lib/http.ts lines 28-35: buildErrorMessage extracts response text"
+      ]
+    },
+    {
+      "answer": "resolveTicket() fetches the entire ticket list (active, then archived if needed) to match a reference. For --reference with up to 5 values, calling resolveTicket() sequentially would make 2-10 API calls. However, this is acceptable: (a) ticket creation is not a hot path, (b) the alternative (a batch-resolve helper) would be over-engineering for a max of 5 references, and (c) the existing ticket list is cached per call, so optimization could be added later if needed. A pragmatic improvement would be to fetch the list once and call matchTicket() for each reference, but this can be deferred.",
+      "evidence": [
+        "helix-cli/src/lib/resolve-ticket.ts lines 86-167: resolveTicket() fetches active list, then archived if no match",
+        "helix-global-server/src/controllers/ticket-controller.ts line 39: max 5 references"
+      ]
+    }
+  ],
+  "statement": "The technical direction is a single-repo change in helix-cli: add --after, --reference, and --implement-from flags to the create command using existing resolveTicket() for reference resolution and getFlag() for parsing; extend TicketDetail and TicketItem types to include relationship fields; add display sections to get and list outputs; and update all documentation surfaces. The server API is fully ready and returns rich relationship data on both detail and list endpoints. Error responses are well-structured JSON with human-readable messages. No new dependencies or abstractions are needed.",
+  "followups": []
+}
