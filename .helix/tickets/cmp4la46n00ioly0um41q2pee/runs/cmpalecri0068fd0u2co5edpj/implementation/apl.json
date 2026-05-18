@@ -1,0 +1,14 @@
+{
+  "step": "implementation",
+  "repo": "helix-cli",
+  "status": "completed",
+  "changedFiles": [
+    "src/index.ts",
+    "src/library/comments-list.ts",
+    "src/library/comments-post.ts"
+  ],
+  "buildResult": "pass",
+  "typecheckResult": "pass",
+  "lintResult": "pass",
+  "followups": []
+}

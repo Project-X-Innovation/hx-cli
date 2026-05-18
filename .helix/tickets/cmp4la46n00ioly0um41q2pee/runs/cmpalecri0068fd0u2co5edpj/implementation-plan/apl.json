@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "Q1: What is the exact scope of CLI changes for Run 4?",
+    "Q2: Should comment IDs be truncated or shown in full?",
+    "Q3: Where should library commands appear in the help text?"
+  ],
+  "answers": [
+    {
+      "answer": "3 fixes across 3 files, ~20 lines total: (1) Add 4 lines of library command entries to usage() in src/index.ts. (2) Add comment IDs to output format in comments-list.ts (+4 lines to format strings). (3) Wrap hxFetch calls in try-catch in comments-list.ts and comments-post.ts (+12 lines total).",
+      "evidence": [
+        "src/index.ts lines 37-59: usage() missing library entries",
+        "src/library/comments-list.ts line 68: format omits comment.id",
+        "src/library/comments-post.ts line 62: hxFetch without try-catch"
+      ]
+    },
+    {
+      "answer": "Full ID. The --reply-to flag needs the full comment ID for the API call. Truncating creates a discovery problem — users see a short ID but need the full one. Full IDs are shown in parentheses prefix format: `(clx1abc2def3ghi...) [thumbs-up] Alice (2026-05-10)`. CLI users are comfortable with long strings and terminal selection.",
+      "evidence": [
+        "comments-post.ts line 30: getFlag(args, '--reply-to') passes the ID directly to the API",
+        "tech-research decision: full ID chosen over 7-char prefix to make workflow self-contained"
+      ]
+    },
+    {
+      "answer": "Between the 'hlx comments' block (line 52-53) and 'hlx skill' block (line 54) in the usage() function. This creates logical domain grouping: ticket comments → library commands → skill/tooling. Follows the existing 2-space indent, left-aligned command format.",
+      "evidence": [
+        "src/index.ts lines 52-53: hlx comments list/post entries",
+        "src/index.ts line 54: hlx skill show",
+        "tech-research decision: between comments and skill blocks for natural domain flow"
+      ]
+    }
+  ],
+  "statement": "CLI Run 4 plan: 5 steps across 3 files, ~20 lines. Fix 1: library commands in usage() help. Fix 2: comment IDs (full) in comments list output. Fix 3: try-catch on hxFetch for user-friendly errors. Verification plan includes 6 Required Checks: 1 build gate + 5 CLI tests (help text, list, comments with IDs, post, error handling).",
+  "followups": []
+}
