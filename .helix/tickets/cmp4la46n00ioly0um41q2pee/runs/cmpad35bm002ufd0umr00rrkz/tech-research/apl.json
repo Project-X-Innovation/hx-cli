@@ -1,0 +1,36 @@
+{
+  "questions": [
+    "Q1: Is showing the full comment ID in CLI output the right approach for --reply-to discoverability?",
+    "Q2: Where should library commands appear in the usage() help text?",
+    "Q3: Are there other CLI discoverability gaps beyond usage() and comment IDs?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The --reply-to flag at comments-post.ts line 39 requires the full comment ID (cuid format, ~25 chars). Truncating to 7 characters would create a discovery gap — users see a short prefix but need to find the full ID. Showing the full ID in parentheses makes the comments list -> comments post --reply-to workflow self-contained. Terminal users are comfortable selecting long strings. The format: `(clx1abc2def...) [thumbs-up] Alice (2026-05-10): \"text\"`.",
+      "evidence": [
+        "comments-post.ts line 39: getFlag(args, '--reply-to') — expects full ID",
+        "comments-list.ts line 6: id: string in type — available but not printed",
+        "comments-list.ts line 68: format omits id"
+      ]
+    },
+    {
+      "answer": "Between the hlx comments and hlx skill blocks in the usage() string. This creates a logical domain progression: ticket operations (tickets, comments) -> library operations (library list, show, comments) -> utility (skill, update). The library commands are a natural extension of the feedback/commenting domain.",
+      "evidence": [
+        "src/index.ts lines 52-53: hlx comments list/post entries",
+        "src/index.ts lines 54-55: hlx skill show/install entries",
+        "Library is conceptually between comments (ticket-level feedback) and skill (utility)"
+      ]
+    },
+    {
+      "answer": "The two identified gaps (usage help, comment IDs) are the primary discoverability issues. SKILL.md at lines 48-51 and 146-174 is complete with all library commands and examples — agent discoverability is covered. Rating aliases (up/down/love) are intuitive. Auto-slugification works. 3-format item resolution with disambiguation is well-implemented. The optional hardening (try-catch on hxFetch) improves error UX but is not a discoverability issue per se.",
+      "evidence": [
+        "SKILL.md lines 146-174: complete Library section with command table and workflow examples",
+        "comments-post.ts lines 5-11: RATING_MAP with 5 aliases including short forms",
+        "comments-list.ts line 33: auto-slugify on --section with space detection",
+        "resolve-library-item.ts lines 71-76: disambiguation lists matching items with IDs"
+      ]
+    }
+  ],
+  "statement": "CLI Run 4 hardening needs 2 mandatory discoverability fixes plus 1 optional error handling improvement: (1) Add 4 lines of library commands to usage() in src/index.ts. (2) Show full comment IDs in comments-list.ts output for --reply-to discoverability. (3) Optional: wrap hxFetch calls in try-catch for user-friendly error messages. ~20 lines across 3 files. All existing functionality confirmed working.",
+  "followups": []
+}

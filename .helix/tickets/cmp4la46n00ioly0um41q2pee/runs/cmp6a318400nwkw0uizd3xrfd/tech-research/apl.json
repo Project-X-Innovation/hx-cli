@@ -1,0 +1,27 @@
+{
+  "questions": [
+    "What is the correct approach for making --rating optional when --reply-to is present?",
+    "Does the CLI need any changes for the LOVE icon update or the nullable rating server change?"
+  ],
+  "answers": [
+    {
+      "answer": "In comments-post.ts, restructure the rating flag handling: (1) Check for --reply-to first using getFlag (already at line 36). (2) If --reply-to IS present, use getFlag (optional) for --rating instead of requireFlag. (3) If --reply-to is NOT present (top-level post), keep requireFlag for --rating as current behavior. (4) When --reply-to is present and no --rating provided, omit rating from the POST body entirely (server accepts null rating for replies). (5) When --reply-to is present and --rating IS provided, include it normally. The body construction at lines 42-47 already conditionally adds fields, so omitting rating when it's undefined will naturally exclude it from the JSON body.",
+      "evidence": [
+        "comments-post.ts:29 — requireFlag(args, '--rating', ...) currently always requires rating",
+        "comments-post.ts:36 — const replyTo = getFlag(args, '--reply-to') already reads the flag",
+        "comments-post.ts:42-47 — body construction: 'const body = { anchor: section, rating }; if (content) body.content = content; if (replyTo) body.parentCommentId = replyTo'",
+        "Server library-comment-service.ts:69-73 — validation only enforces rating for top-level"
+      ]
+    },
+    {
+      "answer": "No functional changes needed. The CLI uses 'love' as the flag value which maps to 'LOVE' stored value — this is purely a data mapping and is unaffected by the client-side icon change. For the nullable rating server change, the body construction at lines 42-47 only adds fields that are present — when rating is undefined (reply without rating), it won't be included in the JSON body, which the server correctly interprets as null. SKILL.md description of rating values ('thumbs-up (up), thumbs-down (down), love') is correct and needs no update — 'love' is the CLI concept, the icon is a UI concept.",
+      "evidence": [
+        "comments-post.ts:5-11 — RATING_MAP: 'love' -> 'LOVE' (data mapping, not display)",
+        "comments-post.ts:42-47 — body adds fields conditionally; undefined rating won't be serialized",
+        "SKILL.md:170 — 'Rating values: thumbs-up (up), thumbs-down (down), love' (correct as-is)"
+      ]
+    }
+  ],
+  "statement": "CLI needs 1 targeted fix: make --rating conditional in comments-post.ts. Read --reply-to first, then use getFlag (optional) instead of requireFlag (mandatory) for --rating when replying. When no --reply-to, keep requireFlag. No other CLI changes needed for the icon or nullable rating updates.",
+  "followups": []
+}

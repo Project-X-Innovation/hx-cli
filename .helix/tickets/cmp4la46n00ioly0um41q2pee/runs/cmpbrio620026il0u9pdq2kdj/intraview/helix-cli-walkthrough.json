@@ -1,0 +1,49 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "helix-cli: Staging Merge Conflict Resolution (BLD-448)",
+  "description": "This tour walks through a conflict resolution run for ticket BLD-448 (Library Comments and Iteration) in the helix-cli repository. A staging refresh introduced a reported merge conflict in src/tickets/index.ts between the ticket branch (library CLI integration, 4 commits) and the staging branch (concurrent ticket command updates, 1 commit). The AI agent verified the conflict was auto-resolved cleanly — zero conflict markers remain in any source file, all 10 subcommand handlers are preserved in the tickets dispatcher, and the TypeScript build passes with zero errors. No source code changes were required; the tour documents the verification artifacts produced during this run.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The run begins with a diagnosis of the reported merge conflict. The conflicted file was src/tickets/index.ts, caught between 4 ticket-branch commits (library CLI implementation + ticket lookup changes) and 1 staging commit (concurrent ticket command dispatcher updates). The diagnosis confirmed that the conflict was already auto-resolved before the agent ran — grep for <<<<<<, =======, and >>>>>>> across all .ts files in src/ returned zero matches. The 150-line resolved file was structurally intact with all expected subcommand imports present.",
+      "title": "Diagnosis: Conflict Origin and Pre-Resolution Status"
+    },
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/diagnosis/apl.json",
+      "line": 1,
+      "description": "The APL (Assertions, Proofs, Logic) artifact records the three key questions the diagnosis answered: (1) Are there unresolved markers in tickets/index.ts? No — grep returned zero matches. (2) Are there stray markers anywhere in src/? No — all 16 grep hits were in .helix/ artifact JSON files from prior runs, not in source. (3) Does the resolved file preserve both ticket-side and staging-side intents? Yes — all 10 subcommand imports (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description) are present, and library command files exist in src/library/.",
+      "title": "Diagnosis APL: Evidence for Zero Remaining Markers"
+    },
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/implementation-plan/implementation-plan.md",
+      "line": 1,
+      "description": "Because the merge was pre-resolved, the implementation plan is a verification-only plan governed by four principles: no code changes, verify don't re-implement, minimal touch (only the 1 file in merge-conflicts.json is in scope), and build-as-gate (TypeScript compilation is the primary correctness signal). The three steps are: (1) grep for conflict markers repo-wide, (2) npm install, (3) npm run build. This plan explicitly forbids modifying any source files and treats tsc --noEmit exit code 0 as the definitive success gate.",
+      "title": "Implementation Plan: Verify-Only, No Code Changes"
+    },
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/implementation-plan/apl.json",
+      "line": 1,
+      "description": "The implementation plan APL answers the three plan-phase questions. Q1 (conflict markers): zero found via direct grep. Q2 (intent preservation): the 150-line file has all 10 imports at lines 4-14 and a complete switch statement at lines 43-148 with proper use of extractTicketRef and resolveTicket for ref-based commands. Q3 (build): expected to pass based on file integrity, but deferred to the execution step — this distinction is important because it keeps the plan honest about what was inspected versus what was runtime-verified.",
+      "title": "Implementation Plan APL: Build Gate Deferred to Execution"
+    },
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/implementation/apl.json",
+      "line": 1,
+      "description": "The implementation execution APL records the outcome of actually running the verification steps. The single question — were there real merge conflicts needing resolution? — is answered: No. The agent re-confirmed that src/tickets/index.ts contained no conflict markers, the broad repo-wide grep across all *.ts files also returned nothing, and no source code modifications were made. The statement closes the loop: conflict resolution run completed, no code changes needed, the auto-resolved state is correct.",
+      "title": "Implementation: Execution Confirms No Changes Needed"
+    },
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "The code review independently verified all claims from the implementation run. Three file groups were checked: (1) src/tickets/index.ts — 150 lines, no conflict markers, all 10 subcommand cases present in the switch statement, resolveTicket used correctly for ref-based commands; (2) all src/ files via grep — zero <<<<<<< markers anywhere; (3) the 6 library comment feature files — library/comments-list.ts, library/comments-post.ts, library/comments.ts, library/index.ts, library/show.ts, and src/index.ts all verified present with library comment references intact. No code changes were made during review.",
+      "title": "Code Review: Independent Verification of Merge Integrity"
+    },
+    {
+      "file": ".helix/tickets/cmp4la46n00ioly0um41q2pee/runs/cmpblprsk005vgz0uxap7uqbb/code-review/apl.json",
+      "line": 1,
+      "description": "The final APL artifact closes the verification chain. The three code-review questions are answered with hard evidence: (1) merged file preserves both ticket-side and staging-side changes — confirmed by inspecting imports at lines 4-13 and the switch statement at lines 43-148; (2) no remaining conflict markers — recursive grep for <<<<<<< across src/ returned zero matches; (3) TypeScript build passes — tsc --noEmit completed with exit code 0, confirming all imports resolve and all types are correct. The overall statement: the helix-cli merge from staging was auto-resolved cleanly, all 10 subcommands are intact, the build is green, and the codebase major code paths remain clean.",
+      "title": "Code Review APL: Build Pass Confirmed, Tour Summary"
+    }
+  ]
+}

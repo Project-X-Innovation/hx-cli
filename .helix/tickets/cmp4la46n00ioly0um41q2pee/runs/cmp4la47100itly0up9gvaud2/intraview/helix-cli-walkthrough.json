@@ -1,0 +1,67 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 2b: Library CLI Commands (helix-cli)",
+  "description": "This tour walks through the Phase 2b implementation of library commands in helix-cli. Seven new files and two modified files add `hlx library list|show|comments list|comments post` commands. The changes introduce a multi-strategy item resolution utility, a nested module router mirroring the existing comments module pattern, four command implementations, integration into the main dispatcher, and SKILL.md documentation critical for agent discoverability. No new npm dependencies were introduced; the implementation follows established codebase patterns throughout.",
+  "steps": [
+    {
+      "file": "src/lib/resolve-library-item.ts",
+      "line": 1,
+      "description": "This file is created first because all library commands depend on it. It adapts the existing resolve-ticket.ts 3-strategy pattern for library items: (1) exact cuid match via /^c[a-z0-9]{24}$/ regex, (2) case-insensitive ticket shortId match (e.g. RSH-439), and (3) case-insensitive title substring fallback with ambiguity detection. The helper extractLibraryItemRef pulls the item reference from either the --item flag or the first positional argument. Fetches the full item list via GET /library/items and matches client-side, keeping the server API surface minimal.",
+      "title": "Item Resolution Utility (Foundation)"
+    },
+    {
+      "file": "src/library/index.ts",
+      "line": 1,
+      "description": "The top-level router for the library module, mirroring the src/comments/index.ts pattern (52-line switch dispatcher). Dispatches on args[0] to list, show, or comments subcommands. For the comments subcommand, it first resolves the library item via resolveLibraryItem before delegating to the nested comments router. All imports use .js extensions per codebase convention. This router is the single entry point registered in the main dispatcher.",
+      "title": "Library Module Router"
+    },
+    {
+      "file": "src/library/list.ts",
+      "line": 1,
+      "description": "Implements `hlx library list`. Calls GET /api/library/items via hxFetch, then formats results using padEnd alignment to match the visual style of other list commands (e.g., tickets list). Outputs each library item's shortId, title, and cuid so users and agents can identify items for subsequent show or comments commands. No required flags; purely a discovery command.",
+      "title": "Library List Command"
+    },
+    {
+      "file": "src/library/show.ts",
+      "line": 1,
+      "description": "Implements `hlx library show <item>`. Resolves the item reference via extractLibraryItemRef and resolveLibraryItem, then fetches the full report via GET /api/library/items/:id. Renders the report body and its section annotations so users can read the full library report content. Error handling surfaces descriptive messages when the item cannot be resolved.",
+      "title": "Library Show Command"
+    },
+    {
+      "file": "src/library/comments.ts",
+      "line": 1,
+      "description": "A second-level router handling the `comments` subcommand of the library module. Dispatches on the next positional argument to either comments-list or comments-post. This nested router pattern keeps each leaf command focused on a single responsibility and mirrors how the top-level dispatcher handles module routing. The library item is already resolved by the parent router before this file is invoked.",
+      "title": "Comments Nested Router"
+    },
+    {
+      "file": "src/library/comments-list.ts",
+      "line": 1,
+      "description": "Implements `hlx library comments list <item> [--section <slug>]`. Calls GET /api/library/items/:id/comments, optionally filtered by section slug. The --section flag value is auto-slugified before being sent as a query parameter, so human-readable section names work correctly. Results are displayed with padEnd alignment showing author, rating, and comment body. This is the primary read path for section-level feedback.",
+      "title": "Comments List Command"
+    },
+    {
+      "file": "src/library/comments-post.ts",
+      "line": 1,
+      "description": "Implements `hlx library comments post <item> --section <slug> --rating <value> [--body <text>] [--reply-to <id>]`. The --rating flag is normalized via a RATING_MAP that accepts multiple aliases (e.g., 'up', 'positive', '+1' all map to the canonical rating value), making the command ergonomic for both humans and agents. The --reply-to flag enables threaded replies. POSTs to /api/library/items/:id/comments. Descriptive errors are emitted for unknown rating aliases or missing required flags.",
+      "title": "Comments Post Command"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 72,
+      "description": "A new 'library' case is added to the main switch dispatcher, following the exact same configOrHelp pattern used by the 'comments' case (lines 87-91). This ensures the library commands require authentication before executing. The runLibrary import is added at the top of the file. Without this registration, the entire library module would be unreachable from the CLI entry point.",
+      "title": "Main Dispatcher Integration"
+    },
+    {
+      "file": "skill-content/SKILL.md",
+      "line": 1,
+      "description": "Four new library commands are added to the Available Commands table and a comprehensive Library Reports workflow section is appended with seven example commands covering list, show, comments list (with --section filter), and comments post (with all rating aliases). This update is classified as critical: agents read SKILL.md to discover CLI capabilities, so without it the entire Phase 2b feature would be invisible to AI agents operating in this repository.",
+      "title": "SKILL.md Agent Discoverability Documentation"
+    },
+    {
+      "file": "src/lib/resolve-library-item.ts",
+      "line": 1,
+      "description": "The complete data flow is: main dispatcher (src/index.ts) → library router (src/library/index.ts) → resolveLibraryItem (src/lib/resolve-library-item.ts) → leaf command (list/show/comments-list/comments-post) → hxFetch (src/lib/http.ts) → API. All existing commands (login, token, inspect, comments, org, tickets, skill, update) are unmodified. The build passes (tsc exit code 0). The 3-strategy resolution utility is robust against ambiguous matches. SKILL.md ensures agent discoverability. No regressions were introduced.",
+      "title": "Summary: Data Flow and Code Path Integrity"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "questions": [
+    "What CLI-side spec deviations remain after prior implementation runs?",
+    "Should the CLI --rating flag be optional for reply posts?",
+    "Does the SKILL.md need updates for the icon change from heart to double thumbs up?"
+  ],
+  "answers": [
+    {
+      "answer": "One confirmed deviation: --rating is required for all posts including replies via requireFlag (comments-post.ts:29). SKILL.md and all other CLI files are complete and correct.",
+      "evidence": [
+        "comments-post.ts:29 — requireFlag(args, '--rating', '...') makes rating mandatory for all posts",
+        "Research report: 'When parentCommentId is present, rating becomes optional'",
+        "All 7 new files and 2 modified files structurally complete per scout"
+      ]
+    },
+    {
+      "answer": "Yes. The spec says rating is optional for replies. When --reply-to is present, --rating should use getFlag instead of requireFlag so it's optional. When --reply-to is absent (top-level post), --rating remains required.",
+      "evidence": [
+        "comments-post.ts:29 — requireFlag(args, '--rating', ...) — always required currently",
+        "Server library-comment-service.ts:69-73 — validates rating required only for top-level",
+        "Research report Zod schema: 'When parentCommentId is present, rating becomes optional'"
+      ]
+    },
+    {
+      "answer": "SKILL.md uses 'love' as the CLI flag value which maps to 'LOVE' stored value. The flag name stays 'love' regardless of icon changes (icon is UI-only). SKILL.md description can optionally be updated for clarity but no functional change is needed. The rating taxonomy description at SKILL.md:170 is correct.",
+      "evidence": [
+        "SKILL.md:170 — 'Rating values: thumbs-up (up), thumbs-down (down), love'",
+        "comments-post.ts:5-11 — RATING_MAP: 'love' -> 'LOVE' (correct mapping)"
+      ]
+    }
+  ],
+  "statement": "The CLI needs 1 targeted fix: make --rating optional when --reply-to is present in comments-post.ts. Change requireFlag to conditional getFlag based on whether --reply-to is set. SKILL.md is correct and complete. No new files needed.",
+  "followups": []
+}
