@@ -49,27 +49,5 @@ I'll put in a note. Nate, in his report, felt that goals should be a kind of tic
 
 #RSH-193 #RSH-411
 
-## Referenced Tickets
-
-2 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### RSH-193: Side Quests
-- Mode: RESEARCH | Status: REPORT_READY
-- Completed runs: 1 (run-1)
-- Materialized files: 4 artifacts
-- Path: `.helix-refs/RSH-193/`
-- Manifest: `.helix-refs/RSH-193/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
-### RSH-411: Adding a Business Rules Layer and Reframing for the Agentic Future
-- Mode: RESEARCH | Status: REPORT_READY
-- Completed runs: 10 (run-1, run-2, run-3, run-4, run-5, run-6, run-7, run-8, run-9, run-10)
-- Materialized files: 210 artifacts
-- Path: `.helix-refs/RSH-411/`
-- Manifest: `.helix-refs/RSH-411/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Attachments
 - (none)

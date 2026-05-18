@@ -1,0 +1,56 @@
+{
+  "problem": "RSH-488 explores the 'Goals' concept. The helix-cli is the command-line interface that would expose Goal creation and management commands. Currently no Goal CLI commands exist — ticket creation supports 5 modes (AUTO|BUILD|FIX|RESEARCH|EXECUTE).",
+  "files": [
+    {
+      "path": "src/tickets/index.ts",
+      "why": "CLI ticket command structure (lines 35-149). Goals CLI commands would follow this modular pattern or add a new top-level 'goals' command group."
+    },
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Ticket creation with mode parameter (line 12: AUTO|BUILD|FIX|RESEARCH|EXECUTE). Adding GOAL mode would require updating this."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Ticket listing with status filtering (lines 39-109). Goal filtering might need special handling."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Ticket detail retrieval (lines 47-98). Goal tickets would need child-ticket listing in output."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main CLI entry point (lines 1-129). Top-level command registration. A 'goals' command group would register here."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch, lines 37-134) with retry, auth, and org-scoping. All Goal API calls would use this."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Ticket reference resolution (lines 44-167) — accepts internal ID, short ID, or ticket number. Goal references might use the same resolver if Goals are tickets."
+    },
+    {
+      "path": "package.json",
+      "why": "Build: tsc. Entry: dist/index.js via 'hlx' bin. No test framework beyond Node built-in."
+    }
+  ],
+  "facts": [
+    "CLI ticket creation supports 5 modes: AUTO|BUILD|FIX|RESEARCH|EXECUTE (create.ts line 12). No GOAL mode.",
+    "No 'goal' or 'goals' command group exists in the CLI.",
+    "Top-level commands: login, token, org, tickets, inspect, comments, skill, update (index.ts lines 1-129).",
+    "Ticket reference resolution (resolve-ticket.ts) accepts internal ID, short ID (e.g., BLD-339), or ticket number. If Goals are tickets, same resolver works.",
+    "HTTP client (http.ts) handles auth (API key via X-API-Key, JWT via Bearer), org scoping (X-Helix-Org-ID), retries (3 attempts), and 30s timeout.",
+    "CLI has modular command structure — each command group in its own directory (tickets/, comments/, inspect/, etc.)."
+  ],
+  "unknowns": [
+    "Whether Goals get their own CLI command group ('hlx goals') or are accessed via 'hlx tickets' with GOAL mode.",
+    "Whether Goal-specific commands are needed (e.g., 'hlx goals status', 'hlx goals children', 'hlx goals evaluate').",
+    "Whether the ticket reference resolver needs updates if Goals are a separate entity (not a ticket type)."
+  ],
+  "execution_signals": {
+    "package_manager": "npm",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test dist/**/*.test.js"
+  }
+}
