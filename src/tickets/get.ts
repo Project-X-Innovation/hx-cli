@@ -2,6 +2,15 @@ import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
 import { hasFlag } from "../lib/flags.js";
 
+type RelatedTicket = {
+  id: string;
+  title: string;
+  status: string;
+  shortId: string;
+  mode: string;
+  approvalStatus: string | null;
+};
+
 type TicketDetail = {
   id: string;
   shortId: string;
@@ -20,6 +29,12 @@ type TicketDetail = {
   mergeQueueStatus: string | null;
   approvalStatus: string | null;
   isArchived: boolean;
+  afterTicketId: string | null;
+  afterTicket: RelatedTicket | null;
+  implementFromTicketId: string | null;
+  implementFromTicket: RelatedTicket | null;
+  referencedTicketIds: string[];
+  referencedTickets: RelatedTicket[];
 };
 
 type TicketResponse = { ticket: TicketDetail };
@@ -60,6 +75,17 @@ export async function printTicketDetail(config: HxConfig, ticketId: string): Pro
   }
   if (ticket.approvalStatus) {
     console.log(`Approval:     ${ticket.approvalStatus}`);
+  }
+
+  if (ticket.afterTicket) {
+    console.log(`Depends on:   ${ticket.afterTicket.shortId} (${ticket.afterTicket.title}) - ${ticket.afterTicket.status}`);
+  }
+  if (ticket.implementFromTicket) {
+    console.log(`Implements:   ${ticket.implementFromTicket.shortId} (${ticket.implementFromTicket.title}) - ${ticket.implementFromTicket.status}`);
+  }
+  if (ticket.referencedTickets && ticket.referencedTickets.length > 0) {
+    const refs = ticket.referencedTickets.map((r) => `${r.shortId} (${r.title}) - ${r.status}`).join(", ");
+    console.log(`References:   ${refs}`);
   }
 
   if (ticket.repositories.length > 0) {

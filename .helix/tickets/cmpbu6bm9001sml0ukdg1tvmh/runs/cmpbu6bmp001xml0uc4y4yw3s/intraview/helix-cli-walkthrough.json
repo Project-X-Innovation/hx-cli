@@ -1,0 +1,108 @@
+{
+  "title": "Ticket Relationship Support in hlx CLI",
+  "description": "Adds --after, --reference, and --implement-from flags to tickets create, displays relationship data in tickets get and list, and updates all documentation surfaces.",
+  "steps": [
+    {
+      "file": "src/tickets/create.ts",
+      "line": 6,
+      "title": "Import resolveTicket utility",
+      "description": "Added import for resolveTicket from resolve-ticket.js to resolve ticket references (short IDs, internal IDs, numeric refs) to internal IDs for the relationship flags."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 17,
+      "title": "Updated usage string with new flags",
+      "description": "The inline help string now includes [--after <ticket-ref>] [--reference <ref1,ref2>] [--implement-from <ticket-ref>] at the end."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 90,
+      "title": "Relationship flag parsing",
+      "description": "Three new optional flags parsed using getFlag(): --after (single ticket ref), --reference (comma-separated refs), --implement-from (single ticket ref). Each is resolved via resolveTicket() with try/catch error handling matching the existing --repos pattern."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 119,
+      "title": "Reference splitting and max-5 validation",
+      "description": "The --reference flag value is split on commas, trimmed, filtered for empty strings, and validated client-side to contain at most 5 references before resolving each sequentially."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 139,
+      "title": "POST body with relationship fields",
+      "description": "The hxFetch POST body now conditionally spreads afterTicketId, implementFromTicketId, and referencedTicketIds only when the corresponding flags were provided and resolved."
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 154,
+      "title": "Server error extraction with em-dash parsing",
+      "description": "The hxFetch call is wrapped in try/catch. On error, the code splits the error message on the em-dash separator, attempts to JSON.parse the body portion, and extracts the server's error field for clean display. Falls back to the raw message on parse failure."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 5,
+      "title": "RelatedTicket helper type",
+      "description": "New shared type for relationship objects returned by the server: { id, title, status, shortId, mode, approvalStatus }. Used by afterTicket, implementFromTicket, and referencedTickets."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 32,
+      "title": "TicketDetail type extended with relationship fields",
+      "description": "Six new fields added: afterTicketId, afterTicket, implementFromTicketId, implementFromTicket, referencedTicketIds, referencedTickets. These match the server's GET /api/tickets/:id response shape."
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 80,
+      "title": "Conditional relationship display",
+      "description": "Three conditional sections added to printTicketDetail(): 'Depends on' (afterTicket), 'Implements' (implementFromTicket), 'References' (referencedTickets). Each only renders when the data is present, preserving identical output for tickets without relationships."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 13,
+      "title": "TicketItem type extended with relationship fields",
+      "description": "Four new fields added to match the list endpoint response: afterTicketId, afterTicket (with shortId for display), implementFromTicketId, referencedTicketIds."
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 111,
+      "title": "Dependency indicator in list output",
+      "description": "New afterTag computed from ticket.afterTicket.shortId and appended to the output line. Only appears for tickets with a dependency, preserving existing alignment."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 21,
+      "title": "Updated ticketsUsage() with new flags",
+      "description": "The top-level tickets usage help now includes the three new relationship flags on the create command line."
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 73,
+      "title": "Updated case 'create' help with new flags",
+      "description": "The create subcommand help string also includes the three new flags."
+    },
+    {
+      "file": "src/docs/cli-content.ts",
+      "line": 108,
+      "title": "New flag rows in documentation table",
+      "description": "Three new rows added to the tickets create flags table: --after, --reference, --implement-from with descriptions."
+    },
+    {
+      "file": "src/docs/cli-content.ts",
+      "line": 205,
+      "title": "Worked examples for ticket relationships",
+      "description": "Four new worked examples added: creating a dependent ticket, cross-referencing tickets, implementing from research, and viewing relationships."
+    },
+    {
+      "file": "skill-content/SKILL.md",
+      "line": 92,
+      "title": "Relationship command examples in skill docs",
+      "description": "Three new examples in the Ticket Management section showing --after, --reference, and --implement-from usage."
+    },
+    {
+      "file": "skill-content/references/commands.md",
+      "line": 56,
+      "title": "Updated Action Commands create reference",
+      "description": "The tickets create command in the Action Commands section now includes all three new relationship flags."
+    }
+  ]
+}

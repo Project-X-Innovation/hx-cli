@@ -53,7 +53,7 @@ hlx tickets artifact <ticket-id> --step <step> --artifact <name>  View a specifi
 ### Action Commands
 
 ```
-hlx tickets create --title <title> --repo <repo> [--description <desc>]
+hlx tickets create --title <title> --repo <repo> [--description <desc>] [--after <ticket-ref>] [--reference <ref1,ref2>] [--implement-from <ticket-ref>]
 hlx tickets rerun <ticket-id>
 hlx tickets continue <ticket-id>
 hlx tickets bundle <ticket-id> --out <dir>

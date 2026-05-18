@@ -88,6 +88,15 @@ hlx tickets artifact <ticket-id> --step <step> --artifact <name>
 # Create a new ticket
 hlx tickets create --title "Fix login bug" --repo my-app
 
+# Create a ticket that depends on another (dependency chain)
+hlx tickets create --title "Build API" --after RSH-490 --repos my-app --description "Implement after schema is ready"
+
+# Create a ticket with cross-references
+hlx tickets create --title "Update docs" --reference RSH-490,RSH-491 --repos my-app --description "Update docs for new endpoints"
+
+# Create an implementation from a research ticket
+hlx tickets create --title "Implement caching" --implement-from RSH-485 --repos my-app --description "Implement based on research findings"
+
 # Continue work on a ticket
 hlx tickets continue <ticket-id>
 ```

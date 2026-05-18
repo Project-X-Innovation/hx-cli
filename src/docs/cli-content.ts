@@ -105,6 +105,9 @@ hlx org switch     # Switch to a different org
 | \`--description-file <path>\` | Read description from a file (mutually exclusive with \`--description\`) |
 | \`--repos <name1,name2>\` | Target repositories, comma-separated (required) |
 | \`--mode <mode>\` | Ticket mode: AUTO, BUILD, FIX, RESEARCH, or EXECUTE |
+| \`--after <ticket-ref>\` | Create after another ticket (dependency chain) |
+| \`--reference <ref1,ref2>\` | Reference related tickets, comma-separated (max 5) |
+| \`--implement-from <ticket-ref>\` | Link to a completed research ticket |
 
 **\`hlx tickets continue\` flags:**
 
@@ -198,6 +201,38 @@ hlx tickets create --title "Migrate user schema" --description-file ./desc.md --
 \`\`\`
 
 This reads the description from \`./desc.md\` instead of passing it inline. The \`--mode\` flag accepts: AUTO, BUILD, FIX, RESEARCH, or EXECUTE.
+
+### Create a ticket with a dependency
+
+\`\`\`bash
+hlx tickets create --title "Build API endpoints" --after RSH-490 --repos my-app --description "Implement REST endpoints after schema is ready"
+\`\`\`
+
+The ticket starts as WAITING until the predecessor (RSH-490) completes, then transitions to QUEUED automatically.
+
+### Create a ticket with cross-references
+
+\`\`\`bash
+hlx tickets create --title "Update API docs" --reference RSH-490,RSH-491 --repos my-app --description "Update docs to reflect new endpoints"
+\`\`\`
+
+References are informational only and do not affect ticket scheduling.
+
+### Create an implementation from a research ticket
+
+\`\`\`bash
+hlx tickets create --title "Implement caching" --implement-from RSH-485 --repos my-app --description "Implement caching based on research findings"
+\`\`\`
+
+The \`--implement-from\` flag requires a RESEARCH mode ticket with REPORT_READY status.
+
+### View ticket relationships
+
+\`\`\`bash
+hlx tickets get RSH-501
+\`\`\`
+
+When a ticket has relationships, the detail view shows "Depends on", "Implements", and/or "References" lines with the related ticket's short ID, title, and status.
 
 ### View artifacts for a specific run
 
