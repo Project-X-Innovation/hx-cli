@@ -1,0 +1,141 @@
+{
+  "problem": "The hlx CLI `tickets create` command does not support ticket relationship fields (afterTicketId, referencedTicketIds, implementFromTicketId) that the server API already accepts and the web UI already provides via slash commands (/after, /implement) and hashtag references (#). The CLI also does not display relationship data when viewing tickets.",
+  "files": [
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Primary file for ticket creation. Currently only sends title, description, repositoryIds, and mode in POST body. Missing afterTicketId, referencedTicketIds, implementFromTicketId fields."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Ticket subcommand router. Dispatches to create, get, list, etc. Usage text and help strings will need updating for new flags."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Ticket detail display. TicketDetail type does not include afterTicketId, referencedTicketIds, or implementFromTicketId fields. printTicketDetail does not render relationship info."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Ticket list display. TicketItem type does not include relationship fields. Output line does not show dependency info."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Existing ticket resolution logic (ID, shortId, number). Already capable of resolving ticket refs for --after/--reference flag values."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Flag parsing utilities (getFlag, hasFlag, requireFlag). Used for all CLI flag handling."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "HTTP client (hxFetch). Already supports POST with arbitrary body fields. No changes expected."
+    },
+    {
+      "path": "src/lib/resolve-repo.ts",
+      "why": "Repo resolution pattern. Demonstrates the resolve-then-use pattern already used for repos and tickets."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and top-level usage text. Usage string mentions 'tickets create' but not relationship flags."
+    },
+    {
+      "path": "src/docs/cli-content.ts",
+      "why": "Exported documentation for agent consumption. tickets create section documents only title/description/repos/mode flags."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Agent skill documentation. Does not mention ticket relationships or dependency commands."
+    },
+    {
+      "path": "skill-content/references/commands.md",
+      "why": "Command reference documentation. tickets create section omits relationship flags."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Existing tests for ticket resolution. Pattern for testing create with new flags."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Existing tests for flag utilities."
+    },
+    {
+      "path": "package.json",
+      "why": "Build/test/typecheck scripts. Version 1.3.3. No ORM dependencies."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. Strict mode, ES2022, Node16 modules."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Server POST /api/tickets already accepts afterTicketId (optional string), implementFromTicketId (optional string), and referencedTicketIds (optional array of up to 5 strings)",
+      "source": "helix-global-server/src/controllers/ticket-controller.ts lines 29-40 (createTicketSchemaGeneral zod schema)"
+    },
+    {
+      "claim": "Server validates afterTicketId: checks existence in same org, prevents DEPLOYED/STAGING_MERGED predecessors, walks up to 20 ancestors for circular dependency detection, sets ticket status to WAITING or QUEUED based on predecessor run status",
+      "source": "helix-global-server/src/services/ticket-service.ts lines 689-736"
+    },
+    {
+      "claim": "Server validates referencedTicketIds: checks all referenced tickets exist in same org",
+      "source": "helix-global-server/src/services/ticket-service.ts lines 760-777"
+    },
+    {
+      "claim": "Server validates implementFromTicketId: must reference a RESEARCH mode ticket with REPORT_READY status",
+      "source": "helix-global-server/src/services/ticket-service.ts lines 668-685"
+    },
+    {
+      "claim": "Web UI uses /after slash command in description editor to set afterTicketId, /implement for implementFromTicketId, and # hashtag for referencedTicketIds",
+      "source": "helix-global-client/src/routes/create-ticket.tsx lines 112-114 (afterTicketId state), 162-165 (SLASH_COMMANDS), 156 (useHashtagReference hook)"
+    },
+    {
+      "claim": "CLI tickets create currently only sends: title, description, repositoryIds, mode (optional) in POST body",
+      "source": "helix-cli/src/tickets/create.ts lines 89-93"
+    },
+    {
+      "claim": "CLI has no --after, --reference, or --implement-from flags anywhere in the codebase",
+      "source": "Grep for afterTicketId|referencedTicketIds|implementFromTicketId across helix-cli returned zero matches"
+    },
+    {
+      "claim": "CLI TicketDetail type in get.ts does not include afterTicketId, referencedTicketIds, or related fields",
+      "source": "helix-cli/src/tickets/get.ts lines 5-23"
+    },
+    {
+      "claim": "CLI resolveTicket() already resolves ticket references from ID, shortId, or number against active and archived tickets via API fetch",
+      "source": "helix-cli/src/lib/resolve-ticket.ts lines 86-167"
+    },
+    {
+      "claim": "Prisma schema has afterTicketId (self-relation TicketDependency), referencedTicketIds (String[]), and implementFromTicketId (self-relation TicketImplementsResearch) on Ticket model",
+      "source": "helix-global-server/prisma/schema.prisma lines 327-376"
+    },
+    {
+      "claim": "Quality gates: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js)",
+      "source": "helix-cli/package.json lines 16-19"
+    },
+    {
+      "claim": "No ORM or database dependencies in helix-cli; no migration awareness needed",
+      "source": "helix-cli/package.json devDependencies: only @types/node and typescript"
+    },
+    {
+      "claim": "Client ticket detail view shows Related Tickets section including referencedTickets and afterTicket",
+      "source": "helix-global-client/src/routes/create-ticket.tsx and ticket detail component"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "Does GET /api/tickets/:id response include afterTicketId, afterTicket (nested), referencedTicketIds, referencedTickets (nested), and implementFromTicketId fields?",
+      "impact": "Determines what the CLI can display when showing ticket details. The client expects these fields, so the API likely returns them, but the exact response shape for the CLI's GET endpoint has not been verified."
+    },
+    {
+      "question": "Does the tickets list endpoint (/api/tickets GET) return afterTicketId or referencedTicketIds on list items?",
+      "impact": "Determines whether the CLI can show dependency info in list output without additional API calls."
+    },
+    {
+      "question": "Should the CLI support saveToDraft and directorUserId fields also present in the server schema?",
+      "impact": "These are additional create-time fields the CLI does not support. Scope decision for the ticket."
+    },
+    {
+      "question": "What error messages does the server return when afterTicketId validation fails (circular dependency, wrong status, not found)?",
+      "impact": "Determines how the CLI should format error output for these cases."
+    }
+  ]
+}
