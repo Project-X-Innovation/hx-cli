@@ -1162,6 +1162,10 @@ The code changes themselves are in place across all 3 repos and the build passes
 ![Verification Screenshot](/tickets/cmp4la46n00ioly0um41q2pee/proof/3/image?runId=cmpblprsk005vgz0uxap7uqbb)
 
 ![Verification Screenshot](/tickets/cmp4la46n00ioly0um41q2pee/proof/4/image?runId=cmpblprsk005vgz0uxap7uqbb)
+- **Usher** (2026-05-18T20:38:28.048Z) [Helix]: @Helix also a user should only be able to thumbs up, thumbs down, or double thumbs up once and if they then change their answer it should change and not be additive. They should be able to do more than one. It should be if other people do that there could be more than one but one user can have just one selection on a section.
+- **Helix** (2026-05-18T20:38:41.111Z) [Agent]: Got it — each user gets exactly one reaction per section (thumbs up, thumbs down, or double thumbs up). Selecting a new one replaces their existing choice rather than stacking. Multiple users can each have their own single selection, so aggregate counts across users are fine.
+
+There's already a run in progress right now, so once it wraps up I can kick off another one to incorporate this change. Just let me know!
 
 ## Continuation Context
 There's still a lot of work that needs to be done here.
