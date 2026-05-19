@@ -1,0 +1,44 @@
+{
+  "questions": [
+    "Why doesn't the current version (1.3.3) trigger an auto-deploy when merged to main?",
+    "What files contain the version string and need to be updated?",
+    "Is the two-stage GitHub Actions pipeline (auto-tag + publish) correctly configured?",
+    "What semver increment is appropriate given the ticket context?"
+  ],
+  "answers": [
+    {
+      "answer": "The auto-tag.yml workflow (line 37) checks whether a v{version} tag already exists on the remote before creating one. Since the previous ticket (cmp5p01tn) set up this pipeline at version 1.3.3, the v1.3.3 tag already exists. The workflow correctly skips tag creation, so publish.yml never triggers. Bumping the version to a new value (e.g., 1.3.4) will cause auto-tag to create a new tag on the next main push.",
+      "evidence": [
+        "auto-tag.yml lines 34-43: checks if tag exists via git ls-remote, sets exists=true/false",
+        "auto-tag.yml line 46: skips tag creation when exists == 'true'",
+        "scout/reference-map.json fact: 'Previous ticket (cmp5p01tn) successfully completed the same auto-tag + publish pipeline setup with version 1.3.3.'"
+      ]
+    },
+    {
+      "answer": "Only package.json (line 3) and package-lock.json (lines 3 and 9) contain the hardcoded version string '1.3.3'. No source code files contain hardcoded version strings. src/update/version.ts reads the version dynamically from package.json at runtime.",
+      "evidence": [
+        "package.json line 3: \"version\": \"1.3.3\"",
+        "package-lock.json lines 3, 9: \"version\": \"1.3.3\"",
+        "grep for '1.3.3' returned only package.json, package-lock.json, and scout artifacts",
+        "grep for '\"version\"' in src/ returned no matches",
+        "src/update/version.ts: reads version from package.json via readFileSync at runtime"
+      ]
+    },
+    {
+      "answer": "Yes. The pipeline is correctly configured. auto-tag.yml triggers on push to main, reads version from package.json, and creates a v{version} tag if one doesn't exist. publish.yml triggers on v* tag push, runs npm ci (which triggers tsc build via prepare script), runs tests, validates tag matches package.json version, validates tarball contents, and publishes with provenance. No issues found in either workflow.",
+      "evidence": [
+        "auto-tag.yml: triggers on push to main (line 4-6), reads version (lines 22-29), creates tag (lines 45-52)",
+        "publish.yml: triggers on v* tag (lines 4-6), uses Node 24 for npm 11.x OIDC (line 21), validates version match (lines 32-38), validates tarball (lines 43-57), publishes with provenance (line 62)"
+      ]
+    },
+    {
+      "answer": "The ticket does not specify the increment. A patch bump (1.3.3 -> 1.3.4) is the most conservative choice since this change is purely to trigger a deploy — no new features or breaking changes are being introduced by the version bump itself.",
+      "evidence": [
+        "ticket.md: 'Bump the version on the CLI to get it auto deployed to NPMJS' — no semver level specified",
+        "No feature or breaking-change context provided in the ticket"
+      ]
+    }
+  ],
+  "statement": "The root cause is that the current package version 1.3.3 already has a corresponding v1.3.3 git tag on the remote, so auto-tag.yml correctly skips tag creation on main push, and publish.yml never fires. The fix is to increment the version in package.json and package-lock.json (the only two files containing the version string). A patch bump to 1.3.4 is the minimal correct change. The deployment pipeline is already correctly configured and requires no modifications.",
+  "followups": []
+}
