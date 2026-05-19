@@ -1233,3 +1233,4 @@ The schema and API changes would be minimal since it's just storing a string ide
 
 Want me to go ahead and implement it?
 - **Usher** (2026-05-19T16:40:45.426Z) [Helix]: Yes let's go ahead but go slow. Take a step back. Think about how to do it properly. Think about the optimal experience.
+- **Helix** (2026-05-19T16:40:55.123Z) [Agent]: On it! I've kicked off the run with a deliberate, design-first approach — thinking through the full user experience before touching any code. The goal will be to make section-level commenting feel natural and unobtrusive, not bolted on. I'll update you when it's ready.

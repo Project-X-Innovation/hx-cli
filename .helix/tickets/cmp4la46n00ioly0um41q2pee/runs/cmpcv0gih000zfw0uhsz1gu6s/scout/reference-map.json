@@ -1,73 +1,76 @@
 {
-  "problem": "Conflict resolution run: merge-conflicts.json lists src/tickets/index.ts as conflicted from staging refresh. File currently shows NO active conflict markers. CLI Library Comments feature is fully implemented: 6 new files in src/library/, 1 utility, dispatcher registered, SKILL.md updated.",
+  "problem": "Continuation run for Library Comments and Iteration (BLD-448). CLI library module fully implemented: 6 files in src/library/ (index, list, show, comments, comments-list, comments-post), resolve-library-item utility, main dispatcher updated, SKILL.md updated. merge-conflicts.json lists src/tickets/index.ts as conflicted from staging refresh — but NO active conflict markers exist (file is clean at 150 lines). User feedback primarily targets frontend UX; CLI implementation appears complete per spec.",
   "files": [
     {
       "path": ".helix/merge-conflicts.json",
-      "why": "Declares sole conflict: src/tickets/index.ts. Ticket commits: 5cfbd79, ca6c51b, 210d9fc, 758fce3. Staging commit: 6a4215c."
+      "why": "Declares sole conflict: src/tickets/index.ts (4 ticket + 1 staging commits). No active markers found."
     },
     {
       "path": "src/tickets/index.ts",
-      "why": "Listed as conflicted file. Contains ticket subcommand dispatcher (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description). No active conflict markers found. Must verify both sides preserved."
+      "why": "150 lines. Ticket CLI command router. Listed as conflicted but clean. Contains list, latest, get, create, update-description, rerun, continue, artifacts, artifact, bundle subcommands."
     },
     {
       "path": "src/library/index.ts",
-      "why": "Library module router. Dispatches to list/show/comments. Uses resolveLibraryItem."
+      "why": "73 lines. Library module router: dispatches to list, show, comments subcommands. Uses extractLibraryItemRef + resolveLibraryItem."
     },
     {
       "path": "src/library/list.ts",
-      "why": "hlx library list. Fetches /api/library/items."
+      "why": "49 lines. hlx library list — formatted table with ID, Title, Status, Date."
     },
     {
       "path": "src/library/show.ts",
-      "why": "hlx library show <ref>. Annotates headings with comment summaries."
+      "why": "66 lines. hlx library show — displays report with section slugs annotated and comment summaries."
     },
     {
       "path": "src/library/comments.ts",
-      "why": "Nested router for list/post subcommands."
+      "why": "51 lines. Comments nested router: dispatches to list and post subcommands."
     },
     {
       "path": "src/library/comments-list.ts",
-      "why": "hlx library comments list. Groups by anchor with threading."
+      "why": "87 lines. hlx library comments list — comments grouped by section with top-level + nested replies."
     },
     {
       "path": "src/library/comments-post.ts",
-      "why": "hlx library comments post. Rating + optional text + reply-to."
+      "why": "78 lines. hlx library comments post — posts section rating with optional text. Rating mapping: thumbs-up/up -> THUMBS_UP, thumbs-down/down -> THUMBS_DOWN, love -> LOVE. Auto-slugification of heading text."
     },
     {
       "path": "src/lib/resolve-library-item.ts",
-      "why": "Multi-format resolver: cuid, ticket short ID, title match."
+      "why": "82 lines. Multi-format item resolution: cuid, ticket short ID, title substring match."
     },
     {
       "path": "src/index.ts",
-      "why": "Main dispatcher. Library case at lines 98-102."
+      "why": "140 lines. Main dispatcher with 'library' case at lines 98-102."
     },
     {
       "path": "skill-content/SKILL.md",
-      "why": "Library section at lines 146-179."
+      "why": "187 lines. Library section with all commands documented for agent discoverability."
     },
     {
       "path": "src/lib/http.ts",
-      "why": "hxFetch HTTP client with retry logic. Used by all library commands."
+      "why": "135 lines. hxFetch HTTP client with retry logic, dual auth (X-API-Key for hxi_ tokens, Bearer otherwise)."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "36 lines. Flag parsing utilities: getFlag, hasFlag, getPositionalArgs, isHelpRequested, requireFlag."
     },
     {
       "path": "package.json",
-      "why": "Quality gates: build = 'tsc', typecheck = 'tsc --noEmit'."
+      "why": "Quality gates: build = 'tsc', typecheck = 'tsc --noEmit'. TypeScript 6.0.2, Node >= 18."
     }
   ],
   "facts": [
-    "merge-conflicts.json lists src/tickets/index.ts as sole conflict file",
-    "NO active conflict markers found anywhere in the repo via grep",
-    "Ticket side added 4 commits: 5cfbd79, ca6c51b, 210d9fc, 758fce3. Staging side added 1 commit: 6a4215c",
-    "tickets/index.ts is the ticket subcommand dispatcher — not directly related to library feature but may have been modified in both branches",
-    "Library feature fully implemented: 6 new files in src/library/, 1 utility in src/lib/",
-    "Dispatcher registered: 'library' case at src/index.ts lines 98-102",
-    "SKILL.md updated with Library section (lines 146-179)",
-    "No new npm dependencies",
-    "Quality gates: npm run build (tsc), npm run typecheck (tsc --noEmit)"
+    "merge-conflicts.json lists src/tickets/index.ts as sole conflict — NO active markers found (file is clean at 150 lines)",
+    "src/library/ module fully implemented: 6 files (index, list, show, comments, comments-list, comments-post)",
+    "src/lib/resolve-library-item.ts: resolves by cuid > ticket short ID > title substring; ambiguity detection lists matches",
+    "Main dispatcher (src/index.ts) has 'library' case at lines 98-102",
+    "SKILL.md updated with Library section documenting all commands, flags, and examples",
+    "Rating mapping in comments-post.ts: thumbs-up/up -> THUMBS_UP, thumbs-down/down -> THUMBS_DOWN, love -> LOVE",
+    "Section flag accepts heading text (auto-slugified) or raw slug",
+    "Quality gates: npm run build (tsc), npm run typecheck (tsc --noEmit)",
+    "No new npm dependencies added"
   ],
   "unknowns": [
-    "Whether staging commit (6a4215c) to tickets/index.ts introduced new subcommands or changes that conflict with ticket commits",
-    "Whether the current tickets/index.ts correctly preserves intent from both sides",
-    "Whether typecheck passes in the current merged state — not verified at scout time"
+    "Whether staging commit (6a4215c) changes to src/tickets/index.ts were properly merged — no markers but unknown if both intents preserved",
+    "Whether typecheck and build currently pass in the merged state — not verified at scout time"
   ]
 }

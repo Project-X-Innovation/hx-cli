@@ -1,8 +1,8 @@
-# Scout Summary: helix-cli (Conflict Resolution Run)
+# Scout Summary: helix-cli
 
 ## Problem
 
-Conflict resolution run after staging refresh. `merge-conflicts.json` lists `src/tickets/index.ts` as the sole conflicted file (4 ticket commits vs 1 staging commit). However, **no active conflict markers** exist anywhere in the repository. The CLI Library module is fully implemented with all 9 Phase 2b steps complete.
+Continuation run for BLD-448 (Library Comments and Iteration). The merge-conflicts.json lists `src/tickets/index.ts` as conflicted from staging refresh, but **no active conflict markers exist** — the file is clean at 150 lines. The CLI Library module is fully implemented with all 9 Phase 2b steps complete. User feedback primarily targets frontend UX; CLI implementation appears complete per spec.
 
 ## Analysis Summary
 
@@ -10,31 +10,33 @@ Conflict resolution run after staging refresh. `merge-conflicts.json` lists `src
 
 | File | Listed In merge-conflicts.json | Active Markers | Lines | Status |
 |------|-------------------------------|----------------|-------|--------|
-| `src/tickets/index.ts` | Yes (4 ticket + 1 staging commits) | None found | 100+ | Clean |
+| `src/tickets/index.ts` | Yes (4 ticket + 1 staging commits) | None found | 150 | Clean |
 
-The file is the ticket subcommand dispatcher (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description). Not directly related to library feature. Conflict likely arose from parallel ticket subcommand changes in different branches.
+The file is the ticket subcommand dispatcher — not directly related to library feature. Conflict likely arose from parallel changes to ticket subcommands in different branches.
 
 ### Feature Implementation State
 
 All 9 Phase 2b CLI steps from the research report are complete:
 
-| Step | Component | File | Status |
-|------|-----------|------|--------|
-| 1 | Resolution utility | `src/lib/resolve-library-item.ts` | Complete |
-| 2 | Module router | `src/library/index.ts` | Complete |
-| 3 | List command | `src/library/list.ts` | Complete |
-| 4 | Show command | `src/library/show.ts` | Complete |
-| 5 | Comments router | `src/library/comments.ts` | Complete |
-| 6 | Comments list | `src/library/comments-list.ts` | Complete |
-| 7 | Comments post | `src/library/comments-post.ts` | Complete |
-| 8 | Register in dispatcher | `src/index.ts` lines 98-102 | Complete |
-| 9 | SKILL.md | `skill-content/SKILL.md` lines 146-179 | Complete |
+| Step | Component | File | Lines | Status |
+|------|-----------|------|-------|--------|
+| 1 | Resolution utility | `src/lib/resolve-library-item.ts` | 82 | Complete |
+| 2 | Module router | `src/library/index.ts` | 73 | Complete |
+| 3 | List command | `src/library/list.ts` | 49 | Complete |
+| 4 | Show command | `src/library/show.ts` | 66 | Complete |
+| 5 | Comments router | `src/library/comments.ts` | 51 | Complete |
+| 6 | Comments list | `src/library/comments-list.ts` | 87 | Complete |
+| 7 | Comments post | `src/library/comments-post.ts` | 78 | Complete |
+| 8 | Register in dispatcher | `src/index.ts` lines 98-102 | 140 | Complete |
+| 9 | SKILL.md | `skill-content/SKILL.md` lines 146-179 | 187 | Complete |
 
 ### Quality Gates
 
-- `npm run build` = `tsc`
-- `npm run typecheck` = `tsc --noEmit`
-- `npm run test` = `tsc && node --test dist/**/*.test.js`
+| Command | Purpose |
+|---------|---------|
+| `npm run build` | `tsc` |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run test` | `tsc && node --test dist/**/*.test.js` |
 
 ## Relevant Files
 
@@ -42,16 +44,12 @@ All 9 Phase 2b CLI steps from the research report are complete:
 |------|------|
 | `src/tickets/index.ts` | **CONFLICT FILE** - Ticket subcommand dispatcher |
 | `.helix/merge-conflicts.json` | Conflict declaration |
-| `src/library/index.ts` | Library module router |
-| `src/library/list.ts` | List command |
-| `src/library/show.ts` | Show command |
-| `src/library/comments.ts` | Comments nested router |
-| `src/library/comments-list.ts` | Comments list command |
-| `src/library/comments-post.ts` | Comments post command |
+| `src/library/*.ts` (6 files) | Library module implementation |
 | `src/lib/resolve-library-item.ts` | Multi-format item resolver |
-| `src/index.ts` | Main dispatcher (library case) |
-| `skill-content/SKILL.md` | Agent discoverability docs |
+| `src/index.ts` | Main dispatcher (library case at lines 98-102) |
+| `skill-content/SKILL.md` | Agent discoverability docs (Library section at lines 146-179) |
 | `src/lib/http.ts` | hxFetch HTTP client |
+| `src/lib/flags.ts` | Flag parsing utilities |
 | `package.json` | Build/typecheck commands |
 
 ## Artifact Inputs Used
@@ -59,9 +57,9 @@ All 9 Phase 2b CLI steps from the research report are complete:
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
 | `.helix/merge-conflicts.json` | Identifies conflicted files | Single conflict in tickets/index.ts, no markers present |
-| `ticket.md` (Research Report) | Phase 2b CLI spec | 9 steps, all implemented |
-| `ticket.md` (Discussion + Continuation) | Prior feedback history | All issues are client-side; CLI is context-only |
-| `src/tickets/index.ts` (100+ lines) | Verified conflict file content | No markers, standard ticket subcommand dispatcher |
+| `ticket.md` (Research Report) | Phase 2b CLI specification | 9 steps, all implemented |
+| `ticket.md` (Discussion + Continuation) | Prior feedback history | All unresolved issues are client-side UX; CLI is complete |
+| `src/tickets/index.ts` (150 lines) | Verified conflict file content | No markers, standard ticket subcommand dispatcher |
 | `src/library/*.ts` (6 files) | Verified feature completeness | All commands implemented per spec |
-| `src/index.ts` | Verified dispatcher registration | Library case at lines 98-102 |
-| `skill-content/SKILL.md` | Verified documentation | Library section at lines 146-179 |
+| `src/index.ts` (140 lines) | Verified dispatcher registration | Library case at lines 98-102 |
+| `skill-content/SKILL.md` (187 lines) | Verified documentation | Library section complete |
