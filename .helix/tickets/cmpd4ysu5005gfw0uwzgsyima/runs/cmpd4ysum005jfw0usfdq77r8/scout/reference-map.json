@@ -1,0 +1,50 @@
+{
+  "problem": "The CLI package version (currently 1.3.3) needs to be bumped so that a merge to main triggers the two-stage GitHub Actions pipeline (auto-tag → publish) to auto-deploy to NPMJS.",
+  "files": [
+    {
+      "path": "package.json",
+      "why": "Primary version source of truth (line 3: \"version\": \"1.3.3\"). The auto-tag workflow reads this field to decide whether to create a new git tag. The publish workflow validates the tag matches this version before publishing."
+    },
+    {
+      "path": "package-lock.json",
+      "why": "Contains version in two locations (lines 3 and 9). Must stay in sync with package.json."
+    },
+    {
+      "path": ".github/workflows/auto-tag.yml",
+      "why": "Stage 1 of deploy pipeline. Triggers on push to main. Reads version from package.json, checks if v{version} tag exists on remote, creates and pushes tag if it does not. Uses RELEASE_TOKEN secret for git push auth."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "Stage 2 of deploy pipeline. Triggers on v* tag push. Builds (npm ci + prepare), runs tests, validates tag version matches package.json version, packs tarball, validates tarball contents, publishes to npm with provenance."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Runtime version reader. Reads version from package.json dynamically at runtime (no hardcoded version string). Confirms version field is single-source-of-truth."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript build configuration. Build outputs to dist/. Source in src/."
+    }
+  ],
+  "facts": [
+    "Current version is 1.3.3 in both package.json (line 3) and package-lock.json (lines 3, 9).",
+    "Package name is @projectxinnovation/helix-cli.",
+    "publishConfig: access=public, provenance=true, registry=https://registry.npmjs.org.",
+    "Deployment pipeline is two-stage: (1) auto-tag.yml on main push creates v{version} tag if absent, (2) publish.yml on v* tag push publishes to npm.",
+    "auto-tag.yml uses RELEASE_TOKEN secret (checkout token) for tag push permission; its GitHub permissions block only has contents:read.",
+    "publish.yml requires id-token:write (for npm provenance OIDC) and contents:read.",
+    "publish.yml validates tag version matches package.json version before publishing (lines 32-38).",
+    "publish.yml validates tarball contains dist/index.js, package.json, skill-content/SKILL.md, and no test files (lines 43-57).",
+    "publish.yml uses Node 24 specifically because npm 11.x supports Trusted Publishing OIDC.",
+    "Version is read at runtime from package.json by src/update/version.ts — no hardcoded version strings in source code.",
+    "Quality gates: typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js), build (tsc).",
+    "No ORM or database dependencies. No migration concerns.",
+    "No runtime dependencies — only devDependencies (@types/node, typescript).",
+    "Previous ticket (cmp5p01tn) successfully completed the same auto-tag + publish pipeline setup with version 1.3.3."
+  ],
+  "unknowns": [
+    "What semver increment is intended (patch 1.3.4, minor 1.4.0, or major 2.0.0)? Ticket does not specify.",
+    "Whether the current 1.3.3 was already successfully published to npm or if this bump is needed because the prior publish failed.",
+    "Whether RELEASE_TOKEN secret is currently configured and valid in the GitHub repo settings."
+  ]
+}

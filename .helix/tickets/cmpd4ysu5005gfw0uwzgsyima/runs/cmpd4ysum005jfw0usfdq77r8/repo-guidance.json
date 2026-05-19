@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "The version bump applies to package.json and package-lock.json in helix-cli. The GitHub Actions workflows that trigger the deploy are also in this repo. No other repos are involved."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

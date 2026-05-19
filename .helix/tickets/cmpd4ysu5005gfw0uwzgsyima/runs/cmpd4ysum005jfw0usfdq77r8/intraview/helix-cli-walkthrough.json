@@ -1,0 +1,37 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-501: Version Bump 1.3.3 → 1.3.4 to Trigger Auto-Deploy Pipeline",
+  "description": "This tour walks through the metadata-only version bump from 1.3.3 to 1.3.4 in helix-cli. The root cause was that the v1.3.3 git tag already existed on the remote, causing the auto-tag.yml workflow to skip tag creation and never trigger publish.yml. By bumping the version to 1.3.4, the next merge to main will create a fresh v1.3.4 tag and publish @projectxinnovation/helix-cli@1.3.4 to npm. Only two files changed — package.json and package-lock.json — with three string replacements total. No source code, workflows, or config files were modified.",
+  "steps": [
+    {
+      "file": "package.json",
+      "line": 3,
+      "description": "This is the single source of truth for the package version. The auto-tag.yml workflow reads this file on every push to main and checks whether a v{version} tag already exists on the remote via `git ls-remote`. Because v1.3.3 was created by a previous ticket (cmp5p01tn), the workflow correctly detected the existing tag, set exists=true, and skipped tag creation — meaning publish.yml never triggered. Changing this field to '1.3.4' is the minimal fix: on the next merge to main, auto-tag.yml will find no v1.3.4 tag, create one, and publish.yml will fire to deploy the package to npm.",
+      "title": "Overview: Why the version was bumped"
+    },
+    {
+      "file": "package-lock.json",
+      "line": 3,
+      "description": "The package-lock.json file contains the version string in two locations. This is the root-level 'version' field (line 3). It must stay in sync with package.json or the publish.yml workflow's validation step — which cross-checks the git tag version against the package.json version — would fail. Direct file editing was chosen over `npm version patch` to avoid unwanted side effects such as automatic git tag creation or lockfile churn beyond these two targeted fields.",
+      "title": "package-lock.json root-level version"
+    },
+    {
+      "file": "package-lock.json",
+      "line": 9,
+      "description": "This is the second version location inside package-lock.json, nested under the packages[\"\"] key. npm's lockfile format stores the version in both the root metadata block and the packages map entry for the workspace root. Both must read '1.3.4' to keep the lockfile internally consistent and to ensure `npm ci` (run by publish.yml before publishing) does not report a lockfile integrity error. A grep for '1.3.3' across all package*.json files after the edit returned zero matches, confirming no stale references remain.",
+      "title": "package-lock.json packages[\"\"] version"
+    },
+    {
+      "file": ".helix/tickets/cmpd4ysu5005gfw0uwzgsyima/runs/cmpd4ysum005jfw0usfdq77r8/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The diagnosis confirmed this is not a bug — the pipeline behaved exactly as designed. auto-tag.yml (lines 34-46) uses `git ls-remote --tags origin` to check for an existing tag before creating one. Since v1.3.3 already existed, the workflow skipped creation and publish.yml never triggered. The fix is purely a version increment. The diagnosis also confirmed that src/update/version.ts reads the version dynamically from package.json at runtime, so no source code changes are needed and no code path depends on a specific hardcoded version value.",
+      "title": "Diagnosis: Pipeline behavior confirmed correct"
+    },
+    {
+      "file": ".helix/tickets/cmpd4ysu5005gfw0uwzgsyima/runs/cmpd4ysum005jfw0usfdq77r8/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "The code review verified the complete change surface. TypeScript typecheck (tsc --noEmit) exited with code 0. All 51 tests passed with 0 failures in 99.4ms. The workflow files auto-tag.yml and publish.yml were inspected and confirmed unmodified. src/update/version.ts was inspected and confirmed to read the version dynamically — no hardcoded strings exist in source code. The change is limited to exactly two files and three string replacements, with no regression risk. On merge to main the pipeline will create tag v1.3.4 and publish @projectxinnovation/helix-cli@1.3.4 to npm.",
+      "title": "Summary: All quality gates passed, codebase remains clean"
+    }
+  ]
+}
