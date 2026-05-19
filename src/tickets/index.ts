@@ -18,7 +18,7 @@ function ticketsUsage(exitCode: number = 1): never {
   hlx tickets list [--search <text>] [--user <email>] [--status <status>] [--status-not-in <s1,s2>] [--archived] [--sprint <id>] [--json]
   hlx tickets latest [--status-not-in <s1,s2>] [--archived] [--sprint <id>]
   hlx tickets get <ticket-ref> [--json]
-  hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]
+  hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] [--after <ticket-ref>] [--reference <ref1,ref2>] [--implement-from <ticket-ref>]
   hlx tickets update-description <ticket-ref> --file <path> | --text <string>
   hlx tickets rerun <ticket-ref>
   hlx tickets continue <ticket-ref> "continuation context" [--dry-run]
@@ -70,7 +70,7 @@ export async function runTickets(config: HxConfig, args: string[]): Promise<void
 
     case "create":
       if (isHelpRequested(rest)) {
-        console.log("Usage: hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]");
+        console.log("Usage: hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] [--after <ticket-ref>] [--reference <ref1,ref2>] [--implement-from <ticket-ref>]");
         process.exit(0);
       }
       await cmdTicketsCreate(config, rest);

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Ticket Relationship Support in hlx CLI (FIX-496)",
+  "description": "This tour walks through the addition of ticket relationship support to the helix-cli. The server API already supported three relationship fields (afterTicketId, referencedTicketIds, implementFromTicketId) but the CLI never passed them. This change adds three new optional flags (--after, --reference, --implement-from) to 'tickets create', extends 'tickets get' and 'tickets list' to display relationship data, and updates all documentation surfaces. No server changes were required. The implementation follows the existing --repos resolve-then-use pattern throughout.",
+  "steps": [
+    {
+      "file": "src/tickets/create.ts",
+      "line": 1,
+      "description": "Before this change, the POST body in tickets create only contained { title, description, repositoryIds, mode }. The three server-supported relationship fields were never parsed from CLI arguments and never sent to the server. The root cause was a pure feature gap — not a bug — since the server Zod schema already accepted all three optional fields.",
+      "title": "Overview: create.ts before the change"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 91,
+      "description": "Three new optional flags are parsed here using the existing getFlag() utility, which returns string | undefined. --after accepts a single ticket reference, --implement-from accepts a single ticket reference, and --reference accepts a comma-separated list. This mirrors exactly how other optional flags like --mode are parsed in this file. No new utilities or imports are needed.",
+      "title": "Parse new relationship flags with getFlag()"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 95,
+      "description": "Each flag value is resolved using the existing resolveTicket(config, ref) utility, which accepts short IDs (e.g. RSH-42) or full IDs and returns { id, shortId }. The --reference flag additionally splits on commas, validates that at most 5 references are provided (enforced client-side before the API call), and resolves each sequentially. Each resolution is wrapped in try/catch so a bad reference produces a clear error message before the POST is attempted. This pattern mirrors the existing --repos resolution at lines 60-76.",
+      "title": "Resolve ticket references via resolveTicket()"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 143,
+      "description": "The resolved ticket IDs are spread into the POST body only when the corresponding flag was provided, using conditional spread operators (...(afterTicketId && { afterTicketId })). This keeps the request payload minimal and avoids sending null/undefined fields that could confuse server-side Zod validation. The server handles all constraint validation (circular deps, status guards, org checks) — the CLI only resolves references and passes IDs.",
+      "title": "Conditionally spread resolved IDs into POST body"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 154,
+      "description": "The hxFetch error format is 'HTTP NNN Status — {json body}' (the em-dash separator is defined in src/lib/http.ts line 34). When the POST fails, this block splits on ' — ', JSON-parses the body portion, and extracts the error field to surface a clean message like 'Ticket RSH-10 is not yet complete'. Falls back to the raw message if JSON parsing fails. This is important because server-side relationship constraint violations (e.g. afterTicket not DONE) return structured error JSON that would otherwise be hidden behind a generic HTTP error string.",
+      "title": "Extract server validation errors from hxFetch error messages"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 5,
+      "description": "The TicketDetail local type is extended to include all six relationship fields returned by the server's detail endpoint: afterTicketId, afterTicket (nested object with id/shortId/title), implementFromTicketId, implementFromTicket (nested), referencedTicketIds (string array), and referencedTickets (nested array). These fields were previously omitted, meaning they were silently dropped when the API response was typed. No new API call is needed — the server already includes this data in every detail response.",
+      "title": "Extend TicketDetail type with relationship fields"
+    },
+    {
+      "file": "src/tickets/get.ts",
+      "line": 47,
+      "description": "The printTicketDetail() function gains three conditional display blocks. Each block only renders when the corresponding relationship field is present on the response object. afterTicket renders as 'After: [RSH-42] Title of ticket', implementFromTicket similarly, and referencedTickets renders as a bulleted list. Using the nested ticket objects (not just IDs) means the output is human-readable without any additional API calls.",
+      "title": "Conditionally render relationship sections in printTicketDetail()"
+    },
+    {
+      "file": "src/tickets/list.ts",
+      "line": 5,
+      "description": "The TicketItem type gains afterTicketId and afterTicket fields to support the list view. The output line (around line 107) gains a conditional '[after RSH-XXX]' tag appended when afterTicket is present. This gives CLI users scanning a list view an immediate visual cue about ticket ordering without requiring them to open each ticket. The afterTicket nested object is used (not just afterTicketId) so the short human-readable ID is shown rather than a UUID.",
+      "title": "Extend TicketItem type and add dependency indicator to list output"
+    },
+    {
+      "file": "src/tickets/index.ts",
+      "line": 1,
+      "description": "The usage strings and help text in the tickets command dispatcher are updated to document --after, --reference, and --implement-from. These are the strings shown when users run 'hlx tickets create --help'. Keeping this in sync with create.ts is critical for discoverability. The flags are marked as optional in the usage string, matching their implementation.",
+      "title": "Update help/usage text with new flags"
+    },
+    {
+      "file": "src/docs/cli-content.ts",
+      "line": 1,
+      "description": "The cli-content.ts file contains the full CLI reference documentation embedded in the skill. New rows are added for all three flags in the tickets create section, with type, optionality, and description columns. This file is the source of truth for the in-product documentation surface, so it must stay consistent with the actual CLI flag names (--repos plural, not --repo singular — a documentation bug found and fixed during code review).",
+      "title": "Update embedded CLI documentation"
+    },
+    {
+      "file": "skill-content/references/commands.md",
+      "line": 56,
+      "description": "The commands.md reference previously listed '--repo <repo>' (singular) instead of the correct '--repos <repo,...>' (plural) for tickets create. This was caught during code review (DOC-1). The fix corrects the existing documentation error and adds entries for the three new relationship flags. This file is the canonical command reference for external documentation consumers, so accuracy here is critical.",
+      "title": "Fix --repo vs --repos typo and add new flags to commands reference"
+    },
+    {
+      "file": "skill-content/SKILL.md",
+      "line": 1,
+      "description": "SKILL.md is updated to document the new --after, --reference, and --implement-from flags in the tickets create section, and to note that 'tickets get' and 'tickets list' now display relationship data. This is the top-level skill documentation read by agents and users to understand CLI capabilities. All three documentation surfaces (cli-content.ts, SKILL.md, commands.md) are kept consistent to avoid user confusion about flag names and behavior.",
+      "title": "Update SKILL.md with relationship flag documentation"
+    },
+    {
+      "file": "src/tickets/create.ts",
+      "line": 143,
+      "description": "The complete data flow is: user provides --after/--reference/--implement-from flags → getFlag() parses values → resolveTicket() converts short IDs to server IDs → resolved IDs are conditionally spread into POST body → server validates constraints and creates the ticket → on error, em-dash extraction surfaces the structured server error message. Quality gates (tsc --noEmit and tsc && node --test dist/**/*.test.js) passed after all changes. No new dependencies were introduced. All existing code paths in create.ts, get.ts, list.ts, and index.ts remain unchanged for users who do not use the new flags — the new fields are strictly additive and conditional.",
+      "title": "Summary: data flow and quality gate confirmation"
+    }
+  ]
+}

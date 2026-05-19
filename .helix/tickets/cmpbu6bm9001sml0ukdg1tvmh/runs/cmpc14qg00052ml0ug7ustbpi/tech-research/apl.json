@@ -1,0 +1,53 @@
+{
+  "questions": [
+    "What architecture approach should be used to add ticket relationship flags to the CLI?",
+    "How should server validation errors be extracted from hxFetch thrown Error messages?",
+    "What is the resolution strategy for multi-reference flags (--reference with multiple values)?",
+    "Should tests be added for the new create/get/list changes?",
+    "Are there any cross-repo changes needed or is this purely helix-cli?"
+  ],
+  "answers": [
+    {
+      "answer": "Follow the existing inline resolve-then-use pattern from create.ts (lines 60-76). Add three new optional flags (--after, --reference, --implement-from) parsed with getFlag(), resolved via resolveTicket(), and included in the POST body. No new modules, abstractions, or indirection needed. This matches the --repos pattern exactly.",
+      "evidence": [
+        "helix-cli/src/tickets/create.ts lines 60-76: existing --repos pattern uses getFlag/requireFlag → split/trim → resolveAllRepos → include in body, with try/catch + process.exit(1)",
+        "helix-cli/src/lib/resolve-ticket.ts lines 86-167: resolveTicket(config, ref) returns { id, shortId } or throws Error, handles 3 reference formats",
+        "helix-cli/src/lib/flags.ts lines 5-9: getFlag(args, flag) returns string | undefined"
+      ]
+    },
+    {
+      "answer": "hxFetch's buildErrorMessage uses an em-dash separator (` — `, not ` - `). For 400 errors, the thrown Error.message follows the format: `HTTP 400 Bad Request — {\"error\":\"Human-readable message.\"}`. The extraction approach should: (1) try to find JSON in the message after the em-dash, (2) parse the JSON and extract the `error` field, (3) fall back to the raw Error.message if parsing fails. A regex like `/\\{.*\"error\"\\s*:\\s*\"([^\"]+)\"/` works but splitting on ` — ` and parsing JSON is cleaner and handles edge cases better.",
+      "evidence": [
+        "helix-cli/src/lib/http.ts line 34: buildErrorMessage returns `HTTP ${response.status} ${response.statusText}${text ? ` — ${text.slice(0, 500)}` : ''}`",
+        "helix-cli/src/lib/http.ts lines 100-103: non-retryable responses throw new Error(message) using buildErrorMessage output",
+        "Research report Section 2 error format: server returns { \"error\": \"Human-readable message\" } for HttpError/ZodError validation failures"
+      ]
+    },
+    {
+      "answer": "Use comma-separated values for --reference (matching --repos convention). Split on commas, trim whitespace, filter empty strings, validate max 5 client-side before resolution. Resolve each reference sequentially via resolveTicket(). Sequential resolution is acceptable because: (1) ticket creation is not a hot path, (2) resolveTicket() reuses the same active ticket list internally, (3) worst case is ~11 API calls which completes in seconds. Batch optimization deferred to Round 2.",
+      "evidence": [
+        "helix-cli/src/tickets/create.ts line 62: existing --repos uses same comma-split pattern: reposRaw.split(',').map(s => s.trim()).filter(s => s.length > 0)",
+        "Server schema: referencedTicketIds max 5 items (helix-global-server ticket-controller.ts Zod schema)",
+        "resolveTicket() makes up to 2 API calls per reference (active + archived fallback)"
+      ]
+    },
+    {
+      "answer": "New unit tests are not strictly required for MVP. Existing tests cover the utility layer (resolveTicket: 15 tests, flags: existing tests). The command functions (create.ts, get.ts, list.ts) have no existing tests — they are integration-level functions that call hxFetch. Adding mock-based tests for the new flag parsing and resolution logic would improve confidence but is deferred to Round 2 to keep the change minimal. TypeScript compilation (tsc --noEmit) and existing test pass are the quality gates.",
+      "evidence": [
+        "helix-cli/src/lib/resolve-ticket.test.ts: 15 test cases covering matchTicket, extractTicketRef, resolveTicket",
+        "helix-cli/src/lib/flags.test.ts: existing tests for flag utilities",
+        "No existing test files for src/tickets/create.ts, src/tickets/get.ts, or src/tickets/list.ts (confirmed by scout glob)"
+      ]
+    },
+    {
+      "answer": "Purely helix-cli. The server API already accepts all three relationship fields (createTicketSchemaGeneral Zod schema includes afterTicketId, implementFromTicketId, referencedTicketIds). The detail and list endpoints already return nested relationship objects in their responses. The web client already renders all three relationship types. No cross-repo changes are needed.",
+      "evidence": [
+        "helix-global-server/src/controllers/ticket-controller.ts lines 29-40: Zod schema verified by scout",
+        "Research report Sections 2.4-2.5: GET detail returns afterTicket/implementFromTicket/referencedTickets; GET list returns afterTicket/implementFromTicketId/referencedTicketIds",
+        "repo-guidance.json: helix-cli is 'target', helix-global-server and helix-global-client are 'context' only"
+      ]
+    }
+  ],
+  "statement": "The technical approach is to follow helix-cli's established inline resolve-then-use pattern. Add three optional flags (--after, --reference, --implement-from) to tickets create using getFlag() + resolveTicket(). Extend TicketDetail and TicketItem types with relationship fields from the server response. Add conditional display rendering in printTicketDetail() and list output. Extract server validation errors from hxFetch Error.message by parsing JSON after the em-dash separator. No new modules, dependencies, or abstractions needed. Single-repo change in helix-cli touching 7 files. Server API and display endpoints are fully ready.",
+  "followups": []
+}
