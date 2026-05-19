@@ -1,34 +1,30 @@
 {
   "questions": [
-    "Q1: Are there any remaining conflict markers in the resolved file or repo-wide?",
-    "Q2: Does the resolved tickets/index.ts correctly preserve both ticket and staging intents?",
-    "Q3: Will the TypeScript build pass with the resolved merge state?"
+    "Q1: Does the auto-merged tickets/index.ts preserve both ticket-side and staging-side changes?",
+    "Q2: Are there any conflict markers in library CLI module files?",
+    "Q3: Does the TypeScript build pass after the staging refresh merge?"
   ],
   "answers": [
     {
-      "answer": "No. Zero conflict markers found in src/tickets/index.ts or anywhere in the src/ directory. Direct grep verification confirmed 0 matches.",
+      "answer": "Yes. The 150-line file has all 10 subcommand handler imports and a switch statement dispatching to all 10 subcommands. Both ticket-side changes (library CLI integration, ticket lookup improvements from 4 commits) and staging-side changes (ticket command updates from 1 commit) are present. Zero conflict markers found.",
       "evidence": [
-        "Grep <<<<<<< in tickets/index.ts: No matches found",
-        "Grep <<<<<<< in src/ --include=*.ts: No matches found",
-        "diagnosis/diagnosis-statement.md (CLI): 'Zero matches for <<<<<<< in tickets/index.ts or any .ts file in src/'"
+        "Grep for conflict markers in tickets/index.ts: zero matches",
+        "Direct read: all 10 imports present (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description)",
+        "Direct read: switch statement with 10 cases + default handler"
       ]
     },
     {
-      "answer": "Yes. The 150-line file has all 10 subcommand handler imports (lines 4-14), a switch statement dispatching to all 10 subcommands (lines 43-148), and proper ticket resolution using extractTicketRef and resolveTicket for ref-based commands.",
+      "answer": "No. All library CLI files (src/library/index.ts, list.ts, show.ts, comments.ts, comments-list.ts, comments-post.ts, plus src/lib/resolve-library-item.ts) were only on the ticket side and were not involved in any conflict. Broad grep across all .ts files shows zero markers in source code.",
       "evidence": [
-        "Direct read of tickets/index.ts lines 1-14: 10 imports including list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description",
-        "Direct read of tickets/index.ts lines 43-148: switch statement with 10 cases + default handler",
-        "diagnosis/diagnosis-statement.md (CLI): 'All 10 subcommand handler imports present'"
+        "merge-conflicts.json lists only tickets/index.ts — no library module files",
+        "Grep for <<<<<<< across src/ --include=*.ts: zero matches"
       ]
     },
     {
-      "answer": "Expected yes based on file integrity inspection, but build has not yet been executed. Deferred to implementation/verification step.",
-      "evidence": [
-        "tech-research/tech-research.md: 'Build gate: npm run build (tsc)'",
-        "diagnosis/diagnosis-statement.md (CLI): 'npm run build passes (not yet verified at runtime)'"
-      ]
+      "answer": "Not yet verified in this run. Build verification is the primary action for the implementation step, specified in CHK-02.",
+      "evidence": []
     }
   ],
-  "statement": "No code changes are needed for conflict resolution in helix-cli. The single conflicted file (src/tickets/index.ts) is pre-resolved with zero conflict markers. All 10 subcommand imports and dispatch cases are intact. The implementation step should verify via grep sweep and TypeScript build.",
+  "statement": "Conflict resolution for helix-cli requires no source code changes. The single conflicted file (tickets/index.ts) is pre-resolved with zero markers. All 10 subcommand imports and dispatch cases are intact. The library module (6 files in src/library/, resolver utility, SKILL.md) is entirely separate and unaffected. The plan consists of 3 steps: marker verification, dependency install, and TypeScript build.",
   "followups": []
 }
