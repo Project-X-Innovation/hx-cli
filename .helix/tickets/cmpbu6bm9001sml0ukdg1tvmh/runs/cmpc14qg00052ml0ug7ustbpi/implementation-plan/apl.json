@@ -1,0 +1,50 @@
+{
+  "questions": [
+    "What is the correct implementation sequence for the 7 files that need changes?",
+    "Are there any dependencies between the implementation steps?",
+    "What quality gates must pass for verification?",
+    "Can the CLI be tested against the staging server during verification?",
+    "Does the em-dash separator in hxFetch error messages affect the error handling implementation?"
+  ],
+  "answers": [
+    {
+      "answer": "The 7 files can be implemented in any order since they are independent changes within the same repo. However, a logical grouping is: (1) core functional changes first (create.ts, get.ts, list.ts), (2) help text (index.ts), (3) documentation (cli-content.ts, SKILL.md, commands.md). This allows incremental typecheck verification after each group.",
+      "evidence": [
+        "create.ts, get.ts, and list.ts have no cross-file dependencies for the new code",
+        "index.ts only changes string literals, not imports or types",
+        "Documentation files (cli-content.ts, SKILL.md, commands.md) are pure content changes"
+      ]
+    },
+    {
+      "answer": "No step depends on another step's output. All 7 file changes are independent. The only shared elements are existing utilities (resolveTicket, getFlag, hxFetch) which are unchanged. TypeScript compilation (tsc --noEmit) should be run after all steps to verify the complete set compiles together.",
+      "evidence": [
+        "Each file defines its own local types (TicketDetail, TicketItem) — no shared type definitions file",
+        "create.ts imports resolveTicket (existing), get.ts and list.ts only extend local types",
+        "Documentation files are string templates with no code dependencies"
+      ]
+    },
+    {
+      "answer": "Two quality gates must pass: (1) tsc --noEmit for TypeScript compilation, (2) tsc && node --test dist/**/*.test.js for existing test suite. Both are defined in package.json scripts. No new tests are required for MVP per tech-research decision.",
+      "evidence": [
+        "package.json scripts: typecheck='tsc --noEmit', test='tsc && node --test dist/**/*.test.js'",
+        "tech-research/tech-research.md Section 'No New Tests in MVP': existing utility tests + TypeScript compilation are the quality gates"
+      ]
+    },
+    {
+      "answer": "Yes. The helix-cli .env file provides HELIX_API_KEY and HELIX_URL pointing to the staging server. After building with tsc, the CLI can be run via 'node dist/index.js' to test create, get, and list commands against the live staging API. This provides runtime verification of the new flags.",
+      "evidence": [
+        "Dev setup config: HELIX_API_KEY=hxi_8cc66fe2... HELIX_URL=https://helix-global-server-staging-3tl6o.ondigitalocean.app",
+        "CLI reads .env for config per src/lib/config.ts"
+      ]
+    },
+    {
+      "answer": "Yes. buildErrorMessage in http.ts line 34 uses an em-dash (` — `) not a regular dash (` - `). The error extraction code in create.ts must split on ` — ` to isolate the JSON body portion, then JSON.parse it to extract the server's error field. Falling back to the raw Error.message if parsing fails ensures resilience.",
+      "evidence": [
+        "helix-cli/src/lib/http.ts line 34: `HTTP ${response.status} ${response.statusText}${text ? ` — ${text.slice(0, 500)}` : ''}`",
+        "tech-research/tech-research.md confirms em-dash and recommends JSON.parse over regex for robustness"
+      ]
+    }
+  ],
+  "statement": "The implementation plan covers 7 independent file changes in helix-cli following the established inline resolve-then-use pattern. Three optional flags (--after, --reference, --implement-from) are added to tickets create, relationship display is added to tickets get and list, and all documentation surfaces are updated. Steps are sequenced logically (core code → help text → docs) but have no hard dependencies. Verification uses tsc --noEmit, existing test suite, CLI help output, and staging server API calls to confirm end-to-end functionality.",
+  "followups": []
+}

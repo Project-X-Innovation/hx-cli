@@ -1,0 +1,132 @@
+{
+  "problem": "The hlx CLI has zero support for ticket relationships (afterTicketId, referencedTicketIds, implementFromTicketId) despite the server API and web UI fully supporting them. Users cannot create tickets with dependency chains, cross-references, or research-to-implementation links from the CLI, nor can they see relationship data when viewing tickets.",
+  "files": [
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Primary change target. Builds POST body for ticket creation (line 89-93). Currently sends only title, description, repositoryIds, mode. Must add --after, --reference, --implement-from flag parsing, resolveTicket() calls, and include resolved IDs in body. Also needs error handling wrap around hxFetch call."
+    },
+    {
+      "path": "src/tickets/get.ts",
+      "why": "Display target. TicketDetail type (lines 5-23) omits all relationship fields. printTicketDetail() (line 47-87) must add 'Depends on' / 'Implements' / 'References' display sections after approval status and before Repositories."
+    },
+    {
+      "path": "src/tickets/list.ts",
+      "why": "Display target. TicketItem type (lines 5-13) omits relationship fields. Output line (line 107) must append [after RSH-XXX] indicator when afterTicket is present."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Help/usage text. ticketsUsage() (line 15-33) and case 'create' help (line 71-77) must include new --after, --reference, --implement-from flags in usage strings."
+    },
+    {
+      "path": "src/docs/cli-content.ts",
+      "why": "Exported documentation. 'hlx tickets create' flags table (lines 99-107) must add three new flag rows. Worked Examples section needs relationship examples."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Agent skill documentation. Ticket Management workflow section (lines 74-93) needs relationship command examples."
+    },
+    {
+      "path": "skill-content/references/commands.md",
+      "why": "Command reference. 'hlx tickets create' in Action Commands (line 56) must include new relationship flags."
+    },
+    {
+      "path": "src/lib/resolve-ticket.ts",
+      "why": "Existing utility to reuse. resolveTicket() (lines 86-167) handles ID/shortId/numeric resolution with active+archived fallback. Will be imported into create.ts for reference resolution. No changes needed to this file."
+    },
+    {
+      "path": "src/lib/flags.ts",
+      "why": "Existing utility to reuse. getFlag() (lines 5-9) for optional flag parsing. Already imported in create.ts. No changes needed to this file."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "Existing HTTP client. hxFetch() throws Error with message containing HTTP status and JSON body on failure (line 34: 'HTTP {status} {statusText} - {body}'). Error handling in create.ts must extract the JSON error field from this message format."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Existing test file for resolveTicket(). Contains 15 test cases covering ID/shortId/numeric resolution, ambiguity, archived fallback, and error propagation. No changes needed but confirms resolveTicket() is well-tested."
+    },
+    {
+      "path": "package.json",
+      "why": "Build/quality gates. Scripts: build='tsc', typecheck='tsc --noEmit', test='tsc && node --test dist/**/*.test.js'. Only devDeps are @types/node and typescript. No ORM, no migrations."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config. target=ES2022, module=Node16, strict=true, declaration=true. All source in src/, output in dist/."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "helix-cli has zero references to afterTicketId, referencedTicketIds, or implementFromTicketId in source code",
+      "evidence": "Grep across helix-cli codebase returned zero source file matches. Only match is in .helix/tickets/*/ticket.md (the research report itself)."
+    },
+    {
+      "claim": "Server API Zod schema already accepts afterTicketId, implementFromTicketId, and referencedTicketIds fields",
+      "evidence": "helix-global-server/src/controllers/ticket-controller.ts lines 29-40: createTicketSchemaGeneral includes afterTicketId (optional string), implementFromTicketId (optional string), referencedTicketIds (optional array, max 5)."
+    },
+    {
+      "claim": "create.ts POST body currently sends only title, description, repositoryIds, and optional mode",
+      "evidence": "helix-cli/src/tickets/create.ts lines 89-93: body: { title, description, repositoryIds, ...(mode && { mode }) }"
+    },
+    {
+      "claim": "TicketDetail type in get.ts omits all relationship fields",
+      "evidence": "helix-cli/src/tickets/get.ts lines 5-23: type includes id, shortId, title, description, status, branchName, reporter, repositories, runs, mergeQueueStatus, approvalStatus, isArchived. No afterTicket*, implementFromTicket*, or referencedTicket* fields."
+    },
+    {
+      "claim": "TicketItem type in list.ts omits all relationship fields",
+      "evidence": "helix-cli/src/tickets/list.ts lines 5-13: type includes id, shortId, title, status, updatedAt, approvalStatus, reporter. No relationship fields."
+    },
+    {
+      "claim": "resolveTicket() utility exists and handles 3 reference formats with active+archived fallback",
+      "evidence": "helix-cli/src/lib/resolve-ticket.ts lines 86-167: handles internal ID, short ID (case-insensitive), numeric ticket number. Fetches active first, falls back to archived. Detects cross-set ambiguity."
+    },
+    {
+      "claim": "getFlag() utility exists for optional flag parsing",
+      "evidence": "helix-cli/src/lib/flags.ts lines 5-9: returns string | undefined based on args array indexOf."
+    },
+    {
+      "claim": "hxFetch error format includes HTTP status and response body text",
+      "evidence": "helix-cli/src/lib/http.ts lines 28-35: buildErrorMessage returns 'HTTP {status} {statusText} - {body text (truncated to 500 chars)}'."
+    },
+    {
+      "claim": "Existing resolve-then-use pattern in create.ts for --repos can be followed for new flags",
+      "evidence": "helix-cli/src/tickets/create.ts lines 60-76: reposRaw.split(',').map(s => s.trim()) pattern, try/catch with resolveAllRepos(), console.error + process.exit(1) on failure."
+    },
+    {
+      "claim": "No ORM, no migrations, no database in helix-cli",
+      "evidence": "package.json devDependencies: only @types/node and typescript. No prisma, drizzle, typeorm, sequelize, or knex."
+    },
+    {
+      "claim": "Only helix-cli requires code changes; server and client are context-only",
+      "evidence": "Research report Section 4 states 'Only helix-cli requires code changes.' Server API already supports all relationship fields. Web UI already supports all three relationship mechanisms."
+    },
+    {
+      "claim": "Quality gates are: tsc (build), tsc --noEmit (typecheck), tsc && node --test dist/**/*.test.js (test)",
+      "evidence": "package.json scripts: build='tsc', typecheck='tsc --noEmit', test='tsc && node --test dist/**/*.test.js'"
+    },
+    {
+      "claim": "Three test files exist in the codebase",
+      "evidence": "Glob for **/*.test.ts found: src/lib/flags.test.ts, src/lib/resolve-ticket.test.ts, src/skill/skill.test.ts"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "Does the hxFetch error thrown for 400-status POST responses actually include the JSON body inline in the error message?",
+      "context": "buildErrorMessage (http.ts line 28-35) reads response.text() and appends it. The research report assumes the error message format is 'HTTP 400 Bad Request - {\"error\":\"...\"}'. This should be verified at runtime but is plausible from static inspection of buildErrorMessage which appends the response body text."
+    },
+    {
+      "question": "Are there any additional fields the server list endpoint returns for relationship data beyond what the research report documents?",
+      "context": "Research report cites helix-global-server/src/services/ticket-service.ts lines 1674-1709 for list response shape. Line numbers may have drifted since research was conducted. The Zod schema in ticket-controller.ts was verified, but the response mapping was not re-read at those exact lines."
+    },
+    {
+      "question": "Should tests be added for the new create.ts flag parsing and display changes?",
+      "context": "The research report does not mention adding tests. Existing test files cover flags.ts and resolve-ticket.ts utilities but not the command functions themselves (create.ts, get.ts, list.ts). The test infrastructure uses node:test with mock support."
+    }
+  ],
+  "serverApiContext": {
+    "note": "Server API contract documented in research report Section 2 was verified against helix-global-server/src/controllers/ticket-controller.ts lines 29-40 (Zod schema). No server changes needed.",
+    "createEndpoint": "POST /api/tickets - accepts afterTicketId, implementFromTicketId, referencedTicketIds (all optional)",
+    "detailEndpoint": "GET /api/tickets/:id - returns nested afterTicket, implementFromTicket, referencedTickets objects",
+    "listEndpoint": "GET /api/tickets - returns afterTicketId, afterTicket (nested), implementFromTicketId, referencedTicketIds per item"
+  },
+  "migrationStrategy": "no-orm"
+}
