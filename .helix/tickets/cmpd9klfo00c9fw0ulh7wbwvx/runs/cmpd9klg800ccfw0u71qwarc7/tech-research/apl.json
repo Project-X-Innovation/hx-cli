@@ -1,0 +1,70 @@
+{
+  "questions": [
+    "What is the correct approach to rewire runUpdate() and checkAutoUpdate() from npm-semver to SHA-based comparison?",
+    "How should performUpdate() install spec change, and does npm correctly handle global git+https installs (prepare script, package placement)?",
+    "How should the npm-to-GitHub migration path work within the existing update flow?",
+    "What is the correct way to extend getPackageVersion() to include commit SHA from config?",
+    "Should isCanonicalSource() change, and how does it interact with migration?",
+    "What functions/constants in check.ts should be removed vs kept after the switch?"
+  ],
+  "answers": [
+    {
+      "answer": "runUpdate() should call fetchRemoteSha() directly (not isUpdateAvailable()) and check for null explicitly — null means fetch failure and must exit non-zero (fail-closed). If non-null, read the locally-recorded SHA from config.installSource.commit. If the SHAs match, print 'Already up to date'. If different or absent, run install. checkAutoUpdate() should use a similar pattern but call fetchRemoteSha() and silently return on null (non-blocking). Both flows replace fetchLatestVersion()/isNewerVersion() with fetchRemoteSha() + SHA string comparison.",
+      "evidence": [
+        "src/update/index.ts:55-67 — runUpdate() currently calls fetchLatestVersion() and isNewerVersion(), must switch to fetchRemoteSha() + SHA comparison",
+        "src/update/index.ts:129-139 — checkAutoUpdate() uses same npm-based comparison",
+        "src/update/check.ts:54-68 — fetchRemoteSha() returns string|null, null means failure",
+        "src/update/check.ts:73-85 — isUpdateAvailable() returns {available:false, remoteSha:null} on failure — conflates 'up to date' with 'fetch error' for callers that need fail-closed behavior",
+        "Ticket: 'Remote SHA fetch fails: hlx update exits non-zero'; 'auto-update pre-command check logs a warning to stderr and continues'"
+      ]
+    },
+    {
+      "answer": "performUpdate() should change the install spec from NPM_PACKAGE@latest to git+CANONICAL_REPO_URL#CANONICAL_BRANCH. A new constant (e.g. GIT_INSTALL_SPEC) should be exported from check.ts composed from existing constants. npm correctly handles global git+https installs: it clones the repo, installs devDependencies to run the prepare script (tsc), builds, and places the result under node_modules using the package name field. Since the name is @projectxinnovation/helix-cli, the global path is identical to registry installs. validateInstall() requires no changes.",
+      "evidence": [
+        "src/update/perform.ts:15-17 — current spec is NPM_PACKAGE@latest",
+        "src/update/check.ts:3-5 — CANONICAL_REPO_URL = 'https://github.com/Project-X-Innovation/helix-cli.git', CANONICAL_BRANCH = 'main'",
+        "package.json:2 — name: '@projectxinnovation/helix-cli'",
+        "package.json:19 — prepare: 'npm run build' which runs tsc",
+        "npm docs (Context7): 'When installing from a Git repository, npm may perform a build if certain scripts (prepare) are present'; devDependencies example shows prepare-based builds are supported",
+        "src/update/validate.ts:41-47 — constructs path as globalRoot/@projectxinnovation/helix-cli/dist/index.js — works for git installs since npm uses the name field for directory placement"
+      ]
+    },
+    {
+      "answer": "Migration is handled inline within the existing update flow, not as a separate code path. In runUpdate(): after fetching the remote SHA, check if config.installSource is missing or mode:'npm'. If so, print a one-line notice (e.g. 'Switching install source from npm to GitHub main...'). Then proceed with the normal install path — the install itself is identical whether it's a migration or a regular update. After success, record {mode:'github', repo, branch, commit}. In checkAutoUpdate(): same detection, but no printed notice (quiet mode). When installSource.commit is absent (npm-sourced), any remote SHA is treated as 'different' and triggers the install. This naturally handles the migration case.",
+      "evidence": [
+        "src/update/index.ts:93-98 — currently saves {mode:'npm', version: remoteVersion}; migration changes this to {mode:'github', repo, branch, commit}",
+        "src/lib/config.ts:5-11 — InstallSource type already supports mode:'github' with repo/branch/commit fields",
+        "Ticket: 'First-run migration: when hlx update runs and the recorded install source is missing or marked as npm, the command must (a) print a one-line notice, (b) run the install path, (c) record the install source as GitHub with the new SHA'",
+        "Ticket: 'Config file is unreadable or corrupt: treat as no recorded install source, trigger the migration path'"
+      ]
+    },
+    {
+      "answer": "getPackageVersion() should be extended to call loadFullConfig() and read installSource.commit. If commit is a non-empty string, return '<semver> (<commit.slice(0,7)>)'. If commit is missing (legacy npm installs or fresh installs before first hlx update), return the semver only. The --version handler at src/index.ts:124 already calls getPackageVersion() and prints directly, so no change is needed there. A separate concern: fresh installs (npm install -g git+https://...) do not run hlx update, so the first hlx invocation has no SHA in config — the fallback to semver-only is correct, and the ticket specifies a note to run hlx update to refresh metadata.",
+      "evidence": [
+        "src/update/version.ts:10-20 — getPackageVersion() reads semver from package.json, returns string",
+        "src/lib/config.ts:88-96 — loadFullConfig() reads raw config including installSource",
+        "src/index.ts:122-124 — --version prints getPackageVersion() directly",
+        "Ticket: 'hlx --version must include the short SHA of the installed commit, drawn from the same config field. If the field is missing (legacy installs), fall back to the existing semver-only output and a one-line note to run hlx update'"
+      ]
+    },
+    {
+      "answer": "isCanonicalSource() should continue to accept mode:'npm' as canonical. This allows checkAutoUpdate() to proceed for npm-sourced users, triggering the silent migration. After migration, the installSource becomes mode:'github' which is already accepted. Removing mode:'npm' from isCanonicalSource would block auto-update for users who haven't explicitly run hlx update yet, creating a worse migration experience. No change needed to isCanonicalSource() — it already handles both modes correctly.",
+      "evidence": [
+        "src/update/index.ts:20-28 — isCanonicalSource() accepts mode:'npm' and mode:'github' with matching repo/branch",
+        "src/update/index.ts:121-127 — checkAutoUpdate() gates on isCanonicalSource() before proceeding",
+        "Ticket: 'The pre-command auto-update check performs the same SHA comparison and triggers the same install path on mismatch, in quiet mode'"
+      ]
+    },
+    {
+      "answer": "fetchLatestVersion() and isNewerVersion() in check.ts should be removed — they are npm-registry-specific functions that will have zero callers after the switch. The NPM_PACKAGE constant should be removed from check.ts since it's no longer needed for the install spec. A new GIT_INSTALL_SPEC constant should be added, composed from existing CANONICAL_REPO_URL and CANONICAL_BRANCH. The existing fetchRemoteSha(), isUpdateAvailable(), CANONICAL_REPO_URL, CANONICAL_BRANCH, and CANONICAL_REPO constants should be kept. Note: NPM_PACKAGE is currently imported by perform.ts, so removing it requires updating that import to use GIT_INSTALL_SPEC instead.",
+      "evidence": [
+        "src/update/check.ts:8-9 — NPM_PACKAGE constant, imported by perform.ts",
+        "src/update/check.ts:15-29 — fetchLatestVersion() used only by index.ts runUpdate/checkAutoUpdate",
+        "src/update/check.ts:36-47 — isNewerVersion() used only by index.ts runUpdate/checkAutoUpdate",
+        "src/update/perform.ts:2 — imports NPM_PACKAGE from check.ts"
+      ]
+    }
+  ],
+  "statement": "The update system rewiring is a well-contained change within the src/update/ module plus documentation surfaces. The existing git primitives (fetchRemoteSha, isUpdateAvailable, CANONICAL_* constants, InstallSource.commit config field) provide the foundation — they need to be wired into the update flows that currently use npm-registry functions. The key technical decisions are: (1) runUpdate() calls fetchRemoteSha() directly with explicit null-check for fail-closed behavior; (2) performUpdate() uses a new GIT_INSTALL_SPEC constant; (3) install source recording switches to {mode:'github', repo, branch, commit}; (4) migration is inline within the normal update flow with a conditional notice; (5) getPackageVersion() reads SHA from config; (6) npm-specific functions and the NPM_PACKAGE constant are removed from check.ts. validateInstall() and isCanonicalSource() require no changes. 12 documentation and error-message locations across 7 files need text updates to reference the git+https URL.",
+  "followups": []
+}
