@@ -1,0 +1,18 @@
+{
+  "questions": [
+    "Should the CLI add Goal-specific commands or just extend the existing mode validation?"
+  ],
+  "answers": [
+    {
+      "answer": "Minimal: add GOAL to VALID_MODES array and update help text only. The product spec explicitly defers Goal-specific CLI commands (product.md Out of Scope #9). The CLI has no mode-specific logic beyond validation -- mode is passed through to the API. Goal proposal review is a visual, interactive task better suited to the web UI. Existing hlx tickets get/list will show GOAL tickets without modification.",
+      "evidence": [
+        "product/product.md Out of Scope #9: 'Goal-specific CLI commands deferred; hlx tickets create --mode GOAL suffices for MVP'",
+        "create.ts line 12: VALID_MODES = ['AUTO', 'BUILD', 'FIX', 'RESEARCH', 'EXECUTE'] -- adding 'GOAL' is the complete change",
+        "create.ts line 81: mode.toUpperCase() validation; line 91: mode passed directly to API body -- no mode-specific logic",
+        "Research report Section 8.3: 'Add GOAL to VALID_MODES array and --mode help text'"
+      ]
+    }
+  ],
+  "statement": "The helix-cli requires only a mechanical 2-file change: add 'GOAL' to VALID_MODES array and update help text in create.ts and index.ts. No new commands, no mode-specific logic. The CLI is a thin passthrough; Goal-specific CLI commands are explicitly deferred per product scope.",
+  "followups": []
+}

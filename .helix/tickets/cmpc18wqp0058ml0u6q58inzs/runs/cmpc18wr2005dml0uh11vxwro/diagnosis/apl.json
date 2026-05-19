@@ -1,0 +1,19 @@
+{
+  "questions": [
+    "What CLI changes are needed for GOAL mode support?"
+  ],
+  "answers": [
+    {
+      "answer": "Two files need mechanical edits: (1) create.ts line 12: add 'GOAL' to VALID_MODES array, line 16: add GOAL to --mode help text, (2) index.ts lines 15-31: add GOAL to mode options in tickets subcommand help text. Mode validation is case-insensitive (line 81) and passes mode directly to API (line 91), so no additional validation logic is needed. Goal-specific CLI commands (hlx goals ...) are deferred per the research report.",
+      "evidence": [
+        "create.ts line 12: VALID_MODES = ['AUTO', 'BUILD', 'FIX', 'RESEARCH', 'EXECUTE'] (no GOAL)",
+        "create.ts line 16: help text shows --mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>",
+        "create.ts line 81: mode.toUpperCase() (case-insensitive validation)",
+        "index.ts lines 15-31: tickets subcommand help lists mode options",
+        "Research report Section 8.3: 'CLI needs minimal changes since GOAL is just another TicketMode value'"
+      ]
+    }
+  ],
+  "statement": "The helix-cli needs a minimal, mechanical change: add 'GOAL' to the VALID_MODES array and update help text strings in create.ts and index.ts. No new commands or validation logic required for MVP.",
+  "followups": []
+}
