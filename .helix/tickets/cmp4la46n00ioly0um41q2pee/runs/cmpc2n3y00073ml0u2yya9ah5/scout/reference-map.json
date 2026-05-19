@@ -1,0 +1,73 @@
+{
+  "problem": "Conflict resolution run: merge-conflicts.json lists src/tickets/index.ts as conflicted from staging refresh. File currently shows NO active conflict markers. CLI Library Comments feature is fully implemented: 6 new files in src/library/, 1 utility, dispatcher registered, SKILL.md updated.",
+  "files": [
+    {
+      "path": ".helix/merge-conflicts.json",
+      "why": "Declares sole conflict: src/tickets/index.ts. Ticket commits: 5cfbd79, ca6c51b, 210d9fc, 758fce3. Staging commit: 6a4215c."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Listed as conflicted file. Contains ticket subcommand dispatcher (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description). No active conflict markers found. Must verify both sides preserved."
+    },
+    {
+      "path": "src/library/index.ts",
+      "why": "Library module router. Dispatches to list/show/comments. Uses resolveLibraryItem."
+    },
+    {
+      "path": "src/library/list.ts",
+      "why": "hlx library list. Fetches /api/library/items."
+    },
+    {
+      "path": "src/library/show.ts",
+      "why": "hlx library show <ref>. Annotates headings with comment summaries."
+    },
+    {
+      "path": "src/library/comments.ts",
+      "why": "Nested router for list/post subcommands."
+    },
+    {
+      "path": "src/library/comments-list.ts",
+      "why": "hlx library comments list. Groups by anchor with threading."
+    },
+    {
+      "path": "src/library/comments-post.ts",
+      "why": "hlx library comments post. Rating + optional text + reply-to."
+    },
+    {
+      "path": "src/lib/resolve-library-item.ts",
+      "why": "Multi-format resolver: cuid, ticket short ID, title match."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "Main dispatcher. Library case at lines 98-102."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Library section at lines 146-179."
+    },
+    {
+      "path": "src/lib/http.ts",
+      "why": "hxFetch HTTP client with retry logic. Used by all library commands."
+    },
+    {
+      "path": "package.json",
+      "why": "Quality gates: build = 'tsc', typecheck = 'tsc --noEmit'."
+    }
+  ],
+  "facts": [
+    "merge-conflicts.json lists src/tickets/index.ts as sole conflict file",
+    "NO active conflict markers found anywhere in the repo via grep",
+    "Ticket side added 4 commits: 5cfbd79, ca6c51b, 210d9fc, 758fce3. Staging side added 1 commit: 6a4215c",
+    "tickets/index.ts is the ticket subcommand dispatcher — not directly related to library feature but may have been modified in both branches",
+    "Library feature fully implemented: 6 new files in src/library/, 1 utility in src/lib/",
+    "Dispatcher registered: 'library' case at src/index.ts lines 98-102",
+    "SKILL.md updated with Library section (lines 146-179)",
+    "No new npm dependencies",
+    "Quality gates: npm run build (tsc), npm run typecheck (tsc --noEmit)"
+  ],
+  "unknowns": [
+    "Whether staging commit (6a4215c) to tickets/index.ts introduced new subcommands or changes that conflict with ticket commits",
+    "Whether the current tickets/index.ts correctly preserves intent from both sides",
+    "Whether typecheck passes in the current merged state — not verified at scout time"
+  ]
+}
