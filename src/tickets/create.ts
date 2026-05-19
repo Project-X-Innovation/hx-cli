@@ -3,6 +3,7 @@ import type { HxConfig } from "../lib/config.js";
 import { hxFetch } from "../lib/http.js";
 import { requireFlag, getFlag, isHelpRequested } from "../lib/flags.js";
 import { resolveAllRepos } from "../lib/resolve-repo.js";
+import { resolveTicket } from "../lib/resolve-ticket.js";
 
 type CreateTicketResponse = {
   ticket: { id: string; shortId?: string; mode?: string; status: string };
@@ -13,7 +14,7 @@ const VALID_MODES = ["AUTO", "BUILD", "FIX", "RESEARCH", "EXECUTE"] as const;
 
 export async function cmdTicketsCreate(config: HxConfig, args: string[]): Promise<void> {
   if (isHelpRequested(args)) {
-    console.log("Usage: hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>]");
+    console.log("Usage: hlx tickets create --title <title> --description <desc> | --description-file <path> --repos <name1,name2> [--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>] [--after <ticket-ref>] [--reference <ref1,ref2>] [--implement-from <ticket-ref>]");
     process.exit(0);
   }
 
@@ -86,11 +87,89 @@ export async function cmdTicketsCreate(config: HxConfig, args: string[]): Promis
     mode = normalized;
   }
 
-  const data = (await hxFetch(config, "/tickets", {
-    method: "POST",
-    body: { title, description, repositoryIds, ...(mode && { mode }) },
-    basePath: "/api",
-  })) as CreateTicketResponse;
+  // --- Relationship flags ---
+  const afterRef = getFlag(args, "--after");
+  const referenceRaw = getFlag(args, "--reference");
+  const implementFromRef = getFlag(args, "--implement-from");
+
+  let afterTicketId: string | undefined;
+  if (afterRef) {
+    try {
+      const resolved = await resolveTicket(config, afterRef);
+      afterTicketId = resolved.id;
+      console.log(`Resolved --after "${afterRef}" to ${resolved.shortId} (${resolved.id})`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  let implementFromTicketId: string | undefined;
+  if (implementFromRef) {
+    try {
+      const resolved = await resolveTicket(config, implementFromRef);
+      implementFromTicketId = resolved.id;
+      console.log(`Resolved --implement-from "${implementFromRef}" to ${resolved.shortId} (${resolved.id})`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  let referencedTicketIds: string[] | undefined;
+  if (referenceRaw) {
+    const refs = referenceRaw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    if (refs.length > 5) {
+      console.error("Error: --reference accepts at most 5 ticket references.");
+      process.exit(1);
+    }
+    referencedTicketIds = [];
+    for (const ref of refs) {
+      try {
+        const resolved = await resolveTicket(config, ref);
+        referencedTicketIds.push(resolved.id);
+        console.log(`Resolved --reference "${ref}" to ${resolved.shortId} (${resolved.id})`);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    }
+  }
+
+  let data: CreateTicketResponse;
+  try {
+    data = (await hxFetch(config, "/tickets", {
+      method: "POST",
+      body: {
+        title,
+        description,
+        repositoryIds,
+        ...(mode && { mode }),
+        ...(afterTicketId && { afterTicketId }),
+        ...(implementFromTicketId && { implementFromTicketId }),
+        ...(referencedTicketIds && referencedTicketIds.length > 0 && { referencedTicketIds }),
+      },
+      basePath: "/api",
+    })) as CreateTicketResponse;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Attempt to extract server error from em-dash separated response body
+    const dashIdx = msg.indexOf(" — ");
+    if (dashIdx !== -1) {
+      const bodyPart = msg.slice(dashIdx + 3);
+      try {
+        const parsed = JSON.parse(bodyPart);
+        if (parsed.error) {
+          console.error(`Error: ${parsed.error}`);
+          process.exit(1);
+        }
+      } catch {
+        // JSON parse failed — fall through to raw message
+      }
+    }
+    console.error(`Error: ${msg}`);
+    process.exit(1);
+  }
 
   console.log(`Ticket created:`);
   console.log(`  ID:       ${data.ticket.id}`);

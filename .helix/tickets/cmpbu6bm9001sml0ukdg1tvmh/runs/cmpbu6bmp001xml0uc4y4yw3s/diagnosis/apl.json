@@ -1,0 +1,59 @@
+{
+  "questions": [
+    "Why can't the CLI create tickets with dependency chains, cross-references, or research-to-implementation links?",
+    "Does the server API already support relationship fields in the create endpoint?",
+    "Can the CLI display relationship data when viewing or listing tickets?",
+    "Are there existing utilities in helix-cli that can resolve ticket references for the new flags?",
+    "Does the hxFetch error format support surfacing server-side validation errors to the user?",
+    "Is this a single-repo change, or does it require cross-repo modifications?"
+  ],
+  "answers": [
+    {
+      "answer": "The create command POST body only sends { title, description, repositoryIds, mode }. The three relationship fields (afterTicketId, implementFromTicketId, referencedTicketIds) are never parsed from CLI args and never included in the request body.",
+      "evidence": [
+        "helix-cli/src/tickets/create.ts lines 89-93: body: { title, description, repositoryIds, ...(mode && { mode }) }",
+        "Zero grep matches for afterTicketId, referencedTicketIds, or implementFromTicketId across helix-cli source (confirmed by scout)"
+      ]
+    },
+    {
+      "answer": "Yes. The server Zod schema createTicketSchemaGeneral already accepts afterTicketId (optional string), implementFromTicketId (optional string), and referencedTicketIds (optional array, max 5). No server changes needed.",
+      "evidence": [
+        "Research report Section 2: helix-global-server/src/controllers/ticket-controller.ts lines 29-40 documents the Zod schema",
+        "Scout reference-map.json confirms server API contract verified against HEAD"
+      ]
+    },
+    {
+      "answer": "No. The TicketDetail type in get.ts (lines 5-23) and TicketItem type in list.ts (lines 5-13) omit all relationship fields. printTicketDetail() has no relationship display sections. The list output line has no dependency indicator.",
+      "evidence": [
+        "helix-cli/src/tickets/get.ts lines 5-23: type has id, shortId, title, description, status, branchName, reporter, repositories, runs, mergeQueueStatus, approvalStatus, isArchived — no relationship fields",
+        "helix-cli/src/tickets/list.ts lines 5-13: type has id, shortId, title, status, updatedAt, approvalStatus, reporter — no relationship fields",
+        "helix-cli/src/tickets/get.ts lines 47-87: printTicketDetail() shows title, shortId, status, branch, reporter, archived, merge status, approval, repos, runs, description — no relationship sections"
+      ]
+    },
+    {
+      "answer": "Yes. resolveTicket() in src/lib/resolve-ticket.ts (lines 86-167) handles all three reference formats (internal ID, short ID, numeric ticket number) with active+archived fallback and cross-set ambiguity detection. It is already well-tested (15 test cases in resolve-ticket.test.ts). getFlag() in src/lib/flags.ts (lines 5-9) handles optional flag parsing.",
+      "evidence": [
+        "helix-cli/src/lib/resolve-ticket.ts lines 86-167: resolveTicket(config, ref) returns { id, shortId } or throws Error",
+        "helix-cli/src/lib/flags.ts lines 5-9: getFlag(args, flag) returns string | undefined",
+        "helix-cli/src/tickets/create.ts lines 60-76: existing --repos resolve-then-use pattern provides a direct template for the new flags"
+      ]
+    },
+    {
+      "answer": "Yes. hxFetch throws Error with message from buildErrorMessage() which appends response body text (up to 500 chars). For 400 responses, this will include the server JSON like {\"error\":\"Circular dependency detected.\"}. Error extraction via JSON parsing of the message body is feasible.",
+      "evidence": [
+        "helix-cli/src/lib/http.ts lines 28-35: buildErrorMessage returns `HTTP ${response.status} ${response.statusText}${text ? ` — ${text.slice(0, 500)}` : ''}` where text is response.text()",
+        "helix-cli/src/lib/http.ts lines 100-103: non-retryable responses throw new Error(message) using buildErrorMessage output"
+      ]
+    },
+    {
+      "answer": "Single-repo change in helix-cli only. The server API already accepts all relationship fields and the web client already renders them. No modifications needed to helix-global-server or helix-global-client.",
+      "evidence": [
+        "Research report Section 4: 'Only helix-cli requires code changes.'",
+        "Scout found no scout artifacts for helix-global-server or helix-global-client (files don't exist), confirming no changes scoped there",
+        "All 7 target files are within helix-cli: src/tickets/create.ts, src/tickets/get.ts, src/tickets/list.ts, src/tickets/index.ts, src/docs/cli-content.ts, skill-content/SKILL.md, skill-content/references/commands.md"
+      ]
+    }
+  ],
+  "statement": "The hlx CLI has a feature gap: ticket relationships (afterTicketId, referencedTicketIds, implementFromTicketId) are fully supported by the server API and web UI but completely absent from the CLI. The create command POST body omits these fields, and the get/list display types and rendering functions exclude relationship data. The fix is a single-repo change in helix-cli touching 7 files: add --after, --reference, --implement-from flags to tickets create using existing resolveTicket() utility; extend TicketDetail and TicketItem types with relationship fields; add conditional relationship display in printTicketDetail() and list output; update help text and documentation. No new dependencies required. Server validation handles all edge cases (circular deps, wrong status, non-existent tickets).",
+  "followups": []
+}

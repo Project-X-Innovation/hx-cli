@@ -1,0 +1,30 @@
+{
+  "questions": [
+    "Q1: Does the auto-merged tickets/index.ts preserve both ticket-side and staging-side changes?",
+    "Q2: Are there any conflict markers in library CLI module files?",
+    "Q3: Does the TypeScript build pass after the staging refresh merge?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The 150-line file has all 10 subcommand handler imports and a switch statement dispatching to all 10 subcommands. Both ticket-side changes (library CLI integration, ticket lookup improvements from 4 commits) and staging-side changes (ticket command updates from 1 commit) are present. Zero conflict markers found.",
+      "evidence": [
+        "Grep for conflict markers in tickets/index.ts: zero matches",
+        "Direct read: all 10 imports present (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description)",
+        "Direct read: switch statement with 10 cases + default handler"
+      ]
+    },
+    {
+      "answer": "No. All library CLI files (src/library/index.ts, list.ts, show.ts, comments.ts, comments-list.ts, comments-post.ts, plus src/lib/resolve-library-item.ts) were only on the ticket side and were not involved in any conflict. Broad grep across all .ts files shows zero markers in source code.",
+      "evidence": [
+        "merge-conflicts.json lists only tickets/index.ts — no library module files",
+        "Grep for <<<<<<< across src/ --include=*.ts: zero matches"
+      ]
+    },
+    {
+      "answer": "Not yet verified in this run. Build verification is the primary action for the implementation step, specified in CHK-02.",
+      "evidence": []
+    }
+  ],
+  "statement": "Conflict resolution for helix-cli requires no source code changes. The single conflicted file (tickets/index.ts) is pre-resolved with zero markers. All 10 subcommand imports and dispatch cases are intact. The library module (6 files in src/library/, resolver utility, SKILL.md) is entirely separate and unaffected. The plan consists of 3 steps: marker verification, dependency install, and TypeScript build.",
+  "followups": []
+}

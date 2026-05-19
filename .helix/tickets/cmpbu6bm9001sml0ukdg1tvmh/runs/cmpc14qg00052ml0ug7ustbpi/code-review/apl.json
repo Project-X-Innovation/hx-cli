@@ -1,0 +1,60 @@
+{
+  "questions": [
+    "Do the 3 new flags (--after, --reference, --implement-from) correctly resolve references and include them in the POST body?",
+    "Does the error handling correctly extract server validation errors from hxFetch em-dash-separated error messages?",
+    "Are the TicketDetail and TicketItem type extensions correct for the server response shapes?",
+    "Is the conditional display logic correct in get.ts and list.ts?",
+    "Are all documentation surfaces consistent with the actual CLI flag names and usage patterns?",
+    "Do quality gates pass after all changes?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All 3 flags are parsed with getFlag(), resolved via resolveTicket(config, ref) which returns { id, shortId }, and the resolved IDs are conditionally spread into the POST body. The --reference flag correctly splits on commas, validates max 5 client-side, and resolves each reference sequentially. The pattern exactly mirrors the existing --repos resolution pattern.",
+      "evidence": [
+        "src/tickets/create.ts lines 91-93: getFlag() calls for all 3 flags",
+        "src/tickets/create.ts lines 95-137: resolveTicket() calls with try/catch for each flag",
+        "src/tickets/create.ts lines 143-151: POST body with conditional spread operators",
+        "src/lib/resolve-ticket.ts lines 86-167: resolveTicket() returns { id: string; shortId: string }"
+      ]
+    },
+    {
+      "answer": "Yes. The error handling in create.ts lines 154-172 correctly splits on the em-dash separator (` — `) used by hxFetch's buildErrorMessage (http.ts line 34), parses the JSON body portion, and extracts the `error` field. Falls back to the raw message if JSON parsing fails.",
+      "evidence": [
+        "src/tickets/create.ts lines 157-168: dashIdx = msg.indexOf(' — '); JSON.parse(bodyPart); parsed.error extraction",
+        "src/lib/http.ts line 34: buildErrorMessage uses ` — ${text.slice(0, 500)}` separator"
+      ]
+    },
+    {
+      "answer": "Yes. TicketDetail in get.ts adds 6 fields matching the server detail endpoint shape (afterTicketId, afterTicket with mode, implementFromTicketId, implementFromTicket with mode, referencedTicketIds, referencedTickets). TicketItem in list.ts adds 4 fields matching the list endpoint shape (afterTicketId, afterTicket without mode, implementFromTicketId, referencedTicketIds).",
+      "evidence": [
+        "src/tickets/get.ts lines 5-38: RelatedTicket type and TicketDetail extension",
+        "src/tickets/list.ts lines 5-17: TicketItem type with list-specific afterTicket shape (no mode field)",
+        "ticket.md Research Report sections 2.4-2.5: server response shapes for detail and list endpoints"
+      ]
+    },
+    {
+      "answer": "Yes. get.ts lines 80-89 conditionally render Depends on/Implements/References sections only when afterTicket/implementFromTicket/referencedTickets are present. list.ts line 111 computes afterTag only when afterTicket exists. Tickets without relationships display identically to before.",
+      "evidence": [
+        "src/tickets/get.ts lines 80-89: conditional if blocks for each relationship type",
+        "src/tickets/list.ts line 111: ternary for afterTag with empty string fallback"
+      ]
+    },
+    {
+      "answer": "One inconsistency found and fixed: commands.md used `--repo` (singular) on the tickets create line but the actual CLI flag is `--repos` (plural). Fixed to `--repos <name1,name2>`. All other documentation surfaces (cli-content.ts, SKILL.md, index.ts, create.ts help) correctly use `--repos`.",
+      "evidence": [
+        "skill-content/references/commands.md line 56: was `--repo <repo>`, fixed to `--repos <name1,name2>`",
+        "src/tickets/create.ts line 62: actual flag is `--repos`",
+        "All other files consistently use --repos"
+      ]
+    },
+    {
+      "answer": "Yes. TypeScript compilation passes with zero errors (npx tsc --noEmit). All 51 tests pass (0 fail, 0 skipped). Both gates verified before and after the commands.md fix.",
+      "evidence": [
+        "tsc --noEmit: exit code 0, no output",
+        "tsc && node --test dist/**/*.test.js: 51 pass, 0 fail, 0 cancelled, 0 skipped"
+      ]
+    }
+  ],
+  "statement": "Code review complete for helix-cli ticket relationship support. All 7 changed files reviewed against the ticket research report, product spec, and implementation plan. One documentation inconsistency found and fixed: commands.md used `--repo` (singular) instead of `--repos` (plural) for the tickets create command. No code bugs, no regressions, no missed requirements. TypeScript compilation clean, all 51 tests pass after fix.",
+  "followups": []
+}
