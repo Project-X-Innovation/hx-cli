@@ -1,0 +1,37 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-477: Token Usage Accuracy — Include Cache Tokens in Input Token Capture",
+  "description": "This tour walks through the fix for a critical token metering undercount in the helix-cli platform. Claude model runs were recording only base `input_tokens` while ignoring `cache_creation_input_tokens` and `cache_read_input_tokens`, causing input token counts to be undercounted by 95-99%. The fix targets exactly two code locations in `execute-workflow-step.mjs`, adding the two missing cache token fields so that stored input token totals accurately reflect actual LLM consumption. No schema migrations or downstream changes are required.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmp8xp13800r3ks0uhwo2vmnd/runs/cmp8xp13p00r8ks0uk9km3r9o/ticket.md",
+      "line": 1,
+      "description": "This ticket (FIX-477) documents the root cause of a severe token metering bug. Production data from May 2026 showed output tokens were recorded 27x to 1,084x higher than input tokens — the exact inverse of normal Claude usage patterns, where input tokens (especially with prompt caching) should be 5x–20x higher than output tokens. The culprit: the SDK capture code summed only `input_tokens` from the usage object, completely ignoring `cache_creation_input_tokens` and `cache_read_input_tokens`. Since Claude's prompt caching causes nearly all input token cost to appear in those two cache fields, the base `input_tokens` field alone captured only 1–5% of true input volume.",
+      "title": "Overview: Why Token Counts Were Wrong"
+    },
+    {
+      "file": ".helix/tickets/cmp8xp13800r3ks0uhwo2vmnd/runs/cmp8xp13p00r8ks0uk9km3r9o/ticket.md",
+      "line": 47,
+      "description": "The research report (RSH-476, implemented here) identified that the entire fix is confined to `sandbox-runtime-assets/workflow-steps/execute-workflow-step.mjs` at two token-capture sites (approximately lines 1698 and 1724 in the original file). These are the only two places where the platform accumulates input token counts from Claude API responses. All 10 downstream consumers of these token counts are simple integer passthroughs, so correcting the source values automatically propagates accurate counts everywhere without any schema migration or additional code changes.",
+      "title": "Scope: Single File, Two Locations, ~4 Lines"
+    },
+    {
+      "file": ".helix/tickets/cmp8xp13800r3ks0uhwo2vmnd/runs/cmpbuq4mb002wml0uggvaklnx/ticket.md",
+      "line": 1,
+      "description": "This second run record (run ID cmpbuq4mb002wml0uggvaklnx) on the same branch confirms the implementation was carried forward consistently. The ticket description and research report are identical, reinforcing that the fix strategy did not change between runs: add `(usage.cache_creation_input_tokens ?? 0)` and `(usage.cache_read_input_tokens ?? 0)` to both token-accumulation expressions in `execute-workflow-step.mjs`. The nullish coalescing guards ensure backward compatibility with any API response objects that may not include cache fields.",
+      "title": "Second Run: Confirmed Implementation Plan"
+    },
+    {
+      "file": ".helix/tickets/cmp8xp13800r3ks0uhwo2vmnd/runs/cmpbuq4mb002wml0uggvaklnx/ticket.md",
+      "line": 40,
+      "description": "Post-fix, input token counts are expected to increase from the previously recorded ~2K–5K per run to ~1M–3M per run, which aligns with the actual Claude API billing units and restores a correct input-to-output ratio. Risk is assessed as Low: the change is purely additive (summing additional non-negative integer fields), cannot cause a count to decrease, and has no effect on control flow or side effects. This establishes the accurate measurement baseline required for all future usage reporting, cost attribution, and billing features on the platform.",
+      "title": "Expected Impact and Risk Assessment"
+    },
+    {
+      "file": ".helix/tickets/cmp8xp13800r3ks0uhwo2vmnd/runs/cmpbuq4mb002wml0uggvaklnx/ticket.md",
+      "line": 60,
+      "description": "With the two cache token fields added at both capture sites in `execute-workflow-step.mjs`, the data flow is: Claude API response → usage object (contains `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`) → corrected accumulator (now sums all three input-side fields) → stored run metrics → 10 downstream integer passthrough consumers (reporting, billing, dashboards). No other files required modification. The fix is minimal, targeted, and fully consistent with the existing code style and null-safety patterns already present in the file.",
+      "title": "Summary: Data Flow Remains Clean"
+    }
+  ]
+}
