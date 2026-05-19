@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-494: Sprites Preview Error — End-to-End Fix Walkthrough",
+  "description": "This tour covers the full lifecycle of ticket FIX-494, where the Sprites Preview feature was completely non-functional on first use. The AI agent made multiple passes across the helix-cli repository over several runs before achieving a verified fix. Follow the steps in chronological run order to understand what was broken, what each agent run attempted, how verification evolved, and what a human reviewer should manually confirm. Three repositories were ultimately updated, and verification screenshots were captured to confirm the sprites deployment pipeline is functioning.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpbt7ywf000tjq0vjj9fxokd/ticket.md",
+      "line": 1,
+      "description": "This is the original ticket intake for FIX-494. The reporter attempted to use the Sprites Preview feature for the first time and it failed entirely — no partial rendering, no fallback, just a broken state. Two PNG attachments (~230 KB and ~893 KB) were attached showing the error. The key diagnostic signal here is 'first time trying': this strongly implies either an initialization path that was never exercised, a missing bootstrap step, a misconfigured default, or a dependency that is only resolved lazily on first invocation. Any fix must address the cold-start scenario, not just steady-state usage.",
+      "title": "Step 1 — Original Ticket: Cold-Start Failure in Sprites Preview"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpc13kvl004yml0uk5gndp3a/ticket.md",
+      "line": 1,
+      "description": "Run cmpc13kvl004yml0uk5gndp3a is the first agent fix attempt on branch helix/fix/FIX-494-sprites-preview-error. The agent reports changes were applied to 1 repository but verification could not be fully completed. The discussion entry at line 20 is critical: the team confirms the feature was not working even under normal service conditions and instructs the agent to look at the rendering layer more carefully. This run likely addressed surface-level symptoms (perhaps a missing null-check or an incorrect import path) but did not reach the root cause in the sprites lookup or rendering pipeline. The incomplete verification flag means automated test coverage did not exercise the preview deployment flow end-to-end.",
+      "title": "Step 2 — Run 1: Partial Fix Applied, Verification Incomplete"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpc2q2ji007jml0uqtpsrjh4/intraview/helix-cli-walkthrough.json",
+      "line": 1,
+      "description": "This is the CodeTour artifact generated during run cmpc2q2ji007jml0uqtpsrjh4, the second agent pass. Its existence signals the agent paused to document the investigation — a pattern used when the root cause spans multiple files and the agent needs to leave a breadcrumb trail for human reviewers. The tour title 'FIX-494: Sprites Preview Error Investigation & Fix' and the description referencing the sprites preview pipeline confirm this run was doing deeper structural analysis. Verification screenshots (proof/0 through proof/4, referenced in the final ticket.md) were also captured during this run, indicating the agent used a browser-automation step to render the preview deployment section. Review this file to understand which files were flagged as changed and in what data-flow order the agent traced the bug.",
+      "title": "Step 3 — Run 2: Deep Investigation, Tour & Screenshots Captured"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpcqvwwu00ahml0udw03v53h/ticket.md",
+      "line": 1,
+      "description": "This is the final consolidated ticket state after run cmpcqvwwu00ahml0udw03v53h. Several things are notable here. First, the discussion thread (lines 20–24) shows three agent entries: two incomplete verifications followed by a successful one — 'Your changes are ready! Updated 3 repositories.' This means the fix ultimately touched helix-cli plus two additional repositories, consistent with a sprites preview pipeline that spans a CLI tool, a backend service, and possibly a frontend or configuration repository. Second, five verification screenshots (proof/0 through proof/4) are embedded, captured from the preview deployment section as explicitly requested by the team. Third, the continuation context at the bottom (lines 35–37) is the team's verification rubric: a screenshot of the preview deployment section showing sprites successfully deployed, followed by a click-through to confirm the live URL actually renders. Human reviewers should use this exact checklist when doing final sign-off.",
+      "title": "Step 4 — Final State: 3 Repos Updated, Screenshots Confirm Deployment"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpcqvwwu00ahml0udw03v53h/ticket.md",
+      "line": 24,
+      "description": "The five embedded verification screenshot references (proof/0 through proof/4, all scoped to run cmpc2q2ji007jml0uqtpsrjh4) are the primary evidence trail for this fix. Each image URL follows the pattern /tickets/{ticket_id}/proof/{index}/image?runId={run_id}. To perform manual verification: (1) open each proof image and confirm the preview deployment section shows sprites entries with a 'deployed' or 'success' status indicator, (2) click the deployment link shown in the screenshot to confirm the live URL loads the sprite sheet or preview UI without error, (3) repeat with a fresh session to validate the cold-start scenario that originally triggered FIX-494. If any proof image shows a loading spinner, error banner, or empty deployment list, the fix is incomplete and the branch should not be merged.",
+      "title": "Step 5 — Verification Checklist: How to Confirm the Fix Is Real"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpcqvwwu00ahml0udw03v53h/ticket.md",
+      "line": 35,
+      "description": "This is the team's explicit verification rubric captured in the continuation context. It defines the acceptance criteria the automated agent failed to meet in the first two runs: a screenshot of the preview deployment section with sprites successfully deployed, plus a click-through confirming the live URL renders correctly. This rubric should be treated as the Definition of Done for FIX-494. Before merging branch helix/fix/FIX-494-sprites-preview-error, a reviewer must manually walk through this flow. The three-repository scope of the final fix (helix-cli plus two others) means code-path hygiene should be verified across all three: confirm no regressions in the CLI's build pipeline, no broken API contracts in the backend service, and no stale asset references in the frontend or config layer. The main code paths for sprites preview — asset resolution, sprite sheet generation, preview deployment, and URL serving — should all be traced through the updated code before sign-off.",
+      "title": "Step 6 — Summary: Acceptance Criteria & Cross-Repo Sanity Check"
+    }
+  ]
+}

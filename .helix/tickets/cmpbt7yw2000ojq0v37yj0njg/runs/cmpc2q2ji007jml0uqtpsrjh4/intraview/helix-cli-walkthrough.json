@@ -1,0 +1,25 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-494: Sprites Preview Error Investigation & Fix",
+  "description": "This tour walks through the changes made to address ticket FIX-494, where the Sprites Preview feature was not working at all on first use. The AI agent applied changes to the helix-cli repository targeting the sprites preview pipeline. Follow along to understand what was broken, what was changed, and where to verify the fix manually since automated verification could not be fully completed.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpbt7ywf000tjq0vjj9fxokd/ticket.md",
+      "line": 1,
+      "description": "This is the original ticket context for FIX-494. The reporter encountered an error on their first attempt to use the new Sprites Preview feature — it was completely non-functional. Two PNG attachments (image.png, ~230 KB and ~893 KB) were provided showing the error state. This is the starting point for understanding the scope of the problem: it was a first-run failure, suggesting either an initialization issue, a missing dependency, or a broken rendering path in the sprites preview flow.",
+      "title": "Ticket Overview: Sprites Preview Not Working"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpc13kvl004yml0uk5gndp3a/ticket.md",
+      "line": 1,
+      "description": "This is the continuation run (cmpc13kvl004yml0uk5gndp3a) on branch helix/fix/FIX-494-sprites-preview-error. The Helix agent logged that changes were applied to 1 repository but verification could not be fully completed. The continuation context from the team confirms the feature was not working even under normal service conditions, and requests a thorough manual review of the look (likely the UI rendering layer or the sprite sheet lookup logic). This is a critical signal: automated checks passed structurally but the runtime behavior needs human eyes.",
+      "title": "Second Run: Agent Applied Changes"
+    },
+    {
+      "file": ".helix/tickets/cmpbt7yw2000ojq0v37yj0njg/runs/cmpc13kvl004yml0uk5gndp3a/ticket.md",
+      "line": 20,
+      "description": "The agent's discussion entry at line 20 explicitly states: 'Verification could not be fully completed — please review the changes manually.' Combined with the team's note that the feature was broken even under normal service conditions, this step is your reminder to: (1) spin up the sprites preview locally or in a dev environment, (2) trace the data flow from sprite asset loading through to the preview render output, and (3) confirm the fix resolves the first-run failure without introducing regressions in adjacent preview or asset-serving code paths. The major code paths should remain clean — validate that sprite metadata parsing, asset URL resolution, and the preview rendering pipeline all behave correctly end-to-end.",
+      "title": "Discussion Thread: Verification Gap"
+    }
+  ]
+}
