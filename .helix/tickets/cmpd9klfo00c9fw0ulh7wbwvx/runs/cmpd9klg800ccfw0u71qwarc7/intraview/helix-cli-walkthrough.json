@@ -1,0 +1,60 @@
+{
+  "title": "BLD-517: Switch hlx update from npm to GitHub main",
+  "description": "Tour of changes to rewire the hlx CLI update system from npm-registry semver comparison to GitHub-main SHA-based comparison.",
+  "steps": [
+    {
+      "file": "src/update/check.ts",
+      "line": 9,
+      "title": "GIT_INSTALL_SPEC replaces NPM_PACKAGE",
+      "description": "The npm package constant and functions (NPM_PACKAGE, fetchLatestVersion, isNewerVersion) are removed. A single GIT_INSTALL_SPEC constant is added, composed from existing CANONICAL_REPO_URL and CANONICAL_BRANCH constants. This is the canonical install spec used by perform.ts and error messages."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 15,
+      "title": "Install spec switched to git URL",
+      "description": "The install spec now uses GIT_INSTALL_SPEC (git+https://...#main) instead of the npm registry package. npm is still the installer tool (it runs prepare/tsc and links the bin), but the npm registry is never contacted."
+    },
+    {
+      "file": "src/update/version.ts",
+      "line": 27,
+      "title": "Version output includes commit SHA",
+      "description": "getPackageVersion() now reads installSource.commit from the user's config. When a SHA is available, it returns '<semver> (<short-sha>)' (e.g., '1.3.4 (c8620a5)'). Falls back to semver-only gracefully on any config error."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 55,
+      "title": "runUpdate() uses fetchRemoteSha() — fail-closed",
+      "description": "The explicit update command now fetches the remote main HEAD SHA via git ls-remote. On null return (network error), it exits non-zero immediately with a clear error message. This is the fail-closed behavior required by the ticket."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 66,
+      "title": "Migration detection for npm-sourced installs",
+      "description": "When the install source is missing, mode 'npm', or mode 'unknown', a one-line notice is printed before proceeding with the GitHub-based install. This transparently migrates legacy npm users on their first 'hlx update'."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 107,
+      "title": "Install source recorded as GitHub with SHA",
+      "description": "On successful update, saveConfig() records {mode: 'github', repo, branch, commit: remoteSha}. The commit field is the full 40-character SHA, used for future comparison and for the --version output."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 146,
+      "title": "checkAutoUpdate() — fail-open with SHA comparison",
+      "description": "The pre-command auto-update check now uses SHA comparison. On network failure, it emits a stderr warning and returns silently — never blocking command dispatch. This is the fail-open behavior required by the ticket."
+    },
+    {
+      "file": "src/index.ts",
+      "line": 122,
+      "title": "--version handler with SHA fallback note",
+      "description": "When the version string doesn't contain a parenthesized SHA (legacy installs), a note is printed to stderr suggesting 'hlx update' to refresh install metadata."
+    },
+    {
+      "file": "src/docs/cli-content.ts",
+      "line": 18,
+      "title": "Documentation updated to git+https install URL",
+      "description": "The canonical install command in all documentation surfaces now references git+https://github.com/Project-X-Innovation/helix-cli.git#main instead of the npm registry package."
+    }
+  ]
+}

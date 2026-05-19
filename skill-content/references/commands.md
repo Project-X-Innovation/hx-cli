@@ -90,7 +90,7 @@ hlx comments post [--ticket <id>] <message>
 
 ## hlx update
 
-Check for and apply CLI updates from npm.
+Check for and apply CLI updates from GitHub.
 
 ```
 hlx update                       Check for updates and apply if available

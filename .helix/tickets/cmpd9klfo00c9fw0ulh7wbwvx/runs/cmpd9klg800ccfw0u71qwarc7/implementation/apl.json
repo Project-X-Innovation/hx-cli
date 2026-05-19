@@ -1,0 +1,36 @@
+{
+  "questions": [
+    "Were all npm registry references removed from the update flow and replaced with GitHub SHA-based comparison?",
+    "Does the implementation correctly handle migration from npm-sourced installs?",
+    "Does the --version output include the short SHA when available?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All npm registry references are removed: NPM_PACKAGE constant, fetchLatestVersion() (npm view), and isNewerVersion() (semver comparison) are deleted from check.ts. GIT_INSTALL_SPEC is added, composed from existing CANONICAL_REPO_URL + CANONICAL_BRANCH constants. perform.ts uses GIT_INSTALL_SPEC. index.ts uses fetchRemoteSha() for both runUpdate() and checkAutoUpdate(). All documentation and error messages reference the git+https URL. grep confirms zero @projectxinnovation/helix-cli@latest references remain in user-facing text.",
+      "evidence": [
+        "src/update/check.ts — NPM_PACKAGE, fetchLatestVersion, isNewerVersion all removed; GIT_INSTALL_SPEC exported at line 9",
+        "src/update/perform.ts — imports GIT_INSTALL_SPEC at line 2, uses it at line 15",
+        "src/update/index.ts — imports fetchRemoteSha and GIT_INSTALL_SPEC; calls fetchRemoteSha() in both runUpdate() and checkAutoUpdate(); zero fetchLatestVersion or isNewerVersion calls",
+        "grep for @projectxinnovation/helix-cli@latest in src/ and skill-content/: zero matches"
+      ]
+    },
+    {
+      "answer": "Yes. In runUpdate(), when installSource is undefined, mode is 'npm', or mode is 'unknown', a migration notice is printed ('Switching install source from npm to GitHub main...'). The install then proceeds via performUpdate(), validation runs, and on success saveConfig() records {mode: 'github', repo: CANONICAL_REPO, branch: CANONICAL_BRANCH, commit: remoteSha}. This matches the ticket's transparent migration requirement.",
+      "evidence": [
+        "src/update/index.ts lines 66-73 — migration detection: checks !installSource || mode === 'npm' || mode === 'unknown'",
+        "src/update/index.ts lines 105-113 — saveConfig with mode: 'github', repo, branch, commit on success",
+        "src/update/index.ts lines 171-179 — same pattern in checkAutoUpdate()"
+      ]
+    },
+    {
+      "answer": "Yes. getPackageVersion() in version.ts now imports loadFullConfig() and reads installSource.commit from config. If a commit SHA of at least 7 characters exists, it returns '<semver> (<short-sha>)'. If missing or unreadable, it returns semver-only. The --version handler in src/index.ts prints a fallback note when the SHA is absent (no '(' in version string). In sandbox testing, 'node dist/index.js --version' outputs '1.3.4' with the stderr note 'Run hlx update to refresh install metadata.' as expected for a fresh install with no config SHA.",
+      "evidence": [
+        "src/update/version.ts lines 27-31 — reads config.installSource.commit, returns semver + short SHA when present",
+        "src/index.ts lines 122-128 — checks for '(' in version string, prints fallback note if absent",
+        "Sandbox output: '1.3.4\\nRun hlx update to refresh install metadata.'"
+      ]
+    }
+  ],
+  "statement": "Implementation complete. All 7 plan steps executed: (1) check.ts cleaned of npm infrastructure, GIT_INSTALL_SPEC added; (2) perform.ts switched to GIT_INSTALL_SPEC; (3) version.ts extended with SHA from config; (4) update index.ts rewired to SHA-based comparison with migration detection; (5) CLI entry point updated; (6) all documentation and error messages updated to git+https URL; (7) build verified — typecheck passes, build succeeds, all 51 existing tests pass, --version runs correctly.",
+  "followups": []
+}
