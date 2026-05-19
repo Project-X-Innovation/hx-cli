@@ -1,0 +1,18 @@
+{
+  "questions": [
+    "Q1: What CLI changes are needed for GOAL mode support?"
+  ],
+  "answers": [
+    {
+      "answer": "Minimal change: add 'GOAL' to the VALID_MODES array at create.ts line 12 and update the usage text at line 16 to include GOAL in the mode option list. The validation logic (lines 78-87) already normalizes to uppercase and checks against VALID_MODES, so no logic changes are needed. Goal-specific CLI commands (src/goals/) are deferred per the research report.",
+      "evidence": [
+        "create.ts line 12: const VALID_MODES = ['AUTO','BUILD','FIX','RESEARCH','EXECUTE'] as const",
+        "create.ts line 16: usage text shows --mode options",
+        "create.ts lines 78-87: mode validation normalizes to uppercase and checks VALID_MODES.includes()",
+        "Research report Section 8.3: goal-specific commands marked as 'New (deferred)'"
+      ]
+    }
+  ],
+  "statement": "The CLI needs a 2-line change: add 'GOAL' to the VALID_MODES array and update the usage text in src/tickets/create.ts. No new logic, validation, or commands are needed for MVP. The existing mode validation pattern handles the addition automatically.",
+  "followups": []
+}

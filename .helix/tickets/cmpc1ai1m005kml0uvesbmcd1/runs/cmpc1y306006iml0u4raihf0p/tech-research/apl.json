@@ -1,0 +1,18 @@
+{
+  "questions": [
+    "Q1: What is the scope of CLI changes needed for GOAL mode support?"
+  ],
+  "answers": [
+    {
+      "answer": "Minimal: add 'GOAL' to the VALID_MODES const tuple at create.ts line 12 and update the usage text at line 16. The validation logic (lines 78-87) normalizes input to uppercase and checks against VALID_MODES.join() — it handles additions automatically with no new code. Goal-specific CLI commands (hlx goals status, proposals, approve) are explicitly deferred per research report Section 8.3.",
+      "evidence": [
+        "create.ts line 12: const VALID_MODES = ['AUTO','BUILD','FIX','RESEARCH','EXECUTE'] as const — add 'GOAL'",
+        "create.ts line 16: usage text lists modes — add GOAL",
+        "create.ts lines 78-87: validation normalizes to uppercase, checks includes(), errors with VALID_MODES.join() — handles additions automatically",
+        "Research report Section 8.3: 'Future: src/goals/ — New (deferred)'"
+      ]
+    }
+  ],
+  "statement": "CLI changes are minimal: add GOAL to the VALID_MODES const array and usage text in create.ts. Two lines changed, zero new logic. Validation pattern handles the addition automatically. Goal-specific CLI commands are explicitly deferred per the research report.",
+  "followups": []
+}

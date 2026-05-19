@@ -1,0 +1,41 @@
+{
+  "problem": "Add GOAL to the CLI create command's VALID_MODES array and --mode help text so users can create GOAL tickets from the command line.",
+  "files": [
+    {
+      "path": "src/tickets/create.ts",
+      "why": "VALID_MODES array (line 12): currently ['AUTO','BUILD','FIX','RESEARCH','EXECUTE']. Needs GOAL addition. Usage text (line 16) shows mode options. Validation (lines 78-87) normalizes to uppercase and checks against VALID_MODES. Mode sent in API body (line 91)."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Ticket command router — dispatches to create.ts and other subcommands."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "VALID_MODES has 5 values with no GOAL",
+      "evidence": "src/tickets/create.ts line 12: const VALID_MODES = ['AUTO','BUILD','FIX','RESEARCH','EXECUTE'] as const"
+    },
+    {
+      "claim": "Mode validation normalizes to uppercase and checks against array",
+      "evidence": "src/tickets/create.ts lines 78-87: modeRaw → toUpperCase() → includes check → exit with error if invalid"
+    },
+    {
+      "claim": "Mode sent conditionally in request body",
+      "evidence": "src/tickets/create.ts line 91: ...(mode && { mode })"
+    },
+    {
+      "claim": "Build: tsc; Typecheck: tsc --noEmit; Test: tsc && node --test dist/**/*.test.js",
+      "evidence": "package.json scripts"
+    },
+    {
+      "claim": "No existing goal-related code in CLI source",
+      "evidence": "Grep for 'goal' and 'Goal' found no matches in active TypeScript source files"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "Should GOAL-specific CLI commands (e.g., hlx goals status, hlx goals proposals) be added in this ticket or deferred?",
+      "context": "Research report Section 8.3 marks src/goals/ commands as 'New (deferred)'. Only the create.ts VALID_MODES change is specified for this implementation."
+    }
+  ]
+}
