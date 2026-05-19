@@ -1,23 +1,30 @@
 {
   "questions": [
-    "Does the auto-resolved merge of tickets/index.ts preserve both ticket-side and staging-side changes?",
-    "Are there any remaining git conflict markers in the CLI source code?",
-    "Does the TypeScript build pass after the merge?"
+    "Did the conflict resolution preserve all library CLI commands?",
+    "Is the library module registration intact in src/index.ts?",
+    "Does SKILL.md document all library commands?"
   ],
   "answers": [
     {
-      "answer": "Yes. The merged file at src/tickets/index.ts (150 lines) correctly includes all 10 subcommand imports at lines 4-13 and a complete switch statement handling list, latest, get, create, update-description, rerun, continue, artifacts, artifact, and bundle. resolveTicket is properly used for ref-based commands. Both ticket-side (library commands integration) and staging-side changes are preserved.",
-      "evidence": ["src/tickets/index.ts:4-13 imports", "src/tickets/index.ts:43-148 switch statement with all 10 cases"]
+      "answer": "Yes. All 6 library source files under src/library/ are present and functional. The conflict in tickets/index.ts is unrelated to the library module.",
+      "evidence": [
+        "Glob found all 6 files: index.ts, list.ts, show.ts, comments.ts, comments-list.ts, comments-post.ts",
+        "TypeScript typecheck passed with zero errors"
+      ]
     },
     {
-      "answer": "No. A recursive grep for '<<<<<<<' across src/ returned zero matches. No conflict markers remain in any CLI source file.",
-      "evidence": ["grep -r '<<<<<<<' src/ returned no files"]
+      "answer": "Yes. Import at line 14, help text at lines 54-57, case handler at lines 98-102 all confirmed.",
+      "evidence": [
+        "Direct read of src/index.ts confirmed all three registration points"
+      ]
     },
     {
-      "answer": "Yes. Running tsc --noEmit completed with zero errors, confirming all imports resolve and types are correct after the merge.",
-      "evidence": ["tsc --noEmit exit code 0"]
+      "answer": "Yes. SKILL.md documents all 4 library commands (list, show, comments list, comments post) with usage examples, rating values, and --reply-to support.",
+      "evidence": [
+        "Grep found library commands in commands table (lines 48-51) and workflow section (lines 146-179)"
+      ]
     }
   ],
-  "statement": "The helix-cli merge from staging was auto-resolved cleanly. No conflict markers remain, all 10 subcommands are preserved in tickets/index.ts including the ticket-side library commands, the TypeScript build passes, and no code changes were needed from code review.",
+  "statement": "CLI review confirmed all library commands intact after staging merge. No code changes required.",
   "followups": []
 }

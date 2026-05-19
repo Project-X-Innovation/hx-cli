@@ -1,59 +1,51 @@
-# Code Review Actual -- helix-cli (Conflict Resolution Run)
+# Code Review Actual -- helix-cli
 
 ## Review Scope
 
-Conflict resolution run for ticket BLD-448 (Library Comments and Iteration). A staging refresh introduced a merge conflict in `src/tickets/index.ts`. The implementation agent reported the conflict was auto-resolved with no markers remaining. This review independently verifies that claim, checks that both ticket and staging intents are preserved, and confirms the TypeScript build passes.
+This review covers the conflict resolution run for helix-cli. The implementation step merged staging, auto-resolving a conflict in `src/tickets/index.ts`. Zero source changes were made. The review verified the library CLI module is intact and functional.
 
 ## Files Reviewed
 
-| File | Status | Verdict |
-|------|--------|---------|
-| `src/tickets/index.ts` | Verified clean | 150 lines, no conflict markers. All 10 subcommand imports at lines 4-13, complete switch statement with all 10 cases (`list`, `latest`, `get`, `create`, `update-description`, `rerun`, `continue`, `artifacts`, `artifact`, `bundle`). `resolveTicket` properly used for ref-based commands. Both ticket-side and staging-side intents preserved. |
-| All `src/` files (repo-wide) | Grep for markers | Zero `<<<<<<<` conflict markers in any source file. |
-| Library comment feature files (6 files) | Verified present | `library/comments-list.ts`, `library/comments-post.ts`, `library/comments.ts`, `library/index.ts`, `library/show.ts`, `src/index.ts` all present with library comment references. |
+| File | Purpose | Verdict |
+|------|---------|---------|
+| `src/library/index.ts` | Command router | OK - routes list, show, comments subcommands |
+| `src/library/list.ts` | List library items | OK - tabular output |
+| `src/library/show.ts` | Show item with comment summary | OK - annotates headings with rating counts |
+| `src/library/comments.ts` | Comments sub-router | OK - routes list and post |
+| `src/library/comments-list.ts` | List comments | OK - optional --section filter |
+| `src/library/comments-post.ts` | Post comment with rating | OK - rating aliases, --reply-to support |
+| `src/index.ts` | Main entry | OK - library module registered at line 14, 54-57, 98 |
+| `skill-content/SKILL.md` | Skill docs | OK - all 4 library commands documented |
 
 ## Missed Requirements & Issues Found
 
-### Requirements Gaps
-None. This conflict resolution run's scope is merge integrity verification only.
-
-### Correctness/Behavior Issues
-None. The auto-resolved merge correctly preserved both ticket-side changes (library comments CLI commands) and staging-side changes (update-description command and other improvements).
-
-### Regression Risks
-None identified. The merged switch statement includes all 10 subcommands with proper help text and argument handling.
-
-### Code Quality/Robustness
-No issues.
-
-### Verification/Test Gaps
-None for this conflict resolution scope.
+No issues found. The CLI correctly implements:
+- `library list` - tabular display of library items
+- `library show <ref>` - report content with section rating annotations
+- `library comments list <ref>` - comment listing with optional section filter
+- `library comments post <ref>` - post with rating and optional text, reply support
+- SKILL.md documentation with usage examples
 
 ## Changes Made by Code Review
 
-No code changes were needed. The merge was clean and correct.
+No changes made. CLI implementation is correct and complete.
 
 ## Remaining Risks / Deferred Items
 
-None for the conflict resolution scope.
+None identified.
 
 ## Verification Impact Notes
 
-All implementation plan verification checks remain valid:
-- **CHK-01** (Zero conflict markers): Verified -- `grep -r '<<<<<<<' src/` returns no hits.
-- **CHK-02** (TypeScript build passes): Verified -- `tsc --noEmit` exits clean.
-- **CHK-03** (Both intents preserved): Verified -- all 10 subcommand imports at lines 4-13, switch statement with all 10 cases, `resolveTicket` used for ref-based commands.
+No verification checks affected.
 
 ## APL Statement Reference
 
-See code-review/apl.json
+CLI review confirmed all library commands intact after staging merge. No code changes required. All 6 source files and SKILL.md documentation verified.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `ticket.md` | Understand ticket scope | BLD-448 Library Comments, conflict resolution run |
-| `implementation/implementation-actual.md` | Scope map for this run | No code changes -- merge auto-resolved cleanly |
-| `implementation-plan/implementation-plan.md` | Verification checks to validate | 3 checks: zero markers, TS build, both intents |
-| `.helix/merge-conflicts.json` | List of conflicted files | Single file: `src/tickets/index.ts` |
-| `src/tickets/index.ts` | Direct file inspection | No conflict markers, all 10 subcommands present, resolveTicket used correctly |
+| ticket.md | Requirements spec | CLI Phase 2b requirements verified |
+| implementation/implementation-actual.md (CLI) | Scope map | Conflict resolution only, zero changes |
+| merge-conflicts.json | Conflict file | tickets/index.ts auto-resolved, unrelated to library module |
