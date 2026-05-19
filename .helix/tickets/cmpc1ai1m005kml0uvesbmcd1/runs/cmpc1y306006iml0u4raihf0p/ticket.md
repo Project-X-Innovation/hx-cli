@@ -17,19 +17,6 @@ Implement: Goals: The pm agent x Ralph Loop
 
 How do goals come in as taking this AI Research as a functor and looking at the natural transformations? Where exactly do goals come in? Can we extend the categorical understanding?
 
-## Referenced Tickets
-
-1 ticket(s) referenced. Full artifacts materialized at `.helix-refs/`:
-
-### RSH-369: AI Research As A Functor On the Category Of Business Processes
-- Mode: RESEARCH | Status: REPORT_READY
-- Completed runs: 4 (run-1, run-2, run-3, run-4)
-- Materialized files: 86 artifacts
-- Path: `.helix-refs/RSH-369/`
-- Manifest: `.helix-refs/RSH-369/_manifest.json`
-
-Read the manifest file for a complete file listing, or browse the directory directly.
-
 ## Research Report
 
 # Goals: The PM Agent x Ralph Loop
