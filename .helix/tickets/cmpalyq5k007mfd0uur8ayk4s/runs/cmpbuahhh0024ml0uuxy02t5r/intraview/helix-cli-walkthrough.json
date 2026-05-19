@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-489: Approval Status — Pending Approvals Surfaced at Top of List",
+  "description": "This tour covers the changes introduced for ticket FIX-489 (Approval status). The core problem was that tickets waiting for peer approval were being rendered inline with all other tickets, making them easy to miss. The fix ensures they appear in a dedicated, prominent section at the top of the ticket list so every team member can see and act on them quickly — either approving or flagging as 'needs defense' to remove them from the queue. The tour walks through the agent run context files in chronological order, explaining the rationale and progression of the fix across two runs.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpalyq60007rfd0udul5ahdh/ticket.md",
+      "line": 1,
+      "description": "This file is the context record for the first Helix agent run (run ID: cmpalyq60007rfd0udul5ahdh) targeting ticket FIX-489. It establishes the working branch (`helix/fix/FIX-489-approval-status`) and confirms the target repository is `helix-cli`. This is the entry point for understanding what the agent was asked to do: fix the approval status display so that tickets awaiting peer approval are no longer buried in the general list.",
+      "title": "Overview: First Run Context"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpalyq60007rfd0udul5ahdh/ticket.md",
+      "line": 13,
+      "description": "The Description block defines the product requirement driving this change. Tickets in a 'waiting for peer approval' state must appear in a visually distinct section at the top of the ticket list — not interspersed with other tickets. Reviewers need to be able to take action (approve or mark 'needs defense') with minimal friction. When a ticket is flagged as 'needs defense', it should immediately leave the approval queue, keeping the list clean and actionable.",
+      "title": "Problem Statement: Approval Tickets Must Be Prominent"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 1,
+      "description": "This file records the second agent run (run ID: cmpbln4ad005ggz0uh7j85duy) for the same ticket. It carries forward the same ticket metadata and branch, confirming continuity with the first run. The second run was triggered because a follow-up sync was needed after the first run's changes were successfully merged.",
+      "title": "Second Run: Continuity and Context"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 20,
+      "description": "The Discussion section begins here and documents the agent's first completion message from the initial run, confirming that changes were applied across 2 repositories. Verification screenshots are referenced inline, providing proof of the UI state after the fix — specifically that approval-pending tickets now appear at the top of the list as required.",
+      "title": "First Run Completion: Changes Verified"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbln4ad005ggz0uh7j85duy/ticket.md",
+      "line": 27,
+      "description": "The second run's completion is also logged here. A git conflict was encountered when pushing to the `helix-global-client` branch — the remote already had newer commits that hadn't been accounted for locally, causing a push rejection. This is a housekeeping/sync issue on the follow-up run, not a failure of the core logic changes. The actual approval-status feature code was successfully merged in the first run and remains intact.",
+      "title": "Second Run: Git Conflict Explained"
+    },
+    {
+      "file": ".helix/tickets/cmpalyq5k007mfd0uur8ayk4s/runs/cmpbo48kk001nil0ugkiey9h8/intraview/helix-cli-walkthrough.json",
+      "line": 1,
+      "description": "This CodeTour file was generated as part of the third run (cmpbo48kk001nil0ugkiey9h8) to provide a human-readable walkthrough of all changes made across both prior runs. It serves as the canonical intraview artifact for FIX-489, summarising the data flow: ticket context files are created per-run, the agent reads the description to understand the requirement, applies code changes to surface approval-pending tickets, and logs completion with screenshot proof. The presence of this file confirms the full change lifecycle is documented and traceable.",
+      "title": "Summary: Intraview Tour and Code Path Integrity"
+    }
+  ]
+}
