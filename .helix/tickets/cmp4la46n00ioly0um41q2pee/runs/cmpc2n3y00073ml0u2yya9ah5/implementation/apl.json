@@ -1,17 +1,31 @@
 {
   "questions": [
-    "Were there actual merge conflicts in helix-cli that needed resolution?"
+    "Did the auto-merge resolve the conflict in src/tickets/index.ts without leaving markers?",
+    "Does the merged codebase compile without errors?",
+    "Are both ticket-side and staging-side intents preserved?"
   ],
   "answers": [
     {
-      "answer": "No. The merge-conflicts.json listed src/tickets/index.ts, but the file contained no conflict markers when inspected. The merge was auto-resolved cleanly by git.",
+      "answer": "Yes, zero conflict markers remain in the conflicted file or any source file in the repository.",
       "evidence": [
-        "Grep for conflict markers in src/tickets/index.ts returned no matches",
-        "Broad grep across all source files in src/ returned no conflict markers",
-        "npx tsc --noEmit exits 0"
+        "Grep for conflict markers in src/tickets/index.ts returned zero matches",
+        "Grep across all src/ files returned zero matches"
+      ]
+    },
+    {
+      "answer": "Yes, tsc completed with exit code 0 and zero errors (ran during npm install prepare script).",
+      "evidence": [
+        "npm install output showing successful tsc build via prepare script"
+      ]
+    },
+    {
+      "answer": "Yes, all 10 ticket subcommand imports (list, latest, get, create, rerun, continue, artifacts, artifact, bundle, update-description) are present at lines 4-13, and the library module is registered in src/index.ts at lines 14, 54-57, 98.",
+      "evidence": [
+        "grep output confirming all 10 subcommand imports",
+        "grep output confirming library module registration in src/index.ts"
       ]
     }
   ],
-  "statement": "Conflict resolution run for helix-cli completed. No actual conflict markers were present in the listed file (src/tickets/index.ts) or anywhere else in the repository. No code changes were needed. Typecheck passes.",
+  "statement": "Conflict resolution for helix-cli complete. Auto-merge resolved cleanly. Zero source changes needed. Build passed. All 10 ticket subcommands and library module registration preserved.",
   "followups": []
 }
