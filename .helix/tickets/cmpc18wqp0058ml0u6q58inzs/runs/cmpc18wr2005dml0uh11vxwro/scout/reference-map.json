@@ -1,0 +1,30 @@
+{
+  "problem": "Add GOAL to the CLI's ticket creation mode options. Minimal change: add GOAL to VALID_MODES array and update help text in create.ts.",
+  "files": [
+    {
+      "path": "src/tickets/create.ts",
+      "why": "Ticket creation: VALID_MODES array (line 12) lists [AUTO, BUILD, FIX, RESEARCH, EXECUTE]. Help text (line 16) shows mode options. Mode validation (lines 78-87) is case-insensitive. GOAL needs to be added to the array and help text."
+    },
+    {
+      "path": "src/tickets/index.ts",
+      "why": "Tickets subcommand index: help text (lines 15-31) shows --mode flag options in create usage. Needs GOAL added to the mode list in help text."
+    },
+    {
+      "path": "package.json",
+      "why": "Build: 'tsc'. Typecheck: 'tsc --noEmit'. Test: 'tsc && node --test dist/**/*.test.js'. No ORM, no migrations."
+    }
+  ],
+  "facts": [
+    "VALID_MODES at line 12 of create.ts: ['AUTO', 'BUILD', 'FIX', 'RESEARCH', 'EXECUTE']. No GOAL.",
+    "Help text at line 16: '--mode <AUTO|BUILD|FIX|RESEARCH|EXECUTE>'. Needs GOAL added.",
+    "Mode validation is case-insensitive (line 81: .toUpperCase()).",
+    "Mode parameter is optional (line 78: getFlag(args, '--mode')). When provided, validated against VALID_MODES.",
+    "CLI has no references to parentTicketId, EVALUATING, GOAL, or sideQuest in source code.",
+    "Build is pure TypeScript compilation (tsc). No ORM or migrations.",
+    "CLI top-level commands: login, token, org, tickets, inspect, comments, library, skill, update."
+  ],
+  "unknowns": [
+    "Whether future Goal-specific CLI commands (hlx goals create, hlx goals status) are needed for MVP or deferred.",
+    "Whether the tickets list/get commands need to display parentTicketId/childTickets relationships."
+  ]
+}
