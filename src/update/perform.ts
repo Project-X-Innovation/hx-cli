@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+import { extractTarGz } from "./extract.js";
 import { validateStaged } from "./validate.js";
 
 const STAGING_BASE = join(homedir(), ".hlx", "staging");
@@ -121,10 +122,7 @@ export async function performStagedUpdate(
 
     // ---- Extract ----
     try {
-      execSync(`tar -xzf "${tarballPath}" -C "${stagingDir}"`, {
-        stdio: "pipe",
-        timeout: 30_000,
-      });
+      extractTarGz(tarballPath, stagingDir);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: `Extraction failed: ${msg}` };

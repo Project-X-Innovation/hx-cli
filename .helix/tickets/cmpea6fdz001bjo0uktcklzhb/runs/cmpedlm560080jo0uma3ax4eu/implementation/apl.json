@@ -1,51 +1,33 @@
 {
   "questions": [
-    "Were all 8 implementation steps completed as planned?",
-    "Do all quality gates pass (typecheck, build, tests, CLI --version)?",
-    "Are all npm install -g git+https references removed from the codebase?",
-    "Does the update module use GitHub REST API with staged download-validate-swap?"
+    "Does the new extractTarGz function correctly replace the execSync tar call without breaking the error contract?",
+    "Does the implementation use only node:* built-in modules with zero third-party dependencies?",
+    "Do all 5 extraction test cases pass, including the colon-in-path test that validates the original Windows GNU tar failure mode?",
+    "Does npm run build and npm test pass with no regressions to existing tests?",
+    "Is the execSync import retained in perform.ts only for the copyDirRecursive EXDEV fallback (not for tar)?"
   ],
   "answers": [
     {
-      "answer": "All 8 implementation steps were completed: (1) build-release.yml created, (2) auto-tag.yml deleted, (3) check.ts rewritten with GitHub REST API and auth token discovery, (4) validate.ts rewritten for staged directory validation, (5) perform.ts rewritten with staged download-extract-validate-swap mechanism, (6) index.ts updated with new orchestration flow and GitHub auth error messaging, (7) documentation updated in 4 files to remove npm install references, (8) all quality gates pass.",
-      "evidence": [
-        ".github/workflows/build-release.yml created with push-to-main trigger, contents: write, concurrency group, build/test/tarball/release steps",
-        ".github/workflows/auto-tag.yml deleted - confirmed file does not exist",
-        "src/update/check.ts exports fetchLatestRelease() using api.github.com, getGitHubToken() for auth discovery",
-        "src/update/validate.ts exports validateStaged() checking dist/index.js existence and --version",
-        "src/update/perform.ts exports performStagedUpdate() with staging dir, tar extraction, rename-based swap, backup/rollback",
-        "src/update/index.ts uses fetchLatestRelease, performStagedUpdate, explicit auth error with GITHUB_TOKEN/GH_TOKEN/gh auth login",
-        "src/docs/cli-content.ts, src/skill/show.ts, src/skill/paths.ts updated to remove npm install references"
-      ]
+      "answer": "Yes. The extractTarGz function is called at perform.ts:125 inside the same try/catch block (lines 124-129). It throws on error, which is caught and converted to { success: false, error: 'Extraction failed: ...' } — identical error contract to the prior execSync call.",
+      "evidence": ["src/update/perform.ts lines 123-129", "src/update/extract.ts lines 65-141"]
     },
     {
-      "answer": "All quality gates pass: npx tsc --noEmit exits 0 with no errors, npm run build exits 0, npm test exits 0 with all 51 tests passing, node dist/index.js --version outputs '1.3.4'.",
-      "evidence": [
-        "npx tsc --noEmit completed with no output (exit code 0)",
-        "npm run build completed with exit code 0",
-        "npm test: 51 tests passed, 0 failed, 0 skipped",
-        "node dist/index.js --version outputs '1.3.4'"
-      ]
+      "answer": "Yes. extract.ts imports only node:zlib, node:fs, and node:path. extract.test.ts imports only node:test, node:assert, node:fs, node:path, node:os, and node:zlib. No third-party modules are used anywhere.",
+      "evidence": ["grep '^import' src/update/extract.ts shows only node:zlib, node:fs, node:path", "grep '^import' src/update/extract.test.ts shows only node:* modules"]
     },
     {
-      "answer": "Zero npm install -g git+https references remain in source code, skill content, or workflow files. Grep across src/, skill-content/, and .github/ all return zero matches. GIT_INSTALL_SPEC constant has been removed.",
-      "evidence": [
-        "grep 'npm install -g git+https' across src/ returns 0 matches",
-        "grep 'npm install -g git+https' across skill-content/ returns 0 matches",
-        "grep 'npm install -g git+https' across .github/ returns 0 matches",
-        "grep 'GIT_INSTALL_SPEC' across src/ returns 0 matches"
-      ]
+      "answer": "Yes. All 5 tests pass: (1) representative CI tarball extraction with content verification, (2) colon-in-path extraction succeeds, (3) corrupt tarball throws, (4) empty archive is handled gracefully, (5) PAX headers are skipped and subsequent file is extracted correctly.",
+      "evidence": ["node --test dist/update/extract.test.js output: 5 tests, 5 pass, 0 fail"]
     },
     {
-      "answer": "The update module uses the GitHub REST API (GET /repos/{owner}/{repo}/releases/tags/latest) via native fetch() for release discovery, replacing git ls-remote. The staged update mechanism downloads the tarball to ~/.hlx/staging/<sha>/, extracts via system tar, validates with validateStaged() (entrypoint existence + --version check), then does a rename-based swap with .bak backup directories for rollback.",
-      "evidence": [
-        "check.ts line 56: fetch('https://api.github.com/repos/Project-X-Innovation/helix-cli/releases/tags/latest')",
-        "perform.ts line 15: STAGING_BASE = join(homedir(), '.hlx', 'staging')",
-        "perform.ts line 44: safeRename with EXDEV fallback and Windows retry",
-        "validate.ts line 14: validateStaged() checks dist/index.js and runs --version with HLX_SKIP_UPDATE_CHECK=1"
-      ]
+      "answer": "Yes. npm run build exits 0. npm test runs all 56 tests (51 existing + 5 new) with 0 failures. node dist/index.js --version outputs '1.3.4'.",
+      "evidence": ["npm test output: tests 56, pass 56, fail 0", "npm run build exits cleanly", "node dist/index.js --version outputs 1.3.4"]
+    },
+    {
+      "answer": "Yes. grep -n 'execSync' src/update/perform.ts shows only two matches: line 1 (import) and line 34 (copyDirRecursive function). No tar invocation remains.",
+      "evidence": ["grep -n execSync src/update/perform.ts: line 1 import, line 34 copyDirRecursive"]
     }
   ],
-  "statement": "Implementation complete. All 8 plan steps executed: build-release.yml CI workflow created, auto-tag.yml deleted, src/update/ module rewritten (check.ts, validate.ts, perform.ts, index.ts) with GitHub REST API and staged download-validate-swap mechanism, documentation updated in 4 files. All quality gates pass: typecheck, build, 51 tests, CLI --version. Zero npm install -g git+https references remain. publish.yml preserved unchanged. Fail-open (auto-update) / fail-closed (manual update) behavior preserved. Explicit GitHub auth error messaging implemented.",
+  "statement": "Implementation complete. The execSync tar call at perform.ts:124 has been replaced with an in-process extractTarGz function using only Node.js built-in modules (node:zlib, node:fs, node:path). This eliminates the dependency on any external tar binary, resolving the Windows GNU tar failure where drive-letter colons are interpreted as remote-host syntax. The error contract is preserved exactly. Five test cases cover representative extraction, colon-in-path (original failure mode), corrupt input, empty archive, and PAX header handling. All 56 tests pass, the build succeeds, and no third-party dependencies were added.",
   "followups": []
 }

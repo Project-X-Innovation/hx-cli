@@ -1,158 +1,111 @@
-# Implementation Actual — BLD-527: Replace hlx self-update with GitHub release assets
+# Implementation Actual — BLD-527 (Continuation): Replace tar extraction with in-process JS library
 
 ## Summary of Changes
 
-Replaced the `hlx update` and auto-update mechanism to use prebuilt GitHub Release assets instead of `npm install -g git+https://...#main`. Three areas changed: (1) CI workflows — new `build-release.yml` publishing a prebuilt tarball on every `main` merge, `auto-tag.yml` deleted; (2) the `src/update/` module rewritten to implement staged download-validate-swap using the GitHub REST API; (3) documentation in 4 files updated to remove all `npm install -g git+https://...` references.
+Replaced the `execSync('tar -xzf ...')` call at `src/update/perform.ts:124` with a new in-process `extractTarGz()` function in `src/update/extract.ts` that uses only Node.js built-in modules (`node:zlib`, `node:fs`, `node:path`). This eliminates the dependency on an external `tar` binary that caused `hlx update` to fail on Windows when GNU tar (from Git for Windows) is first in PATH — GNU tar interprets drive-letter colons (`C:`) as remote-host syntax. Added 5 targeted tests covering representative extraction, the original failure mode (colon-in-path), corrupt input, empty archives, and PAX extended headers. Zero third-party dependencies added. Error contract preserved exactly.
 
 ## Files Changed
 
 | File | Why Changed | Review Hotspot |
 |------|-------------|----------------|
-| `.github/workflows/build-release.yml` | **New.** CI workflow triggered on push to `main` — builds, tests, creates tarball, publishes as GitHub Release under rolling `latest` tag using `GITHUB_TOKEN` with `contents: write`. | CI/CD — review workflow permissions, concurrency, tarball contents, and tag naming (must not match `v*`). |
-| `.github/workflows/auto-tag.yml` | **Deleted.** Removed auto-tag workflow that pushed `v{version}` tags on every `main` merge, chaining to npm publish. | N/A — deletion only. |
-| `src/update/check.ts` | **Rewritten.** Replaced `git ls-remote` with GitHub REST API (`GET /repos/{owner}/{repo}/releases/tags/latest`). Added `getGitHubToken()` auth discovery chain. Removed `GIT_INSTALL_SPEC` constant. New exports: `ReleaseInfo`, `ReleaseCheckResult`, `fetchLatestRelease()`, `getGitHubToken()`. `isUpdateAvailable()` now async. | **Shared public API** — `fetchLatestRelease` and types are consumed by `index.ts`. Auth token chain is a security-relevant code path. |
-| `src/update/validate.ts` | **Rewritten.** Replaced npm-path-dependent validation (`npm root -g` + `@projectxinnovation/helix-cli/dist/index.js`) with staged directory validation. New export: `validateStaged(stagingDir)`. | **Shared utility** — consumed by `perform.ts`. Validates staged candidate before swap. |
-| `src/update/perform.ts` | **Rewritten.** Replaced `npm install -g` with staged tarball download → extract → validate → rename-based swap. New exports: `performStagedUpdate()`, `getInstallRoot()`. Implements backup/rollback with `.bak` directories, EXDEV cross-filesystem fallback, and Windows retry logic. | **Critical path** — this is the core update mechanism. Swap logic, rollback, and cleanup are high-scrutiny areas. Uses `import.meta.url` for install root discovery. |
-| `src/update/index.ts` | **Updated.** Rewired orchestration to use `fetchLatestRelease()` and `performStagedUpdate()`. Removed `GIT_INSTALL_SPEC` import. Added explicit GitHub auth error messaging (GITHUB_TOKEN, GH_TOKEN, gh auth login). Updated recovery messages to point to `hlx update` and GitHub Releases instead of npm. | **Orchestration** — fail-open (auto-update) / fail-closed (manual update) behavior must be preserved. Error messages are user-facing. |
-| `src/docs/cli-content.ts` | **Updated.** Replaced Installation section npm install command with GitHub release download instructions. Replaced "Stale Symlink After Update" troubleshooting with "CLI Not Working After Update" pointing to `hlx update` and GitHub release. | User-facing documentation. |
-| `src/skill/show.ts` | **Updated.** Replaced npm install recovery message with `hlx update` and GitHub release URL. | Error message path — only triggers when SKILL.md is missing from installation. |
-| `src/skill/paths.ts` | **Updated.** Replaced npm install recovery message with `hlx update` and GitHub release URL. | Error message path — only triggers when skill-content/ is missing from installation. |
+| `src/update/extract.ts` | **New.** In-process tar extraction function using `node:zlib` (gunzipSync) and manual tar header parsing. Handles USTAR format, PAX extended headers, checksum validation, and path traversal protection. | **New shared utility** — consumed by `perform.ts`. Core of the bug fix. Tar parsing logic (~140 lines) is security-relevant (path traversal checks at lines 107-119). |
+| `src/update/perform.ts` | **Modified.** Replaced `execSync('tar -xzf ...')` at line 124 with `extractTarGz(tarballPath, stagingDir)`. Added import for `extractTarGz`. Error handling structure (try/catch returning `{ success: false, error }`) preserved exactly. | **Critical path** — this is the staged-update orchestration. Only the extraction block (lines 123-129) changed. The `execSync` import is retained for `copyDirRecursive` (line 34, EXDEV fallback). |
+| `src/update/extract.test.ts` | **New.** 5 test cases using programmatic tarball creation (no fixture files). Covers: (1) CI-shaped tarball extraction with content verification, (2) colon-in-path destination (original GNU tar failure mode), (3) corrupt tarball throws, (4) empty archive handled gracefully, (5) PAX extended header skipping. | Tests use only `node:*` imports. `createTestTarGz()` helper builds valid USTAR tarballs with correct checksums. |
 
 ## Steps Executed
 
-### Step 1: Create CI Workflow for Prebuilt Release Artifacts
-Created `.github/workflows/build-release.yml` with:
-- Trigger: `on: push: branches: [main]`
-- Permissions: `contents: write`
-- Concurrency: `group: build-release, cancel-in-progress: true`
-- Steps: checkout → setup-node@v4 (Node 22) → npm ci → npm test → generate build-metadata.json → create tarball (dist/, skill-content/, package.json, build-metadata.json, excluding test files) → delete existing `latest` release → create new `latest` release with tarball asset
-- Tag `latest` does NOT match `v*`, so publish.yml will NOT trigger
+### Step 1: Create `src/update/extract.ts`
 
-### Step 2: Remove Auto-Tag Workflow
-Deleted `.github/workflows/auto-tag.yml`.
+Created `src/update/extract.ts` with a single exported function `extractTarGz(tarballPath: string, destDir: string): void` that:
+1. Reads the `.tgz` file with `readFileSync`
+2. Decompresses with `gunzipSync` to get raw tar buffer
+3. Parses tar entries in a loop over 512-byte blocks:
+   - Reads header fields: name (bytes 0-99), size (bytes 124-135), typeflag (byte 156), prefix (bytes 345-499)
+   - Validates checksums (bytes 148-155) against computed sum
+   - Handles typeflags: `'5'` (directory), `'0'`/`'\0'` (regular file), `'x'`/`'g'` (PAX headers — skipped)
+   - Detects end-of-archive via two consecutive 512-byte zero blocks
+4. Includes path traversal protection: strips leading `/`, rejects `..` components, validates resolved path starts with destination
 
-### Step 3: Rewrite Remote SHA Check and Auth Discovery
-Rewrote `src/update/check.ts`:
-- Removed `GIT_INSTALL_SPEC` constant
-- Kept `CANONICAL_REPO_URL`, `CANONICAL_BRANCH`, `CANONICAL_REPO`
-- Added `getGitHubToken()`: `GITHUB_TOKEN` → `GH_TOKEN` → `gh auth token` → null
-- Added `fetchLatestRelease()`: calls GitHub REST API, handles 401/403 (auth required), 404 (no release), parses `target_commitish` and `assets[0].url`
-- Added types: `ReleaseInfo`, `ReleaseCheckResult`
-- Updated `isUpdateAvailable()` to use `fetchLatestRelease()` (now async)
+### Step 2: Replace `execSync` tar call in `src/update/perform.ts`
 
-### Step 4: Rewrite Staged Validation
-Rewrote `src/update/validate.ts`:
-- Removed all npm-specific logic (`npm root -g`, npm package path)
-- New `validateStaged(stagingDir)`: checks `dist/index.js` exists, checks `package.json` exists, runs `node <dir>/dist/index.js --version` with `HLX_SKIP_UPDATE_CHECK=1`
+Modified `src/update/perform.ts` with two changes:
+1. Added `import { extractTarGz } from "./extract.js";` at line 14
+2. Replaced the extraction block (originally lines 122-131) from `execSync('tar -xzf ...')` to `extractTarGz(tarballPath, stagingDir)` inside the same try/catch structure
 
-### Step 5: Rewrite Update Execution with Staged Download+Swap
-Rewrote `src/update/perform.ts`:
-- Removed `npm install -g` call and `GIT_INSTALL_SPEC` import
-- Added `getInstallRoot()` using `import.meta.url` (same pattern as version.ts and paths.ts)
-- Added staging directory management: `~/.hlx/staging/<sha>/`
-- New `performStagedUpdate(assetUrl, commitSha, token?)`:
-  - Downloads tarball via `fetch()` with `Accept: application/octet-stream`
-  - Extracts via `tar -xzf` using `execSync`
-  - Validates via `validateStaged()`
-  - Rename-based swap: live dirs → `.bak`, staged dirs → live
-  - EXDEV fallback: copy+delete instead of rename
-  - Windows retry: `Atomics.wait()` for 500ms then retry
-  - Rollback: restores `.bak` dirs on any swap failure
-  - Cleanup: removes staging and backup dirs
+The `execSync` import at line 1 is retained because `copyDirRecursive` at line 34 still uses it for the EXDEV cross-filesystem fallback. This is not a tar invocation.
 
-### Step 6: Update Orchestration and Error Messages
-Updated `src/update/index.ts`:
-- Imports: `fetchLatestRelease`, `getGitHubToken` from check.ts; `performStagedUpdate` from perform.ts; removed `fetchRemoteSha`, `GIT_INSTALL_SPEC`, `performUpdate`, `validateInstall`
-- `runUpdate()`: calls `fetchLatestRelease()`, handles auth-required with explicit guidance, calls `performStagedUpdate()`, updated recovery messages
-- `checkAutoUpdate()`: same flow changes, fail-open preserved, calls `fetchLatestRelease()` and `performStagedUpdate()`
-- `isCanonicalSource()`: unchanged
+### Step 3: Create `src/update/extract.test.ts`
 
-### Step 7: Update Documentation and Error Recovery Messages
-- `src/docs/cli-content.ts`: Installation section now points to GitHub release download. Troubleshooting now says "CLI Not Working After Update" with `hlx update` and GitHub release URL.
-- `src/skill/show.ts`: Recovery message points to `hlx update` and GitHub release URL
-- `src/skill/paths.ts`: Recovery message points to `hlx update` and GitHub release URL
-- `skill-content/references/commands.md`: Already says "Check for and apply CLI updates from GitHub" — no changes needed
+Created 5 test cases following the project's established patterns (`node:test` describe/it, `node:assert` strict, `mkdtempSync` for isolation, `afterEach` cleanup):
 
-### Step 8: Quality Gates and CLI Verification
-All gates pass (see Verification Commands below).
+1. **Representative CI tarball**: Creates a `.tgz` with `dist/index.js`, `dist/update/perform.js`, `skill-content/SKILL.md`, `package.json`, `build-metadata.json`. Verifies all files exist with correct content.
+2. **Colon-in-path (original failure mode)**: Extracts to a directory named `staging:test` (on non-Windows). This directly validates the original GNU tar failure is eliminated.
+3. **Corrupt tarball**: Passes garbage bytes. Asserts `extractTarGz` throws (which `performStagedUpdate` catches and converts to `{ success: false, error }`).
+4. **Empty archive**: Creates a valid `.tgz` with only end-of-archive markers. Verifies no error and no files created.
+5. **PAX extended headers**: Creates a tarball with a PAX header entry (typeflag `'x'`) before a regular file. Verifies the file is extracted and the PAX header data is skipped.
+
+### Step 4: Run quality gates
+
+Ran `npm run build`, `npm test`, and `node dist/index.js --version` to confirm all pass.
 
 ## Verification Commands Run + Outcomes
 
 | Command | Exit Code | Result |
 |---------|-----------|--------|
 | `npx tsc --noEmit` | 0 | No type errors |
-| `npm run build` | 0 | Compiled to dist/ |
-| `npm test` | 0 | 51 tests passed, 0 failed |
+| `npm run build` | 0 | Compiled to dist/; `dist/update/extract.js` and `dist/update/extract.test.js` generated |
+| `npm test` | 0 | 56 tests passed (51 existing + 5 new), 0 failed |
 | `node dist/index.js --version` | 0 | Output: `1.3.4` |
-| `grep 'npm install -g git+https' src/` | 0 matches | No references in source |
-| `grep 'npm install -g git+https' skill-content/` | 0 matches | No references in skill content |
-| `grep 'npm install -g git+https' .github/` | 0 matches | No references in workflows |
-| `grep 'GIT_INSTALL_SPEC' src/` | 0 matches | Constant fully removed |
-| `grep 'git ls-remote' src/update/check.ts` | 0 matches | Replaced with GitHub REST API |
-| `grep 'npm root' src/update/validate.ts` | 0 matches | Replaced with staged directory validation |
-| `grep 'npm install -g' src/update/perform.ts` | 0 matches | Replaced with staged download+swap |
-| `ls .github/workflows/auto-tag.yml` | 2 (not found) | Confirmed deleted |
-| `ls .github/workflows/` | 0 | `build-release.yml`, `publish.yml` present |
-| `ls dist/update/` | 0 | All compiled files present: check.js, index.js, perform.js, validate.js, version.js |
+| `node --test dist/update/extract.test.js` | 0 | 5 tests passed, 0 failed |
+| `grep -rn 'execSync.*tar\|spawnSync.*tar' src/update/` | 0 matches (code) | Only match is a JSDoc comment in extract.ts:55 describing the prior implementation |
+| `grep -n 'execSync' src/update/perform.ts` | 2 matches | Line 1 (import) and line 34 (copyDirRecursive) — no tar usage |
+| `grep -n '^import' src/update/extract.ts` | 3 lines | Only `node:zlib`, `node:fs`, `node:path` — zero third-party imports |
+| `ls dist/update/extract.js dist/update/extract.test.js dist/update/perform.js` | 0 | All three files exist |
 
 ## Test/Build Results
 
 - **TypeScript typecheck:** PASS — zero errors
 - **Build:** PASS — `tsc` compiled to `dist/`
-- **Tests:** PASS — 51/51 tests passed (flag parsing, ticket resolution, skill operations)
+- **Tests:** PASS — 56/56 tests passed (flags: 14, resolve-ticket: 18, skill: 19, extract: 5)
 - **CLI --version:** PASS — outputs `1.3.4`
 
 ## Deviations from Plan
 
-1. **Windows retry mechanism:** Plan suggested shelling out to `ping` for delay. Used `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500)` instead — cleaner synchronous wait without shell dependency, avoids ESM `require` issues.
-2. **No `require()` in ESM:** Initial implementation attempted dynamic `require("node:child_process")` for the Windows retry path. This doesn't work in ESM modules (`"type": "module"` in package.json). Fixed by using `Atomics.wait()`.
+None. Implementation follows the plan exactly in all four steps.
 
 ## Known Limitations / Follow-ups
 
-1. **End-to-end update test requires CI run:** Cannot test the full update flow until the `build-release.yml` workflow runs on GitHub and creates the `latest` release. This is noted in the plan pre-conditions (CHK-08 dependency on live release).
-2. **No update module unit tests:** The `src/update/` module has zero test files. Adding tests was noted as a gap in the product spec but is not in scope for this ticket.
-3. **Publish.yml preserved unchanged:** Verified by re-reading the file — identical to original content.
+1. **`copyDirRecursive` still shells out (perform.ts:33):** Uses `execSync('xcopy'/'cp -R')` for the EXDEV fallback. Not a tar invocation — explicitly out of scope per acceptance criteria #3. Could be replaced with `fs.cpSync()` (stable since Node 16.7) in a future pass.
+2. **No end-to-end update test with real GitHub release:** The extraction tests validate the parsing and file-writing behavior. A full end-to-end test of `hlx update` against a live release requires CI infrastructure, which is outside this ticket's scope.
+3. **Tar format edge cases:** The parser handles the exact features present in our CI-produced tarballs (USTAR format, short paths, PAX headers). Exotic tar features (GNU long name extensions, sparse files, extended attributes) are not handled — these are not produced by our CI and would fail closed with a checksum mismatch error.
 
 ## Verification Plan Results
 
 | Check ID | Outcome | Evidence |
 |----------|---------|----------|
-| CHK-01 | **pass** | `npx tsc --noEmit` exits 0, no type errors |
-| CHK-02 | **pass** | `npm run build` exits 0; `dist/update/` contains check.js, perform.js, validate.js, index.js, version.js |
-| CHK-03 | **pass** | `npm test` exits 0; 51 tests passed, 0 failed |
-| CHK-04 | **pass** | `node dist/index.js --version` exits 0, outputs `1.3.4` |
-| CHK-05 | **pass** | `ls .github/workflows/auto-tag.yml` returns "No such file or directory"; `ls .github/workflows/` shows only `build-release.yml` and `publish.yml` |
-| CHK-06 | **pass** | Re-read `.github/workflows/publish.yml` — content identical to original (triggers on `v*` tags, OIDC trusted publishing, `npm publish *.tgz --provenance`) |
-| CHK-07 | **pass** | `build-release.yml` verified: triggers on `push: branches: [main]`, permissions `contents: write`, concurrency `build-release` with `cancel-in-progress: true`, steps include npm ci, npm test, build-metadata.json generation, tarball creation, `gh release delete latest` + `gh release create latest` with tag `latest` (not `v*`) |
-| CHK-08 | **pass** | Grep for `npm install -g git+https` across src/, skill-content/, .github/ returns 0 matches. Grep for `GIT_INSTALL_SPEC` in src/ returns 0 matches. |
-| CHK-09 | **pass** | No `git ls-remote` in check.ts. `fetchLatestRelease()` exported, calls `api.github.com`. `getGitHubToken()` exported with GITHUB_TOKEN → GH_TOKEN → gh auth token chain. |
-| CHK-10 | **pass** | `performStagedUpdate()` exported in perform.ts. Stages to `~/.hlx/staging/<sha>/`, downloads via fetch, extracts via tar, calls validateStaged(), does rename-based swap with `.bak` backup, cleans up on success, restores on failure. No `npm install -g` in file. |
-| CHK-11 | **pass** | `validateStaged()` exported in validate.ts. Takes directory path, checks `dist/index.js` existence, checks `package.json` existence, runs `node <dir>/dist/index.js --version` with `HLX_SKIP_UPDATE_CHECK=1`. No `npm root` in file. |
-| CHK-12 | **pass** | Auth failure handling in index.ts mentions `GITHUB_TOKEN`, `GH_TOKEN`, and `gh auth login` (lines 62-64). |
+| CHK-01 | **pass** | `npm run build` exits 0. `ls dist/update/extract.js dist/update/extract.test.js dist/update/perform.js` confirms all three files exist. |
+| CHK-02 | **pass** | `npm test` exits 0. Output shows 56 tests, 56 pass, 0 fail. All 5 new `extractTarGz` tests pass alongside all 51 existing tests. |
+| CHK-03 | **pass** | `grep -rn 'execSync.*tar\|spawnSync.*tar' src/update/` — only a JSDoc comment match, no code invocations. `grep -n execSync src/update/perform.ts` shows only line 1 (import) and line 34 (copyDirRecursive). `grep -n '^import' src/update/extract.ts` shows only `node:zlib`, `node:fs`, `node:path`. |
+| CHK-04 | **pass** | `node dist/index.js --version` exits 0, outputs `1.3.4`. |
+| CHK-05 | **pass** | `node --test dist/update/extract.test.js` output shows all 5 tests pass: representative tarball, colon-in-path, corrupt input, empty archive, PAX header handling. |
 
-All 12 required checks pass. Self-verification is complete.
+All 5 required checks pass. Self-verification is complete.
 
 ## APL Statement Reference
 
-Implementation complete. All 8 plan steps executed: build-release.yml CI workflow created, auto-tag.yml deleted, src/update/ module rewritten (check.ts, validate.ts, perform.ts, index.ts) with GitHub REST API and staged download-validate-swap mechanism, documentation updated in 4 files. All quality gates pass: typecheck, build, 51 tests, CLI --version. Zero npm install -g git+https references remain. publish.yml preserved unchanged. Fail-open (auto-update) / fail-closed (manual update) behavior preserved. Explicit GitHub auth error messaging implemented.
+Implementation complete. The `execSync` tar call at `perform.ts:124` has been replaced with an in-process `extractTarGz` function using only Node.js built-in modules (`node:zlib`, `node:fs`, `node:path`). This eliminates the dependency on any external tar binary, resolving the Windows GNU tar failure where drive-letter colons are interpreted as remote-host syntax. The error contract is preserved exactly. Five test cases cover representative extraction, colon-in-path (original failure mode), corrupt input, empty archive, and PAX header handling. All 56 tests pass, the build succeeds, and no third-party dependencies were added. `package.json` is unchanged — zero runtime dependencies maintained.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `ticket.md` | Primary requirements and acceptance criteria | Staged update required; failed updates must never brick CLI; `latest` tag must not trigger npm publish; explicit auth messaging required |
-| `implementation-plan/implementation-plan.md` | Step-by-step implementation guide and verification plan | 8 steps with exact file changes, function signatures, and 12 verification checks |
-| `implementation-plan/apl.json` | Structured implementation dependencies | Step ordering confirmed, zero blocking dependencies |
-| `diagnosis/diagnosis-statement.md` | Root cause analysis | 4 root causes: source-based install requires build tools, destructive npm install -g, auto-tag chains to publish, no prebuilt artifact |
-| `product/product.md` | Product vision, use cases, success criteria | MVP features, fail-open/fail-closed split, never-brick principle |
-| `tech-research/tech-research.md` | Architecture decisions and API design | Option A (GitHub Releases + rolling `latest` tag), rename-based swap, build-metadata.json, auth chain, cross-platform considerations |
-| `scout/reference-map.json` | File inventory and evidence | 5 update files, 2 workflows, 6 npm references, zero tests |
-| `src/update/check.ts` (original) | Current remote SHA check | `git ls-remote` and `GIT_INSTALL_SPEC` to replace |
-| `src/update/perform.ts` (original) | Current update executor | `npm install -g` mechanism to replace |
-| `src/update/validate.ts` (original) | Current post-update validation | npm-path-dependent validation to replace |
-| `src/update/index.ts` (original) | Current orchestration | Fail-open/fail-closed patterns to preserve |
-| `src/update/version.ts` | Version display | Confirmed `import.meta.url` pattern; no changes needed |
-| `src/lib/config.ts` | Config and InstallSource type | `InstallSource` already has `mode: 'github'` — no type changes needed |
-| `.github/workflows/auto-tag.yml` (original) | Auto-tag workflow | Confirmed to delete |
-| `.github/workflows/publish.yml` | npm publish workflow | Confirmed to preserve unchanged |
-| `package.json` | Project configuration | Zero production deps, prepare → tsc, ESM, Node >= 18 |
+| `ticket.md` (continuation context) | Scope, requirements, acceptance criteria, explicit constraints | Extraction-only fix; remove tar binary dependency; preserve error contract; add test; no CI changes |
+| `implementation-plan/implementation-plan.md` | Step-by-step implementation guide and verification plan | 4 steps: extract.ts, perform.ts modification, extract.test.ts, quality gates; 5 verification checks |
+| `diagnosis/diagnosis-statement.md` | Root cause analysis | GNU tar colon interpretation is root cause at perform.ts:124; single call-site replacement |
+| `tech-research/tech-research.md` | Architecture decision | node-tar rejected (no node_modules in release tarball); built-in modules chosen; sync buffer approach |
+| `scout/reference-map.json` | File inventory and evidence | Bug at perform.ts:124; 3 other non-tar child_process calls; tarball shape; validation contract |
+| `product/product.md` | Product spec | Open Q#2 about runtime dep answered by tech-research |
+| `src/update/perform.ts` (lines 1-247) | Direct inspection of bug and orchestration | execSync tar at line 124; error catch at 128-131; copyDirRecursive at line 33 |
+| `src/skill/skill.test.ts` (lines 1-50) | Test pattern reference | node:test describe/it; node:assert strict; mkdtempSync; afterEach cleanup |
+| `package.json` | Dependency and build constraints | Zero runtime deps; ESM; tsc-only build; node:test runner |
+| `tsconfig.json` | Build config | ES2022 target, Node16 modules, strict, output to dist/ |
