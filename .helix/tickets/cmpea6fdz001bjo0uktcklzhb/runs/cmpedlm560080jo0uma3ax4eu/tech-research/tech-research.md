@@ -1,323 +1,372 @@
-# Tech Research — BLD-527: Replace hlx self-update with GitHub release assets
+# Tech Research — BLD-527 (Continuation): Replace tar extraction with in-process JS library
 
 ## Technology Foundation
 
-- **Runtime:** Node.js >= 18 (package.json `engines.node`). Native `fetch()` is available for HTTP requests.
-- **Language:** TypeScript 6.x compiled to ES2022, ESM (`"type": "module"`).
-- **Module resolution:** Node16 (`tsconfig.json`).
-- **Package structure:** Zero production dependencies. `devDependencies` only: `@types/node` and `typescript`.
-- **Platform targets:** macOS, Linux, Windows 10+ (same as current `hlx` user base).
-- **CI:** GitHub Actions. Existing workflows: `auto-tag.yml` (to be removed), `publish.yml` (to be preserved).
-- **Config storage:** `~/.hlx/config.json` with read-merge-write pattern via `saveConfig()`.
+- **Runtime**: Node.js >= 18 (declared in `package.json` engines)
+- **Module system**: ESM (`"type": "module"`, ES2022 target, Node16 resolution)
+- **Build**: TypeScript 6.x compiled via `tsc` to `dist/`
+- **Test runner**: Node.js built-in `node:test` (describe/it) + `node:assert` (strict)
+- **Current runtime dependencies**: Zero — entire codebase uses only `node:*` built-in modules and relative path imports
+- **Release tarball contents**: `dist/`, `skill-content/`, `package.json`, `build-metadata.json` only (no `node_modules/`)
 
 ## Architecture Decision
 
+### Problem
+
+The extraction step at `src/update/perform.ts:124` uses `execSync('tar -xzf ...')` which fails on Windows when GNU tar (from Git for Windows) is first in PATH. GNU tar interprets drive-letter colons (`C:\...`) as remote-host syntax. The fix must replace this with in-process extraction.
+
+### Critical Constraint Discovered: No `node_modules/` in Release Tarball
+
+Evidence collected in this step reveals a constraint that was not addressed in the diagnosis:
+
+1. **Every import in the entire codebase** is from `node:*` built-in modules or relative paths — zero third-party imports (confirmed via grep of all `src/` imports).
+2. **The CI workflow** (`.github/workflows/build-release.yml:37-43`) creates the tarball with only `dist/`, `skill-content/`, `package.json`, `build-metadata.json` — no `node_modules/`.
+3. **No bundler** is used — the build step is solely `tsc` (TypeScript compiler), which produces individual `.js` files that reference external packages via bare specifiers (e.g., `import { x } from 'tar'`).
+4. **GitHub-release-installed copies** have no `node_modules/` directory, so bare specifier imports would fail at runtime with `ERR_MODULE_NOT_FOUND`.
+
+This means adding an npm package like `tar` (node-tar) as a `dependencies` entry in `package.json` would **not resolve at runtime** for the primary install path (GitHub release) without either: (a) bundling the dependency into `dist/` using a tool like esbuild, or (b) including `node_modules/` in the release tarball (CI workflow change, explicitly out of scope).
+
 ### Options Considered
 
-#### Option A: GitHub Releases with Rolling `latest` Tag (CHOSEN)
+#### Option A: `tar` (node-tar) as runtime dependency — REJECTED
 
-Every push to `main` produces a tarball uploaded as a GitHub Release asset under the tag `latest`. The updater queries the GitHub REST API for this release, compares commit SHAs, and downloads the asset if an update is available.
+Add `tar` (isaacs/node-tar v7.5+) to `dependencies`. Replace `execSync` with `tar.x({ file: tarballPath, C: stagingDir })`.
 
 **Pros:**
-- Release assets are permanent — no expiration.
-- Tag `latest` does NOT match `v*` in `publish.yml`, so no accidental npm publish.
-- `GITHUB_TOKEN` with `contents: write` can create/manage releases — no custom secret needed.
-- One API call (`GET /repos/{owner}/{repo}/releases/tags/latest`) returns both the commit SHA and asset download URL.
-- Works for both public and private repos (with auth for private).
-- Well-established pattern for rolling-latest releases (confirmed via GitHub Actions documentation).
+- Battle-tested — used by npm itself for all package extraction
+- TypeScript-native (rewritten in TS for v7), ESM/CJS hybrid via tshy
+- Security-hardened against filesystem-based attacks
+- High-level API: `tar.x({ file, C })` is a near drop-in replacement for `execSync('tar -xzf ... -C ...')`
+- Runtime deps are all pure JS: @isaacs/fs-minipass, chownr, minipass, minizlib, yallist
+
+**Cons — CRITICAL:**
+- **Runtime resolution failure**: The compiled output would contain `import { extract } from 'tar'`. Node.js resolves bare specifiers via `node_modules/`. The release tarball has no `node_modules/`. For GitHub-release-installed copies (the primary install path), the import would fail with `ERR_MODULE_NOT_FOUND`.
+- To fix the resolution, we would need either:
+  - **(a) Bundle with esbuild**: Add esbuild as devDep, change the build script to inline `tar` into dist output. Risks: esbuild may break `import.meta.url` (used at `perform.ts:24` for install root resolution); changes the build architecture beyond the extraction fix scope.
+  - **(b) Include `node_modules/tar` in the tarball**: Requires CI workflow file change (`.github/workflows/build-release.yml`), which is explicitly out of scope.
+- Adds 5 transitive runtime dependencies to a zero-dependency project
+- Breaks the project's established zero-dependency pattern
+
+#### Option B: `tar-stream` + manual file writing — REJECTED
+
+Use tar-stream (mafintosh/tar-stream, Context7 benchmark 90.6) for streaming tar parsing, paired with `node:zlib` for gzip and manual `node:fs` calls for file writing.
+
+**Pros:**
+- Lower-level streaming API, well-maintained
+- High Context7 reputation
 
 **Cons:**
-- Force-moves the `latest` tag on every build (minor git history noise, but the tag is non-semantic).
-- Concurrent main pushes could race (mitigated by GitHub Actions' per-branch concurrency).
+- Same runtime resolution blocker as Option A (no `node_modules/` in release tarball)
+- Requires manual gzip pipe (`createGunzip()` → tar-stream extractor)
+- Requires manual directory creation and file writing per entry
+- Significantly more implementation code than node-tar's high-level API
+- Two packages needed (tar-stream for parsing, manual code for fs operations)
 
-#### Option B: GitHub Actions Artifacts (REJECTED)
+#### Option C: Node.js built-in modules — `node:zlib` + manual tar parsing — CHOSEN
 
-Upload the tarball as a workflow artifact via `actions/upload-artifact`.
+Implement extraction entirely with Node.js built-in modules: `node:zlib` for gzip decompression, manual tar header parsing for file/directory extraction, `node:fs` for writing.
 
-**Rejected because:**
-- Actions artifacts expire after 90 days by default (configurable max varies by plan).
-- Downloading artifacts requires authenticated GitHub API access, even for public repos.
-- No stable URL — artifacts are identified by workflow run ID, requiring multi-step API discovery.
-- Not suitable as a permanent update channel.
+**Pros:**
+- **Zero new dependencies** — preserves the project's zero-dependency design
+- **No build system changes** — `tsc` remains the only build step
+- **No CI changes** — tarball shape and workflow are completely unmodified
+- **No runtime resolution issues** — only `node:*` imports, always available in any Node.js environment
+- **Smallest change surface** — new helper function + replacement of one execSync call
+- **Platform-independent by design** — no external binary, no PATH dependency, no path-quoting issues
+- **Consistent with codebase patterns** — all 50+ existing imports are `node:*` or relative paths
 
-#### Option C: Pre-release with Semantic Version Tag (REJECTED)
+**Cons:**
+- Implements tar parsing (~60-80 lines) rather than using a library
+- Less battle-tested than node-tar for general tar edge cases
+- No third-party security hardening for path traversal
 
-Create a pre-release with a tag like `v0.0.0-main.YYYYMMDD`.
+**Mitigations for cons:**
+- The tarball is created by our own CI from known, simple content: short paths (longest: ~30 chars), no symlinks, no special attributes, no long filenames. Exotic tar format edge cases are not a realistic concern.
+- Path traversal protection is straightforward: resolve target path and verify it starts with the destination directory. This is a 3-line check.
+- Comprehensive test coverage validates the parser against representative payloads including error cases.
 
-**Rejected because:**
-- The tag matches `v*`, which would trigger `publish.yml` and attempt npm publish.
-- Would require modifying `publish.yml` to skip pre-releases, adding coupling.
+### Chosen Option: C — Node.js built-in modules
 
-#### Option D: GitHub Packages (npm) (REJECTED)
+**Rationale:** Option C is the only approach that works within all project constraints simultaneously:
 
-Publish a pre-release package to GitHub Packages on each main push.
+| Constraint | Option A (node-tar) | Option B (tar-stream) | Option C (built-in) |
+|-----------|---------------------|----------------------|---------------------|
+| No external binary | Yes | Yes | Yes |
+| Resolves at runtime (no node_modules) | **No** | **No** | Yes |
+| No build system changes | **No** (needs bundler) | **No** (needs bundler) | Yes |
+| No CI workflow changes | Yes | Yes | Yes |
+| Zero new dependencies | No (6 transitive) | No (3+ transitive) | Yes |
+| Consistent with codebase patterns | No (first 3rd-party import) | No (first 3rd-party import) | Yes |
 
-**Rejected because:**
-- GitHub Packages npm registry requires auth for all installs from private orgs.
-- Adds complexity over a simple tarball download.
-- Re-introduces npm as a dependency in the update path, contrary to ticket requirements.
-
-### Chosen Option: A — GitHub Releases with Rolling `latest` Tag
-
-**Rationale:** Simplest mechanism that satisfies all ticket requirements. Permanent assets, standard token, clean separation from the npm publish path, and a well-established pattern.
+Options A and B both fail the runtime resolution constraint because the release tarball does not include `node_modules/`. Resolving this requires either bundling (build system change) or CI changes — both exceed the stated scope. Option C leverages the same `node:*`-only import pattern used throughout the entire codebase.
 
 ## Core API/Methods
 
-### CI Workflow (build-release.yml)
+### New function: `extractTarGz(tarballPath: string, destDir: string): void`
 
-New workflow triggered on `push to main`:
+**Location**: New file `src/update/extract.ts` (preferred for testability and separation of concerns)
 
-1. Checkout, setup Node.js, `npm ci`, `npm test` (reuses existing build/test scripts).
-2. Generate `build-metadata.json` with `{ "commit": "$GITHUB_SHA", "builtAt": "<ISO timestamp>" }`.
-3. Create tarball: `tar -czf helix-cli.tgz dist/ skill-content/ package.json build-metadata.json` (excluding test files).
-4. Publish release:
-   - Delete existing `latest` release and tag: `gh release delete latest --yes --cleanup-tag || true`
-   - Create new release: `gh release create latest helix-cli.tgz --title "Latest main build" --notes "Commit: $GITHUB_SHA" --target $GITHUB_SHA`
-5. Permissions: `contents: write` (sufficient for `gh release create`).
-6. Concurrency: `group: build-release, cancel-in-progress: true` to prevent race conditions on rapid pushes.
+**Approach — synchronous buffer-based parsing:**
+1. Read the `.tgz` file: `readFileSync(tarballPath)`
+2. Decompress: `gunzipSync(compressed)` to get raw tar data as a `Buffer`
+3. Parse tar entries in a loop over 512-byte blocks:
+   - Read 512-byte header block at current offset
+   - If block is all zeros, check next block — two consecutive zero blocks mark end of archive
+   - Parse header fields:
+     - `name`: bytes 0-99 (null-terminated ASCII string)
+     - `prefix`: bytes 345-499 (USTAR prefix, prepended to name with `/` separator)
+     - `size`: bytes 124-135 (octal ASCII number)
+     - `typeflag`: byte 156 (single character: `'0'`/`'\0'` = file, `'5'` = directory, `'x'` = PAX extended header, `'g'` = global PAX header)
+   - **Typeflag `'5'` (directory)**: `mkdirSync(fullPath, { recursive: true })`
+   - **Typeflag `'0'` or `'\0'` (regular file)**: Ensure parent directory exists, write `size` bytes of data from the next blocks
+   - **Typeflag `'x'` or `'g'` (PAX headers)**: Skip `size` bytes of data, then continue to next entry
+   - Advance offset past data blocks (padded to 512-byte boundary: `Math.ceil(size / 512) * 512`)
+4. **Path safety**: Resolve the target path with `path.resolve(destDir, entryName)` and verify it starts with `path.resolve(destDir)` — reject path traversal attempts
 
-### Updater Module Rewrite (src/update/)
+### Modified call site in `performStagedUpdate`
 
-**check.ts** — Replace `fetchRemoteSha()`:
-- New function `fetchLatestRelease()` calls `GET https://api.github.com/repos/Project-X-Innovation/helix-cli/releases/tags/latest`.
-- Uses Node.js native `fetch()` (available on Node >= 18).
-- Returns `{ commitSha, assetUrl, assetId } | null`.
-- Auth: passes `Authorization: Bearer <token>` header if token is available; omits header for public repos.
-- Remove `GIT_INSTALL_SPEC` constant (no longer needed).
-- Keep `CANONICAL_REPO_URL`, `CANONICAL_REPO`, `CANONICAL_BRANCH` constants for reference.
-
-**perform.ts** — Replace `performUpdate()`:
-- New function `performStagedUpdate(assetUrl, commitSha, token?)`:
-  1. Create staging dir: `~/.hlx/staging/<commitSha>/`
-  2. Download tarball via `fetch()` to staging dir.
-  3. Extract via `tar -xzf <tarball> -C <staging-dir>` using `execSync`.
-  4. Call `validateStaged(stagingDir)` (from validate.ts).
-  5. If valid: execute rename-based swap at the install root.
-  6. If invalid: clean up staging, return failure.
-  7. Clean up staging and backup dirs on success.
-- Returns `{ success: boolean; error?: string }`.
-
-**validate.ts** — Replace `validateInstall()`:
-- New function `validateStaged(stagingDir)`:
-  1. Check `<stagingDir>/dist/index.js` exists.
-  2. Run `node <stagingDir>/dist/index.js --version` with `HLX_SKIP_UPDATE_CHECK=1`.
-  3. Verify non-zero output and exit code 0.
-- Returns `{ valid: boolean; error?: string }`.
-
-**index.ts** — Update orchestration:
-- `runUpdate()`: Call `fetchLatestRelease()` instead of `fetchRemoteSha()`. Call `performStagedUpdate()` instead of `performUpdate()`. Update error messages to remove npm references.
-- `checkAutoUpdate()`: Same flow changes, fail-open behavior preserved.
-- Remove `GIT_INSTALL_SPEC` import.
-
-**version.ts** — No changes needed. Already resolves package root via `import.meta.url` and reads commit SHA from config.
-
-### Install Root Discovery
-
-The updater determines its own install location using `import.meta.url`:
+Replace the extraction block at `src/update/perform.ts` lines 122-131:
 
 ```
-import.meta.url → file:///path/to/dist/update/perform.js
-dirname(fileURLToPath(...)) → /path/to/dist/update/
-join(..., '..', '..') → /path/to/  ← package install root
+// Current (lines 122-131):
+try {
+  execSync(`tar -xzf "${tarballPath}" -C "${stagingDir}"`, {
+    stdio: "pipe", timeout: 30_000,
+  });
+} catch (err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  return { success: false, error: `Extraction failed: ${msg}` };
+}
+
+// Replacement:
+try {
+  extractTarGz(tarballPath, stagingDir);
+} catch (err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  return { success: false, error: `Extraction failed: ${msg}` };
+}
 ```
 
-This pattern is already used in `version.ts:18` and `paths.ts:18`. It works regardless of whether the CLI was installed via npm global, direct download, or other means.
+The error-handling structure (catch -> return `{ success: false, error }`) is preserved exactly. The `extractTarGz` function throws on error, which is caught by the existing try/catch.
 
-### GitHub Auth Token Discovery
+### Import changes in `perform.ts`
 
-Token discovery order (try each, use first non-empty):
-1. `process.env.GITHUB_TOKEN`
-2. `process.env.GH_TOKEN`
-3. `execSync('gh auth token', { timeout: 5000 }).toString().trim()` — if `gh` CLI is installed.
-4. `null` — proceed without auth (works for public repos).
-
-Auth is optional for public repos. For private repos, the updater must have a token.
+- Add: `import { extractTarGz } from "./extract.js";`
+- The `execSync` import at line 1 **must remain** because `copyDirRecursive` (line 33) still uses it for the EXDEV fallback. This is not a tar invocation and is explicitly out of scope per acceptance criteria #3.
 
 ## Technical Decisions
 
-### Decision 1: Replace git ls-remote with GitHub REST API
+### Decision 1: Synchronous vs streaming extraction
 
-**Chosen:** Single GitHub REST API call for release metadata.
+**Chosen: Synchronous** (`readFileSync` + `gunzipSync` + buffer parsing)
 
-**Why:** The updater already needs the GitHub API for asset discovery/download. Consolidating SHA comparison into the same call removes the `git` binary dependency from user machines, reduces to a single network round-trip, and simplifies error handling.
+Rationale:
+- The existing extraction code is synchronous (`execSync` with a 30s timeout)
+- The tarball is small: CLI payload is < 5MB compressed, < 15MB uncompressed
+- `gunzipSync` + buffer-based tar parsing is simpler than setting up a streaming pipeline with proper error handling
+- No memory concern: a 15MB buffer is trivial for Node.js (V8 heap default is 1.5GB+)
+- Maintains the same blocking behavior as the original code
 
-**Rejected alternative:** Keep `git ls-remote` for SHA, add GitHub API only for download. This would maintain two separate network dependencies and require `git` on user machines.
+Rejected alternative: Streaming pipeline (`createReadStream` -> `createGunzip` -> transform stream). Adds significant complexity (stream error propagation, backpressure handling) with no benefit for this payload size.
 
-### Decision 2: Rename-based Swap with Backup Directories
+### Decision 2: Separate file vs inline function
 
-**Chosen:** Rename live `dist/` → `dist.bak/`, then rename staged `dist/` → `dist/`. Repeat for `skill-content/` and `package.json`. On any failure, restore from `.bak`.
+**Chosen: New file `src/update/extract.ts`**
 
-**Why:** `fs.renameSync` is atomic on POSIX (within same filesystem). On Windows, renames succeed when no file handles are open. Node.js closes file handles after module import, so the running CLI does not hold locks on its own `.js` files. The `.bak` directories provide a clean rollback path if any swap step fails.
+Rationale:
+- Easier to unit test in isolation: import `extractTarGz` directly without mocking the full update flow
+- Keeps `perform.ts` focused on orchestration (download -> extract -> validate -> swap -> cleanup)
+- The tar parsing logic is self-contained (~60-80 lines) and logically distinct
+- Test file becomes `src/update/extract.test.ts`, following the project pattern of co-located test files
 
-**Rejected alternative:** In-place overwrite file by file. No atomicity, no rollback, partial failure leaves a broken install.
+### Decision 3: PAX extended header handling
 
-**Rejected alternative:** Copy all files to a new directory and update a symlink. Adds symlink management complexity and requires admin/elevated permissions on some systems.
+**Chosen: Skip PAX headers gracefully**
 
-### Decision 3: System tar for Extraction
+Rationale:
+- GNU tar on Ubuntu (used in CI, `build-release.yml:17` specifies `ubuntu-latest`) defaults to POSIX.1-2001 (pax) format
+- For our simple payload (short paths, normal UIDs, no special attributes), PAX extended headers are unlikely but possible
+- Correct handling: when typeflag is `'x'` or `'g'`, read and discard the data blocks, then proceed to the next entry which contains the actual file/directory
+- This is a ~5-line addition that prevents silent extraction failure on unexpected header types
 
-**Chosen:** Shell out to `tar -xzf` via `execSync`.
+### Decision 4: Path traversal protection
 
-**Why:** The `tar` command is available on macOS (built-in), Linux (built-in), and Windows 10+ (built-in since build 17063, Dec 2017). Using the system `tar` avoids adding a production dependency to a zero-dependency project. The existing codebase already uses `child_process` for external commands (`spawnSync` for npm, `execSync` for git).
+**Chosen: Basic validation — reject entries that escape the destination directory**
 
-**Rejected alternative:** Add the `tar` npm package as a production dependency. This breaks the zero-dependency property and adds supply-chain surface area.
+Rationale:
+- We control the tarball source (our own CI), so malicious content is not a realistic threat
+- But defense-in-depth is good practice for any extraction code
+- Implementation: `const resolved = path.resolve(destDir, name); if (!resolved.startsWith(path.resolve(destDir))) throw new Error(...)`
+- Also strip leading `/` from entry names and reject entries containing `..` path components
+- This matches the essential checks that node-tar performs
 
-**Rejected alternative:** Implement tar parsing in pure JS. Over-engineering for this use case.
+### Decision 5: USTAR prefix handling
 
-### Decision 4: build-metadata.json in Tarball
+**Chosen: Support USTAR prefix field (bytes 345-499)**
 
-**Chosen:** Embed `{ "commit": "<sha>", "builtAt": "<ISO timestamp>" }` in the tarball.
+Rationale:
+- The USTAR format (identified by magic `"ustar\0"` at bytes 257-262) splits long paths into a `prefix` (bytes 345-499) and `name` (bytes 0-99)
+- Full path is `prefix + "/" + name` when prefix is non-empty
+- Our paths are short (longest: `dist/update/perform.js` = 23 chars), so prefix is likely always empty
+- But supporting it is a 3-line addition (`if (prefix) fullName = prefix + '/' + name`) and prevents a class of bugs if the tarball format changes
 
-**Why:** Allows offline commit SHA identification from the installed package, independent of the config file. The updater writes the commit SHA to config after successful install, but `build-metadata.json` provides a fallback and a source-of-truth for the build identity. Also useful for `hlx --version` to report the commit SHA even before config is written.
+### Decision 6: `execSync` import retention in `perform.ts`
 
-### Decision 5: No Changes to InstallSource Type
+**Chosen: Keep the `execSync` import**
 
-**Chosen:** Keep the existing `InstallSource` type unchanged.
+Rationale:
+- `copyDirRecursive` at `perform.ts:33` uses `execSync` for the EXDEV cross-filesystem fallback (`xcopy` on Windows, `cp -R` on POSIX)
+- This is NOT a tar invocation — acceptance criteria #3 says "no remaining external **tar** invocation"
+- The import must remain for `copyDirRecursive` to function
 
-**Why:** The type already has `mode: 'github' | 'npm' | 'unknown'`, `repo`, `branch`, and `commit` fields — all fields needed by the new updater. The `mode: 'github'` value correctly describes the new update source. No new fields are required.
+### Decision 7: Test tarball creation approach
 
-Evidence: `src/lib/config.ts:5-11` — `InstallSource` type already includes `{ mode: 'github', repo?, branch?, commit?, version? }`.
+**Chosen: Programmatic tarball creation using `node:zlib` (gzipSync) + manual tar block construction**
 
-### Decision 6: Concurrency Control in CI Workflow
-
-**Chosen:** Add `concurrency: { group: build-release, cancel-in-progress: true }` to the workflow.
-
-**Why:** If multiple pushes to `main` happen in rapid succession (e.g., merge queue), only the latest build should produce the release. Cancelling in-progress builds for the same group prevents race conditions where two builds try to delete/create the `latest` release simultaneously.
+Rationale:
+- Tests need to create representative `.tgz` payloads to extract
+- Using the same built-in modules (in reverse — creating instead of parsing) keeps tests self-contained with zero test-only dependencies
+- A helper function `createTestTarGz(entries)` builds tar blocks manually:
+  - 512-byte header per entry (name, size, typeflag, checksum)
+  - Data blocks padded to 512 bytes
+  - Two zero blocks to terminate
+  - Wrapped in `gzipSync()`
+- This mirrors the extraction approach and ensures end-to-end coverage
+- Alternative (rejected): Check in a fixture `.tgz` file. Opaque binary fixtures are harder to maintain and review.
 
 ## Cross-Platform Considerations
 
-| Concern | macOS / Linux | Windows 10+ |
-|---------|---------------|-------------|
-| `tar` availability | Built-in | Built-in since build 17063 |
-| File rename atomicity | Atomic (same FS) | Succeeds when no open handles |
-| File locking on `.js` files | No issue — Node closes handles after import | No issue — same behavior |
-| `~/.hlx/staging/` path | `$HOME/.hlx/staging/` | `%USERPROFILE%\.hlx\staging\` (Node `homedir()`) |
-| `gh` CLI for token fallback | Common but optional | Common but optional |
-| Native `fetch()` | Node >= 18 | Node >= 18 |
+| Platform | Current Behavior | After Fix |
+|----------|-----------------|-----------|
+| **Windows + Git for Windows** | **BROKEN** — GNU tar interprets `C:` as remote host: `Cannot connect to C: resolve failed` | Fixed — no external tar binary invoked; `gunzipSync` + buffer parsing is platform-independent |
+| **Windows + only bsdtar** | Works (bsdtar handles Windows paths) | Fixed — extraction is now in-process regardless |
+| **macOS** | Works (BSD tar) | No regression — same extraction result via different mechanism |
+| **Linux** | Works (GNU tar, no drive letters) | No regression — same extraction result via different mechanism |
 
-**Mitigation for Windows rename edge cases:** If `fs.renameSync` fails on Windows (e.g., antivirus holds a handle), retry once after 500ms. If still failing, abort with guidance: "Close any programs accessing the hlx installation directory and retry."
+Key cross-platform notes:
+- `gunzipSync` and `readFileSync` are platform-independent Node.js built-in APIs
+- Tar archives always store paths with forward slashes (`/`) regardless of creation platform
+- `path.join()` and `mkdirSync()` correctly handle platform-specific separators when writing to the filesystem
+- The test for paths containing colons (mimicking Windows drive letters) validates the original failure mode is eliminated
 
 ## Performance Expectations
 
-| Operation | Expected Duration | Notes |
-|-----------|-------------------|-------|
-| GitHub API release query | 200-500ms | Single HTTPS request |
-| SHA comparison (local config read) | <5ms | File read from `~/.hlx/config.json` |
-| Tarball download | 1-5s | Tarball ~500KB-1MB (dist/ + skill-content/), depends on network |
-| Tarball extraction | <1s | Small archive, system tar |
-| Staged validation (--version) | 200-500ms | Spawns node process |
-| Rename-based swap | <50ms | Filesystem renames |
-| **Total update time** | **~3-8s** | Down from 30-120s+ (current npm install -g) |
+| Metric | Current (`execSync tar`) | After (in-process) |
+|--------|-------------------------|---------------------|
+| Extraction time (~5MB .tgz) | ~200-500ms (process spawn + extraction) | ~50-100ms (no process spawn overhead) |
+| Memory peak | Low (external process) | Low (~15MB buffer for uncompressed tar, freed after extraction) |
+| CPU profile | Spawns external process | Single-threaded, brief buffer operations |
 
-Auto-update adds ~0.5-1s to command startup when a check is needed (API call + SHA comparison). No download occurs if already up to date.
+The in-process approach should be **faster** than `execSync` because it eliminates process spawn overhead. Memory usage is trivially small for this payload size.
 
 ## Dependencies
 
-### New Dependencies
+### Runtime dependencies added: None
 
-None. The implementation uses only Node.js built-in APIs:
-- `fetch()` — native in Node >= 18 (HTTP requests)
-- `fs` — file operations (rename, exists, mkdir, read, write)
-- `child_process` — `execSync` for tar extraction and validation subprocess
-- `path`, `url`, `os` — path manipulation and platform detection
+The implementation uses only Node.js built-in modules:
+- `node:zlib` — `gunzipSync()` for gzip decompression
+- `node:fs` — `readFileSync()`, `writeFileSync()`, `mkdirSync()` for file operations
+- `node:path` — `join()`, `resolve()`, `dirname()` for path construction and safety checks
 
-### Existing Dependencies Preserved
+### Dev dependencies added: None
 
-- Zero production dependencies (package.json `devDependencies` only).
-- `GITHUB_TOKEN` (built-in to GitHub Actions, no custom secret).
+Tests use the same built-in modules to create test tarball fixtures programmatically (`gzipSync()` + manual tar block construction).
 
-### Dependencies Removed
+### Why no npm dependency (key finding)
 
-- `git` binary dependency on user machines (replaced by GitHub REST API via `fetch`).
-- `npm` dependency for update execution (replaced by tarball download + extract).
-- `RELEASE_TOKEN` secret (auto-tag.yml is removed; new workflow uses `GITHUB_TOKEN`).
+The release tarball published by CI contains `dist/`, `skill-content/`, `package.json`, and `build-metadata.json` — **no `node_modules/`** (confirmed in `.github/workflows/build-release.yml:37-43`). Every import in the codebase resolves to either `node:*` built-in modules or relative paths (confirmed via grep of all `src/` files — zero third-party imports). An npm dependency like `tar` would produce a bare specifier import (`import ... from 'tar'`) that would fail to resolve at runtime in GitHub-release-installed copies because `node_modules/tar` would not exist.
+
+Fixing this would require either:
+1. **Bundling with esbuild**: Changes the build system. Adds risk of breaking `import.meta.url` resolution at `perform.ts:24` which is critical for install-root discovery. Exceeds the extraction-fix scope.
+2. **Including node_modules in the tarball**: Requires modifying the CI workflow file (`.github/workflows/build-release.yml`), which is explicitly out of scope.
+
+Neither option is justified when the built-in approach solves the problem with zero new dependencies and zero build changes. This revises the diagnosis recommendation of using node-tar.
+
+## Test Strategy
+
+### New file: `src/update/extract.test.ts`
+
+**Test 1: Successful extraction of representative tarball**
+- Programmatically create a `.tgz` with the expected structure: `dist/index.js` (with content), `dist/update/perform.js`, `skill-content/SKILL.md`, `package.json`, `build-metadata.json`
+- Extract to a temp directory using `extractTarGz()`
+- Assert all expected files and directories exist with correct content
+
+**Test 2: Extraction to path with special characters (colon / drive letter)**
+- On non-Windows: create a temp dir with a colon in the name (e.g., `staging:test`) to mimic the Windows drive-letter issue
+- Verify extraction succeeds regardless of path characters in the destination
+- This directly validates the original failure mode is eliminated (the prior `execSync('tar ...')` would fail on such paths)
+
+**Test 3: Corrupt tarball handling**
+- Pass a truncated or garbage buffer as the tarball content
+- Assert that `extractTarGz()` throws an error (which `performStagedUpdate` will catch and convert to `{ success: false, error }`)
+
+**Test 4: Empty archive handling**
+- Create a valid `.tgz` containing only the end-of-archive marker (two consecutive 512-byte zero blocks)
+- Verify extraction completes without error and the destination directory is empty
+
+**Test 5: PAX extended header handling**
+- Create a tarball with a PAX extended header entry (typeflag `'x'`) before a regular file entry
+- Verify the regular file is extracted correctly and the PAX header data is skipped
+
+**Test infrastructure patterns** (from existing tests in `src/skill/skill.test.ts`):
+- `mkdtempSync(join(tmpdir(), 'extract-'))` for isolated temp directories
+- `rmSync(tmpDir, { recursive: true, force: true })` in `afterEach` for cleanup
+- `node:test` (describe/it) + `node:assert` (strict) for assertions
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| GitHub API rate limits (60/hr unauth) | Low | Medium — users blocked from checking updates | Auth token increases to 5000/hr. Auto-update checks are infrequent. Manual retry works. |
-| Antivirus holds file handle during swap on Windows | Low | Medium — swap fails, update aborts | Retry once after 500ms; report clear error with guidance; `.bak` dirs provide rollback. |
-| Concurrent CI builds race on `latest` release | Low | Low — one build wins, both are from main | `concurrency: cancel-in-progress: true` ensures only the latest build completes. |
-| Private repo without auth token | Medium | Medium — update fails | Explicit auth error message with specific guidance (ticket requirement). No silent fallback. |
-| Tarball corruption during download | Very Low | Medium — validation catches it | Staged validation runs `--version` before swap. Corrupt tarball fails extraction or validation. |
-| `tar` not available on user's system | Very Low | High — extraction fails | Available on all modern OS. Clear error message if missing. |
-| Staging directory on different filesystem than install root | Low | Low — rename fails, falls back to copy | Detect cross-filesystem case (EXDEV error); use copy+delete instead of rename. |
+| # | Risk | Likelihood | Impact | Mitigation |
+|---|------|-----------|--------|------------|
+| 1 | Tar format edge case not handled by manual parser | Low | Medium — extraction silently produces wrong output or fails | The CI tarball has simple, known content (short paths, no symlinks, no special attributes). PAX headers are handled. Comprehensive tests cover the exact tarball shape. |
+| 2 | GNU tar on Ubuntu CI produces format features our parser doesn't handle | Very Low | Medium — extraction fails with an error (fail-closed) | USTAR format is well-documented. Our payload has no features that would trigger exotic extensions (no long paths, no extended attributes). If this occurs, it surfaces as an extraction error, preserving fail-closed behavior. |
+| 3 | Large tarball exceeds memory for synchronous approach | Very Low | Low — extraction OOMs on very large payloads | The CLI payload is < 5MB compressed. Even a 10x growth would be < 50MB, trivially within Node.js memory. Can switch to streaming in the future if needed. |
+| 4 | Path separator handling on Windows during file writing | Low | Medium — files written to wrong locations | Tar archives use forward slashes. `path.join()` normalizes to platform separators. Tests verify cross-platform path handling explicitly. |
 
 ## Deferred to Round 2
 
-- **Platform-specific binary builds:** The MVP produces a universal Node.js tarball. Per-OS compiled binaries (via `pkg`, `bun compile`, or `node --sea`) could be explored if startup performance or standalone distribution becomes important.
-- **Delta/incremental updates:** Full tarball download every time. Diff-based updates could reduce bandwidth if artifact size grows significantly.
-- **Explicit rollback command:** `hlx rollback` is not part of MVP. The backup mechanism exists during swap but is cleaned up after success.
-- **Update channels:** MVP supports only the `main` channel. Named channels (e.g., `beta`, `canary`) could be added by publishing additional release tags.
-- **Update telemetry:** Success/failure rates are not tracked. Could be added to monitor update health.
-- **Initial install from GitHub release:** The ticket focuses on `hlx update` (users already have hlx installed). A new user install script (curl-pipe-sh or similar) for GitHub release assets is out of scope.
+- **Replace `copyDirRecursive` shell-out (perform.ts:33):** The EXDEV fallback uses `execSync('xcopy'/'cp -R')`. Not a tar invocation and out of scope. Could be replaced with `fs.cpSync()` (stable since Node 16.7) in a future pass.
+- **Streaming extraction:** If the tarball payload grows significantly, a streaming pipeline approach could reduce peak memory. Not needed at current payload sizes.
+- **Replace `gh auth token` shell-out (check.ts:30):** Not a tar invocation and out of scope. Could be replaced with direct credential file reading in a future pass.
+- **Bundler adoption:** If the project adds more npm dependencies in the future, adopting esbuild as a build step would be worth revisiting to enable standard npm packages in the release tarball.
 
 ## Summary Table
 
-| Area | Decision | Key Detail |
-|------|----------|------------|
-| **Artifact host** | GitHub Releases, rolling `latest` tag | Permanent assets, tag avoids `v*` trigger, GITHUB_TOKEN sufficient |
-| **CI workflow** | New `build-release.yml`, delete `auto-tag.yml` | Build → test → tarball → `gh release create latest` with concurrency control |
-| **Preserve** | `publish.yml` unchanged | Manual `v*` tag push continues to trigger npm publish |
-| **SHA comparison** | GitHub REST API replaces `git ls-remote` | `GET /repos/{owner}/{repo}/releases/tags/latest` — one call for SHA + download URL |
-| **Download** | Node.js native `fetch()` | No new dependencies, available on Node >= 18 |
-| **Extraction** | System `tar -xzf` via `execSync` | Available on macOS, Linux, Windows 10+; preserves zero-dep property |
-| **Staging** | `~/.hlx/staging/<sha>/` | Isolated validation before touching live install |
-| **Swap** | Rename-based with `.bak` backup dirs | Atomic on POSIX, reliable on Windows, rollback on failure |
-| **Validation** | `dist/index.js` exists + `--version` runs | Minimum viable per ticket requirements |
-| **Auth** | `GITHUB_TOKEN` → `GH_TOKEN` → `gh auth token` | Explicit error messaging for private repos |
-| **Install root** | `import.meta.url` resolution | Already proven in `version.ts` and `paths.ts` |
-| **Config** | Existing `InstallSource` type, no changes | `mode: 'github'` + commit SHA already supported |
-| **Error messages** | 6 files updated | Remove all `npm install -g git+https://...` references |
-| **Tests** | No existing update tests | New tests needed for staged update mechanism |
-
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `.github/workflows/build-release.yml` | **New** — CI build + GitHub Release publish on main push |
-| `.github/workflows/auto-tag.yml` | **Delete** — remove auto-tag workflow |
-| `.github/workflows/publish.yml` | **No change** — preserve for manual npm releases |
-| `src/update/check.ts` | **Rewrite** — GitHub REST API replaces `git ls-remote`; add auth token discovery |
-| `src/update/perform.ts` | **Rewrite** — staged tarball download + extract + swap replaces `npm install -g` |
-| `src/update/validate.ts` | **Rewrite** — validate staged directory replaces npm-global-path validation |
-| `src/update/index.ts` | **Update** — new orchestration flow, updated error messages |
-| `src/update/version.ts` | **No change** — already works with import.meta.url and config SHA |
-| `src/lib/config.ts` | **No change** — InstallSource type already sufficient |
-| `src/docs/cli-content.ts` | **Update** — replace npm install references (lines 18, 301) |
-| `src/skill/show.ts` | **Update** — replace npm install recovery message (line 15) |
-| `src/skill/paths.ts` | **Update** — replace npm install recovery message (line 25) |
-| `skill-content/references/commands.md` | **Update** — if install instructions present |
-| `src/index.ts` | **No change** — dispatches to update module, no direct npm references |
-| `package.json` | **No change** — bin entry, scripts, files array all remain valid |
+| Aspect | Decision |
+|--------|----------|
+| **Extraction approach** | Node.js built-in modules (`node:zlib` gunzipSync + manual tar header parsing) |
+| **New runtime dependencies** | None (preserves zero-dependency design) |
+| **New dev dependencies** | None |
+| **Build system changes** | None (`tsc` remains sole build step) |
+| **CI workflow changes** | None |
+| **Files created** | `src/update/extract.ts` (extraction function), `src/update/extract.test.ts` (tests) |
+| **Files modified** | `src/update/perform.ts` (replace execSync tar call with `extractTarGz()` import + call) |
+| **Files NOT changed** | `validate.ts`, `index.ts`, `check.ts`, `version.ts`, `package.json`, `tsconfig.json`, `.github/workflows/build-release.yml` |
+| **Error handling** | Preserved exactly — `extractTarGz` throws on error; existing catch block returns `{ success: false, error }` |
+| **Platform support** | Windows (including GNU tar in PATH), macOS, Linux — all via platform-independent Node.js APIs |
+| **Performance** | Expected faster than execSync (no process spawn overhead) |
 
 ## APL Statement Reference
 
-The update mechanism should use GitHub Releases with a rolling `latest` tag (not matching `v*`), built by a new CI workflow (`build-release.yml`) using `GITHUB_TOKEN` with `contents: write`. The updater replaces `git ls-remote` with a single GitHub REST API call to `GET /repos/{owner}/{repo}/releases/tags/latest`, which provides both the commit SHA and asset download URL. The staged install mechanism downloads the tarball to `~/.hlx/staging/`, validates via entrypoint existence and `--version` check, then does a rename-based swap with backup directories for rollback. Install-root discovery uses the proven `import.meta.url` pattern already in the codebase. Auth follows the standard `GITHUB_TOKEN` → `GH_TOKEN` → `gh auth token` chain with explicit error messaging. The tarball contains `dist/`, `skill-content/`, `package.json`, and `build-metadata.json` — zero production dependencies means no `node_modules` needed.
+See `tech-research/apl.json`. Key revision from diagnosis: the diagnosis recommended using `tar` (node-tar) as an npm dependency. Tech research identified that the release tarball does not include `node_modules/`, making any npm dependency unresolvable at runtime for the primary install path. The built-in module approach (`node:zlib` + manual tar parsing) resolves the same root cause without introducing this dependency resolution gap, while staying consistent with the project's zero-dependency, `node:*`-only import pattern.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `ticket.md` | Primary requirements, acceptance criteria, non-negotiable invariants | Staged update required; failed update must never brick CLI; `latest` tag must not trigger npm publish; explicit auth error messaging required |
-| `scout/reference-map.json` | File inventory, factual claims, open unknowns | 5 update module files to rewrite, 2 workflows (1 delete, 1 preserve), 6 hardcoded npm references, zero production dependencies, zero update tests |
-| `scout/scout-summary.md` | Architecture overview of update module and CI/CD | Confirmed fail-open (auto) vs fail-closed (manual) patterns; `import.meta.url` for path resolution; `saveConfig()` read-merge-write pattern |
-| `diagnosis/apl.json` | Root cause evidence and recommended architecture | Confirmed `npm install -g` is destructive with no staging; rolling `latest` tag won't trigger `publish.yml`; `GITHUB_TOKEN` + `contents: write` sufficient |
-| `diagnosis/diagnosis-statement.md` | Root cause analysis and change scope | 4 root causes identified; GitHub Releases recommended; staged download-validate-swap required |
-| `product/product.md` | Product vision, use cases, success criteria | MVP features defined; open questions on private repo auth, Windows atomicity, install location discovery |
-| `repo-guidance.json` | Repo intent classification | Single repo (`helix-cli`) is the sole change target |
-| `src/update/perform.ts` | Current update executor source | Confirmed `spawnSync('npm install -g ...')` — the exact mechanism being replaced |
-| `src/update/check.ts` | Remote SHA check source | Confirmed `git ls-remote` dependency and `GIT_INSTALL_SPEC` constant to remove |
-| `src/update/index.ts` | Update orchestration source | Confirmed fail-open/fail-closed patterns, recovery messages with npm references |
-| `src/update/validate.ts` | Post-update validation source | Entirely npm-path-dependent: resolves `npm root -g`, checks npm package path |
-| `src/update/version.ts` | Version display source | Confirmed `import.meta.url` pattern for install root resolution; already supports SHA suffix |
-| `src/lib/config.ts` | Config and InstallSource type | `InstallSource` already has mode/repo/branch/commit fields; no type changes needed |
-| `src/skill/paths.ts` | Skill path resolution | Confirmed `import.meta.url` pattern; contains npm install recovery message to update |
-| `src/skill/show.ts` | Skill show command | Contains npm install recovery message to update |
-| `src/docs/cli-content.ts` | CLI documentation content | Two npm install references at lines 18 and 301 to replace |
-| `src/index.ts` | CLI entry point | Confirmed auto-update call, SKIP_AUTO_UPDATE set, --version handling — no direct changes needed |
-| `.github/workflows/auto-tag.yml` | Auto-tag workflow | Confirmed: push-to-main trigger, RELEASE_TOKEN usage — to be deleted |
-| `.github/workflows/publish.yml` | npm publish workflow | Confirmed: `v*` tag trigger, OIDC trusted publishing — to be preserved unchanged |
-| `package.json` | Project configuration | Confirmed prepare → tsc pipeline (root cause), zero production deps, bin entry, files array, engines >= 18 |
-| `.npmignore` | Package exclusion rules | Test file exclusions inform tarball creation |
-| Context7 GitHub Actions docs | GitHub Actions permissions and release creation | Confirmed `contents: write` permission supports `gh release create`; confirmed force-push tag pattern for rolling releases |
+| `ticket.md` (continuation context) | Scope, requirements, acceptance criteria, explicit constraints | Extraction-only fix; must remove tar binary dependency; CI workflow changes out of scope; adding runtime dep in scope |
+| `diagnosis/diagnosis-statement.md` | Root cause analysis, alternative rejection, success criteria | Single root cause at perform.ts:124; recommends node-tar (revised by this step); 3 files changed |
+| `diagnosis/apl.json` | Structured Q&A with evidence | Confirmed colon interpretation is in GNU tar's parser; node-tar recommended but dependency resolution not analyzed |
+| `product/product.md` | Product spec, open questions | Open question #2 asked whether node-tar bundles correctly into release tarball — answered here: it does not without bundler or CI change |
+| `scout/reference-map.json` | File inventory, facts, code boundaries | Confirmed bug at perform.ts:124; zero runtime deps; ESM project; tarball shape; validation contract |
+| `scout/scout-summary.md` | Analysis summary, dependency landscape | Confirmed zero runtime deps, ESM, node:test runner, no existing update tests |
+| `repo-guidance.json` | Repo intent classification | helix-cli is the sole target; no cross-repo impact |
+| `src/update/perform.ts` (lines 1-247) | Direct inspection of bug and full orchestration | execSync tar at line 124; error catch at 128-131; execSync import also used by copyDirRecursive (line 33); import.meta.url at line 24 |
+| `src/update/validate.ts` (lines 1-66) | Post-extraction contract | Checks dist/index.js exists, package.json exists, runs node --version |
+| `package.json` (full) | Dependencies, build scripts, module config | Zero runtime deps; ESM; `"build": "tsc"`; `"files"` field excludes node_modules |
+| `tsconfig.json` (full) | Build constraints | ES2022 target, Node16 modules, strict mode, output to dist/ |
+| `.github/workflows/build-release.yml` (full) | Tarball creation — confirms no node_modules | Lines 37-43: only dist/, skill-content/, package.json, build-metadata.json |
+| `src/skill/skill.test.ts` (full) | Test patterns and infrastructure | node:test describe/it; node:assert strict; mkdtempSync; beforeEach/afterEach cleanup |
+| Entire `src/` import scan (grep) | Verify dependency resolution model | All imports are `node:*` or relative paths — zero third-party modules in entire codebase |
+| Context7: tar-stream docs | Evaluate alternative library | Lower-level API requiring manual file/dir creation; same resolution blocker as node-tar |
+| Web search: node-tar npm | Library fitness and dependency tree | v7.5.13; 5 transitive JS deps; TypeScript-native; ESM hybrid via tshy; used by npm itself |
+| Web search: tar-fs npm | Evaluate tar-fs alternative | Doesn't gunzip by default; same resolution blocker as node-tar |

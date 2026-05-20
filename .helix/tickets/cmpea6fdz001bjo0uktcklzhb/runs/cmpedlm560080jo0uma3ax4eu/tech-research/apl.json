@@ -1,76 +1,65 @@
 {
   "questions": [
-    "What GitHub mechanism should host the prebuilt artifact — GitHub Releases (permanent assets) or GitHub Actions artifacts (which expire)?",
-    "What should the prebuilt tarball contain and how should the CI workflow produce it?",
-    "How should the updater discover the remote commit SHA without requiring git on the user's machine?",
-    "How should the staged download-validate-swap mechanism work, including install-root discovery and atomic swap?",
-    "How should the updater handle authentication for private repository assets and produce explicit error messages?",
-    "How should the updater extract the tarball on the user's machine without external dependencies?",
-    "What is the risk of file-locking on Windows during the swap step?"
+    "Can the diagnosis-recommended tar npm package (node-tar) be used as a runtime dependency given the release tarball has no node_modules/?",
+    "What JavaScript tar library options exist and which fits the project constraints (zero deps, ESM, no bundler, no node_modules in release)?",
+    "Should the extraction be synchronous or streaming?",
+    "How should the tar format be parsed — what header fields and entry types must be handled for the CI-produced tarball?",
+    "How should tests create representative .tgz payloads without adding test-only dependencies?",
+    "Does the execSync import need to remain in perform.ts after removing the tar call?"
   ],
   "answers": [
     {
-      "answer": "GitHub Releases with a rolling 'latest' tag is the correct mechanism. Release assets are permanent (no expiration, unlike Actions artifacts which expire in 90 days by default). The tag 'latest' does NOT match the 'v*' pattern in publish.yml, so it will not trigger npm publish. GITHUB_TOKEN with 'contents: write' permission can create and manage releases via 'gh release create' — no custom RELEASE_TOKEN needed. Release assets have stable download URLs via both browser_download_url (public) and the API endpoint (private/public with auth). Actions artifacts were rejected: they expire, require API auth for all downloads, and the retention window makes them unsuitable as a permanent update channel.",
+      "answer": "No. The tar npm package cannot be used as a runtime dependency without additional build infrastructure. The release tarball (created by .github/workflows/build-release.yml lines 37-43) contains only dist/, skill-content/, package.json, and build-metadata.json — no node_modules/. The build step is solely tsc (TypeScript compiler), which outputs individual .js files with bare specifier imports (e.g., import { x } from 'tar'). Node.js resolves bare specifiers via node_modules/, which does not exist in GitHub-release-installed copies. Adding tar to dependencies would produce code that fails at runtime with ERR_MODULE_NOT_FOUND. To fix this would require either (a) bundling with esbuild (changes build system, risks breaking import.meta.url at perform.ts:24) or (b) including node_modules in the tarball (CI workflow change, out of scope). This revises the diagnosis recommendation.",
       "evidence": [
-        "publish.yml:5-6 — trigger pattern 'v*' will not match tag 'latest'",
-        "Context7 GitHub Actions docs — confirmed GITHUB_TOKEN with 'contents: write' can create releases",
-        "Context7 GitHub Actions docs — permissions key supports 'contents: write' for release creation",
-        "GitHub Actions artifact default retention is 90 days — too short for a permanent update channel"
+        ".github/workflows/build-release.yml:37-43 — tarball created with: tar -czf helix-cli.tgz dist/ skill-content/ package.json build-metadata.json (no node_modules/)",
+        "package.json scripts.build = 'tsc' — no bundler, TypeScript compilation only",
+        "grep of all src/ imports — every import is node:* or relative path, zero third-party modules in entire codebase",
+        "package.json devDependencies only (@types/node, typescript) — zero runtime dependencies",
+        "src/update/perform.ts:24 — import.meta.url used for install root resolution, would be broken by naive esbuild bundling"
       ]
     },
     {
-      "answer": "The tarball should contain: dist/ (excluding test files), skill-content/, package.json, and a new build-metadata.json with the commit SHA and build timestamp. This matches the existing npm 'files' array (package.json:24-29). The project has zero production dependencies (only devDependencies: @types/node and typescript), so no node_modules/ is needed. The CI workflow creates the tarball after running 'npm ci', 'npm test', then uses 'tar -czf' with test file exclusions. build-metadata.json enables the updater to read the commit SHA from the installed artifact without a network call.",
+      "answer": "No npm tar library fits all constraints. The three candidates evaluated were: (1) tar (node-tar v7.5) — battle-tested, used by npm, TypeScript-native, but fails the runtime resolution constraint. (2) tar-stream (mafintosh) — lower-level streaming API, well-maintained, but same resolution blocker and requires more implementation code. (3) tar-fs — higher-level than tar-stream but doesn't gunzip by default and same resolution blocker. All three fail because the release tarball has no node_modules/. The correct approach is to implement extraction using Node.js built-in modules: node:zlib (gunzipSync) for decompression + manual tar header parsing + node:fs for file writing. This preserves the zero-dependency pattern, requires no build system changes, and works in all deployment contexts.",
       "evidence": [
-        "package.json:24-29 — files: ['dist', '!dist/**/*.test.js', '!dist/**/*.test.d.ts', 'skill-content']",
-        "package.json:40-43 — only devDependencies, no production dependencies",
-        ".npmignore — excludes dist/**/*.test.js and dist/**/*.test.d.ts",
-        "publish.yml:50-52 — existing tarball validation checks for dist/index.js, package.json, skill-content/SKILL.md"
+        "Web search — node-tar v7.5.13 has 5 transitive deps (all pure JS): @isaacs/fs-minipass, chownr, minipass, minizlib, yallist",
+        "Context7 tar-stream docs — requires manual file writing per entry (header/stream/next pattern), needs separate zlib pipe for .tgz",
+        "Web search — tar-fs doesn't gunzip by default, needs gunzip-maybe or zlib pipe",
+        "package.json — zero runtime dependencies, all imports are node:* or relative"
       ]
     },
     {
-      "answer": "Replace 'git ls-remote' with a single GitHub REST API call to the releases endpoint: GET /repos/{owner}/{repo}/releases/tags/latest. This returns the release object including target_commitish (the commit SHA), plus the assets array with download URLs. One API call provides both the SHA for comparison AND the asset download URL — eliminating the git binary dependency. Rate limits are manageable: 60 requests/hour unauthenticated, 5000/hour with a token. The updater only makes this call when a user runs 'hlx update' or during periodic auto-update checks.",
+      "answer": "Synchronous. The existing code uses execSync (synchronous process spawn with 30s timeout). The tarball is small (< 5MB compressed, < 15MB uncompressed). readFileSync + gunzipSync + buffer-based tar parsing is simpler than a streaming pipeline and avoids stream error-handling complexity. Memory is not a concern — 15MB is trivial for Node.js. The synchronous approach maintains the same blocking behavior as the original code and integrates cleanly with the existing try/catch error handling in performStagedUpdate.",
       "evidence": [
-        "src/update/check.ts:18-19 — current fetchRemoteSha() uses 'git ls-remote', requiring git on user machine",
-        "package.json:22 — engines.node >= 18, so native fetch() is available for HTTP calls",
-        "GitHub REST API: GET /repos/{owner}/{repo}/releases/tags/{tag} returns release with target_commitish and assets[]"
+        "src/update/perform.ts:124 — current code: execSync('tar -xzf ...', { timeout: 30_000 }) — synchronous with timeout",
+        "src/update/perform.ts:128-131 — error handling: catch block returns { success: false, error } — synchronous error contract",
+        ".github/workflows/build-release.yml — tarball contains dist/ + skill-content/ + 2 JSON files — small payload"
       ]
     },
     {
-      "answer": "The staged download-validate-swap mechanism works in 5 phases: (1) DISCOVER: Query the GitHub Releases API for the 'latest' release, extract commit SHA and asset URL. Compare remote SHA to local SHA from config. (2) DOWNLOAD: Fetch the tarball to ~/.hlx/staging/<sha>.tgz using Node.js native fetch(). (3) UNPACK+VALIDATE: Extract to ~/.hlx/staging/<sha>/, verify dist/index.js exists, run 'node <staged>/dist/index.js --version' with HLX_SKIP_UPDATE_CHECK=1. (4) SWAP: Determine the live install root via import.meta.url (resolves to dist/update/*.js, so ../../ is the package root). Rename live dist/ → dist.bak/, staged dist/ → live dist/. Repeat for skill-content/ and package.json. If any rename fails, restore from .bak. (5) RECORD: Update installSource in ~/.hlx/config.json with mode='github', commit=<sha>. Clean up staging and .bak directories. Install-root discovery via import.meta.url is already proven in the codebase (version.ts:18, paths.ts:18).",
+      "answer": "The tar format parsing must handle: (1) 512-byte header blocks with fields: name (bytes 0-99), size (bytes 124-135 as octal), typeflag (byte 156), prefix (bytes 345-499 for USTAR format). (2) Entry types: regular file (typeflag '0' or '\\0') — write size bytes to filesystem; directory (typeflag '5') — create with mkdirSync; PAX extended header (typeflag 'x') — skip data blocks; global PAX header (typeflag 'g') — skip data blocks. (3) End-of-archive: two consecutive 512-byte all-zero blocks. (4) Data padding: file data is padded to next 512-byte boundary. (5) USTAR prefix support: if prefix (bytes 345-499) is non-empty, full path is prefix + '/' + name. (6) Path safety: resolve against destDir and reject entries that escape it. The CI tarball (created by GNU tar on ubuntu-latest) uses standard POSIX/USTAR format. Our payload has short paths (max ~30 chars), no symlinks, and no special attributes, so exotic format features are not relevant.",
       "evidence": [
-        "src/update/version.ts:18 — dirname(fileURLToPath(import.meta.url)) resolves to dist/update/",
-        "src/skill/paths.ts:18 — same import.meta.url pattern for package root resolution",
-        "src/lib/config.ts:37-38 — CONFIG_DIR = ~/.hlx/, existing staging dir would be adjacent",
-        "src/lib/config.ts:201-212 — saveConfig() uses read-merge-write, safe for updating installSource",
-        "src/update/validate.ts:59-64 — existing --version validation pattern with HLX_SKIP_UPDATE_CHECK=1"
+        ".github/workflows/build-release.yml:17 — runs-on: ubuntu-latest (GNU tar)",
+        ".github/workflows/build-release.yml:37-43 — entries: dist/, skill-content/, package.json, build-metadata.json",
+        "POSIX tar format specification — 512-byte header blocks, octal size field, typeflag field",
+        "scout/reference-map.json facts — tarball is standard .tgz with top-level entries, no nested prefix directory"
       ]
     },
     {
-      "answer": "Auth discovery follows the standard GitHub token chain: (1) GITHUB_TOKEN env var, (2) GH_TOKEN env var, (3) 'gh auth token' command via child_process (if gh CLI is installed). For public repos, no auth is needed for the Releases API or asset downloads. For private repos, the asset download URL must use the API endpoint (api.github.com/repos/{owner}/{repo}/releases/assets/{id}) with 'Accept: application/octet-stream' and 'Authorization: Bearer <token>' headers — the browser_download_url does not work without browser cookies. Error messaging: HTTP 404 → 'No update release found. Ensure a CI build has completed.'; HTTP 401/403 → 'GitHub authentication required. Set GITHUB_TOKEN env var or run gh auth login.'; Network error → 'Could not reach GitHub. Check your network connection.' The updater should attempt unauthenticated first, then authenticated if 404/403 is returned (to handle both public and private repos gracefully).",
+      "answer": "Tests should create .tgz payloads programmatically using the same Node.js built-in modules: gzipSync (from node:zlib) wrapping manually constructed tar blocks. A test helper function creates tar entries by writing 512-byte headers (name, size, typeflag, checksum) followed by data blocks padded to 512 bytes, terminated by two zero blocks. This approach: (1) requires zero test-only dependencies, (2) creates human-readable test setup code, (3) allows precise control over tarball content including error cases (corrupt data, PAX headers, empty archives). Alternative rejected: checking in binary .tgz fixture files — opaque, harder to review and maintain.",
       "evidence": [
-        "Ticket requirement: 'If the GitHub repo/artifact is private and the user is not authenticated to GitHub, the updater must fail with a clear message telling the user exactly what kind of GitHub auth is expected.'",
-        "GitHub REST API docs: Private release assets require authenticated API download with Accept: application/octet-stream header",
-        "src/update/check.ts:3-6 — CANONICAL_REPO_URL and CANONICAL_REPO constants already define the GitHub repo coordinates"
+        "src/skill/skill.test.ts — existing tests create test fixtures programmatically (writeFileSync, mkdirSync) rather than using checked-in fixtures",
+        "package.json — zero dependencies (including devDependencies beyond @types/node and typescript)"
       ]
     },
     {
-      "answer": "Use the system 'tar' command via child_process.execSync for tarball extraction. The 'tar' command is available on: macOS (built-in), Linux (built-in), and Windows 10+ (built-in since build 17063/Dec 2017). Since the project requires Node >= 18, users will overwhelmingly be on OS versions that include tar. This avoids adding npm dependencies (like 'tar' package) to a project with zero production dependencies. The extraction command: 'tar -xzf <tarball> -C <staging-dir>'. If tar is unavailable (unlikely edge case), the error surfaces clearly as a spawn failure.",
+      "answer": "Yes, the execSync import must remain. It is used by copyDirRecursive at perform.ts:33 for the EXDEV cross-filesystem fallback (xcopy on Windows, cp -R on POSIX). This is NOT a tar invocation. Acceptance criteria #3 says 'Grep for execSync / spawnSync / child_process in the update module finds no remaining external tar invocation' — scoped specifically to tar invocations, not to all child_process usage. The import line changes from importing execSync alone to importing both execSync and any new symbols, or the extractTarGz import is added separately.",
       "evidence": [
-        "package.json:22 — engines.node >= 18, implying modern OS",
-        "package.json:40-43 — zero production dependencies; adding a tar library would break this property",
-        "Windows 10 tar availability: shipped since build 17063 (December 2017)",
-        "src/update/perform.ts — existing code already uses child_process.spawnSync for external commands"
-      ]
-    },
-    {
-      "answer": "File-locking risk on Windows during swap is LOW for this specific case. Node.js reads module files into V8's heap during import and then closes the file handle — it does not hold open file locks on .js files after loading. The update command is short-lived: it downloads, validates, swaps, and exits. The NEXT invocation loads the new files. The rename-based swap (dist/ → dist.bak/, staged/ → dist/) operates on directories, which Windows allows when no file handles are open inside them. The only risk is if another process (antivirus scanner, editor indexer) has an open handle on a file inside dist/. Mitigation: if the rename fails, the updater retries once after a short delay, then reports the failure with guidance to close other programs and retry. The backup directory (.bak) provides a clean rollback path.",
-      "evidence": [
-        "Node.js ESM loader: files are read and parsed during import; handles are closed after read",
-        "src/update/perform.ts:22-23 — existing code sets env vars on spawned child processes, showing child_process is the execution model",
-        "Ticket requirement: 'If unpacking fails, hlx update must exit non-zero and keep the current install unchanged' — backup dirs enable this"
+        "src/update/perform.ts:1 — import { execSync } from 'node:child_process'",
+        "src/update/perform.ts:33 — execSync used for xcopy/cp-R in copyDirRecursive",
+        "Ticket acceptance criteria #3 — 'no remaining external tar invocation' (not 'no remaining execSync')"
       ]
     }
   ],
-  "statement": "The update mechanism should use GitHub Releases with a rolling 'latest' tag (not matching 'v*'), built by a new CI workflow (build-release.yml) using GITHUB_TOKEN with contents:write. The updater replaces git ls-remote with a single GitHub REST API call to GET /repos/{owner}/{repo}/releases/tags/latest, which provides both the commit SHA and asset download URL. The staged install mechanism downloads the tarball to ~/.hlx/staging/, validates via entrypoint existence and --version check, then does a rename-based swap with backup directories for rollback. Install-root discovery uses the proven import.meta.url pattern already in the codebase. Auth follows the standard GITHUB_TOKEN → GH_TOKEN → gh auth token chain with explicit error messaging. The tarball contains dist/, skill-content/, package.json, and build-metadata.json — zero production dependencies means no node_modules needed.",
+  "statement": "The extraction step at src/update/perform.ts:124 must be replaced with an in-process function using Node.js built-in modules (node:zlib gunzipSync for decompression + manual tar header parsing for extraction). The diagnosis-recommended node-tar npm package cannot be used because the release tarball has no node_modules/ and the build uses tsc without bundling — any bare specifier import would fail at runtime in GitHub-release-installed copies. The built-in approach requires zero new dependencies, zero build system changes, and zero CI changes, while fully eliminating the external tar binary dependency that causes the Windows/GNU-tar failure. Implementation creates a new src/update/extract.ts file with an extractTarGz(tarballPath, destDir) function, and a new src/update/extract.test.ts file with tests covering successful extraction, error cases, PAX header handling, and path-with-special-characters scenarios. Only src/update/perform.ts is modified (import + one call-site replacement). The execSync import remains for the non-tar copyDirRecursive usage.",
   "followups": []
 }
