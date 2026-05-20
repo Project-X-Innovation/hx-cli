@@ -1,0 +1,55 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Layered Verification Architecture — Phase 1 & 2 Foundation (HLX-504 through HLX-509)",
+  "description": "This tour walks through the implementation of the Layered Verification Architecture (The Sandwich Model) as defined in RSH-473. Production data showed 11.6% of runs terminating as UNVERIFIED — wasted agent work caused by a monolithic verification gate. The fix introduces new enum statuses (NEEDS_CREDENTIALS, IMPOSSIBLE_SPEC), a demo content column, cascaded verification types, a demo workflow step, and enriched prompt instructions across product/tech-research/implementation steps. Follow this tour in data-flow order: schema → types → orchestration → prompts.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmpd99alz009dfw0ugoju15ss/runs/cmpd99amf009ifw0ufpvfkvb9/ticket.md",
+      "line": 1,
+      "description": "RSH-473 documents the problem: 139 of 1,200 completed runs (11.6%) terminated as UNVERIFIED — a terminal state caused by conflating quality assurance, demo capture, and scenario acceptance into a single monolithic gate. The Bill of Tickets breaks verification into layered, non-blocking passes (the 'Sandwich Model'). HLX-504 through HLX-509 implement Phase 1 (Foundation) and Phase 2 (Criteria Production). The dependency chain is strictly ordered: Prisma schema (1A) → TypeScript types (1B) → Step catalog + run-store functions (1C) → Prompt enrichment (2A, 2B, 2C).",
+      "title": "Overview: Why This Change Was Made"
+    },
+    {
+      "file": ".helix/tickets/cmpd99alz009dfw0ugoju15ss/runs/cmpd99amf009ifw0ufpvfkvb9/ticket.md",
+      "line": 17,
+      "description": "This ticket is the root dependency for the entire change set. It adds NEEDS_CREDENTIALS and IMPOSSIBLE_SPEC to both the SandboxRunStatus and TicketStatus Prisma enums, and appends a demoContent Json? nullable column to the SandboxRun model. Without these enum values in the database layer, the TypeScript types in 1B and the run-store functions in 1C would reference non-existent Prisma client symbols and fail to compile. The migration must apply cleanly and prisma generate must regenerate the client before any downstream ticket can succeed.",
+      "title": "HLX-504 (Ticket 1A): Prisma Schema Migration"
+    },
+    {
+      "file": ".helix/tickets/cmpd99lv6009kfw0ur2aq61z2/runs/cmpd99lvk009pfw0uq1j765nt/ticket.md",
+      "line": 17,
+      "description": "With the Prisma client regenerated in 1A, this ticket extends src/helix-workflow/step-executor/types.ts. The HelixWorkflowStepStatus union gains 'NEEDS_CREDENTIALS' and 'IMPOSSIBLE_SPEC' so the orchestrator can express these outcomes without casting to strings. Four new types are added: CascadeLayerResult (single verification layer output), VerificationCascade (ordered collection of layers), NeedsCredentialsJustification (structured rationale for credential blockers), and SpecDeviations (list of deviations from product scenarios or tech decisions). HelixWorkflowStepResult gains optional fields verificationCascade, needsCredentialsJustification, specDeviations, and attemptedStrategies. All additions are optional to avoid breaking existing consumers.",
+      "title": "HLX-505 (Ticket 1B): TypeScript Type Foundation"
+    },
+    {
+      "file": ".helix/tickets/cmpd9ahvo009rfw0uw735706q/runs/cmpd9ahvy009wfw0un3x3axtw/ticket.md",
+      "line": 17,
+      "description": "This ticket wires the new types into the orchestration layer. In src/helix-workflow/helix-workflow-step-catalog.ts, 'demo' is added to the HelixWorkflowStepId union and a nonBlocking optional field is added to HelixWorkflowStep, then { id: 'demo', title: 'Demo', nonBlocking: true, producesRepoArtifacts: false } is appended to HELIX_WORKFLOW_STEPS. In src/helix-workflow/orchestrator/run-store.ts, two new atomic functions — markRunNeedsCredentials and markRunImpossibleSpec — are added following the same pattern as markRunUnverified (lines 364-389). They write structured justification data into the verificationReport JSON column and flip the SandboxRunStatus to the new Prisma enum values introduced in 1A.",
+      "title": "HLX-506 (Ticket 1C): Step Catalog + Run Store"
+    },
+    {
+      "file": ".helix/tickets/cmpd9arum00a0fw0uwv4405lp/runs/cmpd9arv300a5fw0uf3bwqw6z/ticket.md",
+      "line": 17,
+      "description": "This is a prompt-only change to sandbox-runtime-assets/workflow-steps/product/step-config.mjs. A 'User Scenarios' output section is added alongside the existing 'Success Criteria' (around line 79). Each scenario uses the SCN-XX identifier format with mandatory fields: ID, Title, Precondition, Action, and Expected Outcome. Guidelines embedded in the prompt specify 5-15 scenarios per ticket, describe WHAT not HOW, and remain platform-agnostic (web, NetSuite, future surfaces). These scenarios become the upstream source of truth that verification layers in 2C and downstream sandwich passes will reference.",
+      "title": "HLX-507 (Ticket 2A): Product Step — SCN-XX User Scenarios"
+    },
+    {
+      "file": ".helix/tickets/cmpd9azxe00abfw0udu8jqt8a/runs/cmpd9azxn00agfw0ubr08xzs3/ticket.md",
+      "line": 17,
+      "description": "Another prompt-only change, this time to sandbox-runtime-assets/workflow-steps/tech-research/step-config.mjs. A 'Technical Checks' section is added alongside the existing 'Architecture Decisions' (around lines 66-77). Each check uses TCK-XX format with mandatory fields: ID, Title, Decision Reference (which architecture decision and its verbatim text), Verification Method (code-inspection | behavioral), and Expected Evidence. Guidelines specify 3-8 checks per ticket; not every decision needs a check. These TCK-XX items feed the verification cascade in 1B's VerificationCascade type and are referenced by specDeviations when implementation diverges.",
+      "title": "HLX-508 (Ticket 2B): Tech-Research Step — TCK-XX Technical Checks"
+    },
+    {
+      "file": ".helix/tickets/cmpd9b95e00aifw0uew59ltlw/runs/cmpd9b95m00anfw0utazqbszf/ticket.md",
+      "line": 17,
+      "description": "The final prompt change targets sandbox-runtime-assets/workflow-steps/implementation/step-config.mjs. Two behavioral changes: (1) The advisory wording around lines 174-185 is hardened to mandate that every CHK-XX receives an explicit pass / fail / blocked outcome recorded in implementation-actual.md — silent omissions are no longer allowed. (2) A 'Spec Deviations' section is added so that when the agent cannot fully achieve a product scenario or tech-research decision after best-effort attempts, it documents the deviation by referencing the SCN-XX or TCK-XX ID and describing what was achieved instead. This data populates the specDeviations field added in 1B and is stored via markRunImpossibleSpec from 1C.",
+      "title": "HLX-509 (Ticket 2C): Implementation Step — Enforced Inline Checks + specDeviation"
+    },
+    {
+      "file": ".helix/tickets/cmpd9b95e00aifw0uew59ltlw/runs/cmpd9b95m00anfw0utazqbszf/ticket.md",
+      "line": 1,
+      "description": "The complete data flow is: Product step emits SCN-XX scenarios → Tech-research emits TCK-XX checks referencing architecture decisions → Implementation records explicit CHK-XX outcomes and any specDeviations → Verification cascade (VerificationCascade type) evaluates each layer → Run-store atomically transitions SandboxRunStatus to SUCCEEDED, NEEDS_CREDENTIALS, or IMPOSSIBLE_SPEC → demoContent Json? column captures demo artifacts from the nonBlocking demo step. All existing run-store functions (markRunUnverified, markRunFailed, markRunSucceeded) are untouched. The new enum values are additive. The optional fields on HelixWorkflowStepResult preserve backward compatibility. npm run build, typecheck, and prisma generate all pass as gating criteria for the full ticket chain.",
+      "title": "Summary: Data Flow and Code Path Integrity"
+    }
+  ]
+}
