@@ -1,106 +1,122 @@
-# Code Review — BLD-527: Replace hlx self-update with GitHub release assets
+# Code Review Actual — BLD-527 (Continuation): Replace tar extraction with in-process JS library
 
 ## Review Scope
 
-Reviewed the complete implementation of BLD-527, which replaces the `hlx update` and auto-update mechanism from `npm install -g git+https://...#main` to a staged download-validate-swap mechanism using prebuilt GitHub Release assets. The review covers:
+Reviewed the implementation that replaces the `execSync('tar -xzf ...')` call at `src/update/perform.ts` with an in-process `extractTarGz()` function in `src/update/extract.ts`. The review covered:
 
-- 1 new CI workflow (`build-release.yml`)
-- 1 deleted workflow (`auto-tag.yml`)
-- 4 rewritten source files in `src/update/` (check.ts, validate.ts, perform.ts, index.ts)
-- 3 updated documentation/error-message files (cli-content.ts, show.ts, paths.ts)
-- 1 preserved workflow (`publish.yml` — verified unchanged)
-- Supporting context: `src/index.ts`, `src/update/version.ts`, `src/lib/config.ts`, `package.json`, `tsconfig.json`, `skill-content/references/commands.md`
+- Correctness of the manual tar parser (header parsing, typeflag handling, checksum validation, PAX header skipping)
+- Path traversal protection (leading `/` strip, `..` component rejection, resolved path containment)
+- Error contract preservation (throw → catch → `{ success: false, error }`)
+- Robustness against corrupt/truncated input
+- Test coverage completeness and correctness
+- No remaining external tar binary invocations
+- JSDoc/comment accuracy after the change
+- No regression to existing functionality
 
 ## Files Reviewed
 
-| File | Verdict | Notes |
-|------|---------|-------|
-| `.github/workflows/build-release.yml` | Clean | Correct trigger (push to main), `contents: write`, concurrency group, tarball creation, rolling `latest` tag (does not match `v*`), `GITHUB_TOKEN` via `github.token` |
-| `.github/workflows/auto-tag.yml` | Deleted | Confirmed absent from `.github/workflows/` |
-| `.github/workflows/publish.yml` | Unchanged | Verified: triggers on `v*` tags, OIDC trusted publishing, `npm publish *.tgz --provenance` — identical to original |
-| `src/update/check.ts` | Clean | GitHub REST API fetch, auth token discovery chain (GITHUB_TOKEN -> GH_TOKEN -> gh auth token -> null), SHA regex validation, correct asset URL handling |
-| `src/update/validate.ts` | Clean | Validates staged directory: entrypoint existence, package.json existence, `--version` subprocess with HLX_SKIP_UPDATE_CHECK=1 |
-| `src/update/perform.ts` | Clean | Staged download -> extract -> validate -> rename-based swap with `.bak` backup dirs. EXDEV cross-filesystem fallback. Windows retry via `Atomics.wait`. Rollback on swap failure. Cleanup in `finally` block. |
-| `src/update/index.ts` | Clean | Correct fail-closed (runUpdate: process.exit(1)) and fail-open (checkAutoUpdate: warn-and-return) behavior. Explicit GitHub auth guidance on 401/403. Config persistence with installSource metadata. |
-| `src/docs/cli-content.ts` | **Fixed** | Installation instruction `npm install -g ./` would fail because extracted tarball has no `src/` directory but `prepare` script runs `tsc` which requires it. Fixed: added `--ignore-scripts` flag. |
-| `src/skill/show.ts` | Clean | Recovery message points to `hlx update` and GitHub release URL |
-| `src/skill/paths.ts` | Clean | Recovery message points to `hlx update` and GitHub release URL |
-| `src/update/version.ts` | Not changed (verified) | Already uses `import.meta.url` for package root, reads commit SHA from config |
-| `src/lib/config.ts` | Not changed (verified) | `InstallSource` type already supports `mode: 'github'`, `repo`, `branch`, `commit` |
-| `src/index.ts` | Not changed (verified) | Auto-update call and `--version` handler work correctly with new update module |
-| `package.json` | Not changed (verified) | Zero production deps, `prepare` -> `tsc`, bin entry correct |
-| `tsconfig.json` | Not changed (verified) | `rootDir: "src"`, `include: ["src"]` — confirms the `npm install -g ./` bug |
-| `skill-content/references/commands.md` | Not changed (verified) | Already says "Check for and apply CLI updates from GitHub" — correct |
+| File | Review Focus | Findings |
+|------|-------------|----------|
+| `src/update/extract.ts` (new, 148 lines) | Tar parser correctness, path safety, error handling, bounds checking | **Issue found:** Missing bounds check on data read — `subarray()` silently truncates if header claims more data than buffer holds. Fixed by adding bounds check at lines 127-131. |
+| `src/update/perform.ts` (modified, 246 lines) | Integration with extractTarGz, error contract, JSDoc accuracy | **Issue found:** Stale JSDoc at line 73 still said "Extract via system `tar`". Fixed to "Extract in-process via extractTarGz (no external binary)". |
+| `src/update/extract.test.ts` (new, 277→313 lines) | Test coverage, test helper correctness, edge case coverage | Tests are well-structured. Added test 6 for truncated tar entry to cover the new bounds check. |
+| `src/update/validate.ts` (unchanged, 66 lines) | Post-extraction contract compatibility | No issues. `validateStaged` checks `dist/index.js`, `package.json`, runs `node --version`. These checks are compatible with the in-process extraction output. |
+| `src/update/index.ts` (unchanged, 207 lines) | Caller error handling, fail-open/fail-closed behavior | No issues. `runUpdate()` exits non-zero on failure (fail-closed). `checkAutoUpdate()` logs warning and continues (fail-open). Both unchanged. |
+| `package.json` (unchanged) | No new dependencies | Correct. Zero runtime deps maintained. Only `node:*` imports used. |
+| `tsconfig.json` (unchanged) | Build config compatibility | Correct. ES2022 target, Node16 modules, strict mode — all compatible with the new code. |
 
 ## Missed Requirements & Issues Found
 
 ### Correctness/Behavior Issues
 
-1. **Installation instruction would fail (Fixed)** — `src/docs/cli-content.ts` line 19 instructed users to run `npm install -g ./` from the extracted tarball directory. The CI tarball only contains `dist/`, `skill-content/`, `package.json`, and `build-metadata.json` — it does NOT contain `src/`. The `prepare` script in `package.json` runs `npm run build` -> `tsc`, and `tsconfig.json` has `"rootDir": "src"` and `"include": ["src"]`. Running `npm install -g ./` from the extracted tarball would trigger `tsc`, which would fail because there are no TypeScript source files to compile. Fixed by adding `--ignore-scripts` flag and a clarifying note.
-
-### Requirements Gaps
-
-None. All ticket acceptance criteria are satisfied:
-- AC-1: `build-release.yml` creates prebuilt GitHub Release asset without `v*` tag
-- AC-2: `auto-tag.yml` deleted
-- AC-3: `publish.yml` preserved unchanged for manual tag-driven npm releases
-- AC-4: `hlx update` uses prebuilt artifact, no `tsc` required (after documentation fix)
-- AC-5: Failed update preserves current install (backup/rollback mechanism)
-- AC-6: Auto-update uses same staged mechanism, fail-open behavior preserved
-- AC-7: Auth failures produce explicit GitHub auth guidance (GITHUB_TOKEN, GH_TOKEN, gh auth login)
-- AC-8: No `npm install -g git+https://...#main` or `npm install -g @projectxinnovation/helix-cli@latest` references remain as the primary install/update path
-- AC-9: `hlx --version` includes commit SHA (read from config after successful update)
-- AC-10: Staged validation prevents bricked CLI — live install is immutable until candidate passes
-
-### Regression Risks
-
-None identified. The changes are confined to the update module and CI workflows. Existing tests (flag parsing, ticket resolution, skill operations) all pass. `publish.yml` is byte-for-byte identical to the original.
+1. **Missing data bounds check in extract.ts (FIXED)**
+   - **Location:** `src/update/extract.ts`, between lines 124 and 126 (before typeflag handling)
+   - **Issue:** When reading file data at line 139 (`tar.subarray(dataStart, dataStart + size)`), there was no verification that `dataStart + size <= tar.length`. If a tar header claimed a data size larger than the remaining buffer (possible with corruption in the tar layer after successful gzip decompression), `subarray()` would silently return a truncated view. This could produce silently truncated files without raising an error — violating the fail-closed invariant.
+   - **Risk:** Low likelihood (gunzipSync catches most corruption), but the consequence (silent data truncation) is severe for an update tool. A truncated `dist/index.js` would likely be caught by `validateStaged()` (which runs `node --version`), but other files like `build-metadata.json` could be silently truncated.
+   - **Fix:** Added bounds check at lines 127-131 that throws a descriptive error: `Truncated tar entry "${entryName}": expected ${size} bytes at offset ${dataStart}, but archive is only ${tar.length} bytes`. Added test case 6 to validate this behavior.
 
 ### Code Quality/Robustness
 
-No material issues. Minor observations (not requiring fixes):
-- `version.ts` does not read `build-metadata.json` as a fallback for commit SHA display. This is acceptable because: (1) config is saved with commit SHA after successful `hlx update`, (2) the `--version` handler in `src/index.ts` already hints users to run `hlx update` when the SHA is absent.
-- No unit tests exist for the update module. This is explicitly called out as a known limitation and out of scope for this ticket.
+2. **Stale JSDoc comment in perform.ts (FIXED)**
+   - **Location:** `src/update/perform.ts`, line 73
+   - **Issue:** The JSDoc said "Extract via system `tar`" but the implementation now uses in-process extraction. Misleading for future maintainers.
+   - **Fix:** Changed to "Extract in-process via extractTarGz (no external binary)."
+
+### Requirements Gaps
+
+None. All ticket acceptance criteria are met:
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| 1. Windows with GNU tar → extraction succeeds | Met | In-process extraction eliminates external tar dependency entirely |
+| 2. macOS/Linux → no regression | Met | Same output via platform-independent Node.js APIs |
+| 3. No remaining external tar invocation | Met | `grep -rn 'execSync.*tar\|spawnSync.*tar' src/update/` → only JSDoc comment match |
+| 4. Test exercises representative tarball | Met | 6 test cases covering CI-shaped tarball, colon-in-path, corrupt input, empty archive, PAX headers, truncated entry |
+| 5. npm test, npm run build, --version pass | Met | 57/57 tests pass, build exits 0, version outputs `1.3.4` |
+
+### Regression Risks
+
+None identified. The change is fully isolated to the extraction step. The `extractTarGz` function is a new module consumed only by `performStagedUpdate`. All 51 pre-existing tests continue to pass.
 
 ### Verification/Test Gaps
 
-None beyond the known limitation of no update-module unit tests.
+None. Test coverage is comprehensive:
+- Test 1: CI-shaped tarball with full content verification
+- Test 2: Colon-in-path (original failure mode)
+- Test 3: Corrupt tarball (throws)
+- Test 4: Empty archive (graceful)
+- Test 5: PAX extended headers (skipped correctly)
+- Test 6: Truncated tar entry (throws — added by code review)
 
 ## Changes Made by Code Review
 
-| File | Line | Description |
-|------|------|-------------|
-| `src/docs/cli-content.ts` | 19 | Changed `npm install -g ./` to `npm install -g ./ --ignore-scripts` — the extracted tarball does not contain `src/` so `tsc` (triggered by the `prepare` script) would fail without this flag |
-| `src/docs/cli-content.ts` | 20-21 | Added clarifying note: "The `--ignore-scripts` flag is required because the tarball ships prebuilt -- no build step is needed." |
+| # | File | Lines | Description |
+|---|------|-------|-------------|
+| 1 | `src/update/extract.ts` | 127-131 | Added bounds check: `if (size > 0 && dataStart + size > tar.length) throw new Error(...)`. Prevents silent data truncation on corrupt tar entries. |
+| 2 | `src/update/perform.ts` | 73 | Fixed stale JSDoc: "Extract via system `tar`" → "Extract in-process via extractTarGz (no external binary)". |
+| 3 | `src/update/extract.test.ts` | 279-313 | Added test case 6: "throws on truncated tar entry (header claims more data than exists)". Builds a tar with a header claiming 10000 bytes but only 512 bytes of data present. Asserts extractTarGz throws with "Truncated tar entry" message. |
 
 ## Remaining Risks / Deferred Items
 
-1. **End-to-end update test requires CI run**: The full update flow cannot be tested until `build-release.yml` runs on GitHub and creates the initial `latest` release. This is inherent to the design and documented in the implementation.
-2. **No update module unit tests**: The `src/update/` module has zero test files. This was identified as a gap but is out of scope for this ticket.
-3. **GitHub API rate limits**: Unauthenticated requests are limited to 60/hr. Auto-update checks are infrequent, so this is low-risk. Auth token usage raises the limit to 5000/hr.
-4. **`build-metadata.json` not used by `version.ts`**: The file is embedded in the tarball and copied to the install root, but `version.ts` only reads the commit SHA from config. This means a fresh tarball install (without running `hlx update`) won't display the SHA. The `--version` handler already mitigates this by printing a hint.
+1. **`copyDirRecursive` still shells out (perform.ts:34):** Uses `execSync('xcopy'/'cp -R')` for the EXDEV cross-filesystem fallback. Not a tar invocation — explicitly out of scope per acceptance criteria #3. Could be replaced with `fs.cpSync()` in a future pass.
+
+2. **Path traversal `startsWith` without trailing separator (extract.ts:115):** The check `!fullPath.startsWith(resolvedDest)` technically matches prefix `resolvedDest` + any suffix. However, this is safe in practice because: (a) `..` components are rejected first (line 108), (b) leading `/` is stripped first (line 105), and (c) `path.resolve(base, relative)` with a safe relative path always produces a path under `base/`. The defense is correct but could be strengthened with `resolvedDest + path.sep` in a future hardening pass.
+
+3. **Tar format edge cases:** The parser handles USTAR format with PAX headers. Exotic features (GNU long name extensions, sparse files) are not supported. These are not produced by our CI and would fail closed with a checksum mismatch error. No action needed.
 
 ## Verification Impact Notes
 
-No verification checks are affected by the code review change. The fix is in documentation content only and does not change any behavioral logic or function signatures. All 12 verification checks (CHK-01 through CHK-12) remain valid as defined.
+The code-review changes are additive (bounds check + test + comment fix). They do not alter the behavior for valid tarballs, only add a fail-fast path for corrupt data.
+
+| Check ID | Impact | Status |
+|----------|--------|--------|
+| CHK-01 (Build) | No impact — new bounds check compiles cleanly | Still valid |
+| CHK-02 (Tests) | Test count increased from 56 to 57 (new truncation test) — all pass | Still valid |
+| CHK-03 (No tar invocation) | No impact — no new shell invocations added | Still valid |
+| CHK-04 (CLI version) | No impact | Still valid |
+| CHK-05 (Extraction tests) | Test count increased from 5 to 6 — all pass | Still valid, expanded |
 
 ## APL Statement Reference
 
-Code review complete. One correctness issue found and fixed: the installation instruction `npm install -g ./` in `cli-content.ts` would fail when run from the extracted CI tarball because the tarball lacks `src/` and the `prepare` script runs `tsc`. Fixed by adding `--ignore-scripts` flag. All other implementation changes are correct: staged download-validate-swap mechanism, fail-open/fail-closed behavior, auth error messaging, backup/rollback, workflow changes, and documentation updates. Quality gates pass after fix: typecheck clean, 51/51 tests pass.
+Code review complete with two fixes applied. (1) Added a bounds check in extract.ts (lines 127-131) that throws on truncated tar entries where the header claims more data than exists in the buffer — this converts a silent data truncation into a visible error, preserving the fail-closed contract. Added a corresponding test case (test 6). (2) Fixed a stale JSDoc comment in perform.ts line 73 that still referenced "system tar" after the implementation replaced it with in-process extraction. All 57 tests pass, build succeeds, CLI version output works. No other issues found — the tar parser, path traversal protection, error handling, and test coverage are correct.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `ticket.md` | Primary requirements and acceptance criteria | 10 acceptance criteria, non-negotiable invariants (never brick CLI, fail-open/fail-closed), workflow changes |
-| `implementation/implementation-actual.md` | Scope map for review — file list and claimed outcomes | 8 changed files, 12 verification checks claimed passing |
-| `implementation/apl.json` | Implementation structured evidence | Cross-referenced with code to verify claims |
-| `implementation-plan/implementation-plan.md` | Step-by-step plan with verification checks | Compared actual changes against planned changes; found documentation divergence (plan said "add to PATH", implementation used `npm install -g ./`) |
-| `product/product.md` | Product vision and success criteria | Confirmed fail-open/closed split, never-brick principle, "no user-side build tools" requirement |
-| `tech-research/tech-research.md` | Architecture decisions | Confirmed GitHub Releases + rolling `latest` tag, rename-based swap, system tar, build-metadata.json |
-| `diagnosis/diagnosis-statement.md` | Root cause analysis | 4 root causes confirmed addressed: source-based install, destructive npm install -g, auto-tag chains, no prebuilt artifact |
-| `scout/scout-summary.md` | Codebase architecture overview | Confirmed 5-file update module structure, 6 npm-install references, zero tests |
-| `tsconfig.json` | TypeScript build configuration | `rootDir: "src"`, `include: ["src"]` — proved the `npm install -g ./` bug |
-| `package.json` | Project configuration | `prepare: "npm run build"` → `tsc` — confirmed the install instruction would trigger a build |
-| `src/index.ts` | CLI entry point | Verified auto-update integration, `--version` handler with SHA hint |
-| `.github/workflows/publish.yml` | npm publish workflow | Verified unchanged — triggers on `v*` tags, OIDC trusted publishing |
+| `ticket.md` (continuation context) | Requirements, acceptance criteria, non-negotiable invariants | Extraction-only fix; fail-closed on errors; no external binary; test with colon-in-path |
+| `implementation/implementation-actual.md` | Scope map of changed files and verification claims | 3 files changed (extract.ts, perform.ts, extract.test.ts); 5 tests; claims verified by direct code inspection |
+| `implementation/apl.json` | Implementation structured evidence | Error contract claims verified against actual code |
+| `implementation-plan/implementation-plan.md` | Intended design and verification plan | 4 steps; 5 checks (CHK-01 through CHK-05); all still valid after review |
+| `tech-research/tech-research.md` | Architecture decision: built-in modules over node-tar | Key constraint: no node_modules in release tarball; built-in approach is only viable option |
+| `diagnosis/diagnosis-statement.md` | Root cause analysis | GNU tar colon interpretation at perform.ts:124; single call-site replacement |
+| `product/product.md` | Product spec, use cases, scope | Extraction-only change; error contract; fail-open/fail-closed behavior |
+| `scout/reference-map.json` | File inventory and facts | Bug location, tarball shape, validation contract, zero runtime deps |
+| `repo-guidance.json` | Repo intent | helix-cli is sole target; no cross-repo impact |
+| `src/update/extract.ts` | Direct code review | Tar parser correctness, bounds check gap identified |
+| `src/update/extract.test.ts` | Test coverage review | 5 test cases comprehensive; added 6th for truncation |
+| `src/update/perform.ts` | Integration review | extractTarGz correctly wired; error contract preserved; stale JSDoc found |
+| `src/update/validate.ts` | Post-extraction contract | Checks dist/index.js, package.json, node --version — compatible with in-process extraction output |
+| `src/update/index.ts` | Caller error handling | fail-closed (exit 1) and fail-open (warn+continue) preserved |
+| `package.json` | Dependencies, build scripts | Zero runtime deps maintained; ESM; tsc-only build |
+| `tsconfig.json` | Build configuration | ES2022, Node16 modules, strict — compatible with new code |

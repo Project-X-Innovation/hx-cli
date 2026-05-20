@@ -274,4 +274,48 @@ describe("extractTarGz", () => {
       "PaxHeader directory should not be created",
     );
   });
+
+  it("throws on truncated tar entry (header claims more data than exists)", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "extract-"));
+    const destDir = join(tmpDir, "staged");
+    mkdirSync(destDir, { recursive: true });
+
+    // Build a tarball where the header claims 10000 bytes but the archive
+    // is truncated after only a few data blocks.
+    const header = Buffer.alloc(512);
+    const name = "dist/large-file.js";
+    header.write(name, 0, name.length, "ascii");
+    header.write("0000644\0", 100, 8, "ascii");
+    header.write("0001000\0", 108, 8, "ascii");
+    header.write("0001000\0", 116, 8, "ascii");
+    // Claim 10000 bytes of data
+    const sizeStr = (10000).toString(8).padStart(11, "0");
+    header.write(sizeStr + "\0", 124, 12, "ascii");
+    const mtime = Math.floor(Date.now() / 1000).toString(8).padStart(11, "0");
+    header.write(mtime + "\0", 136, 12, "ascii");
+    header.write("0", 156, 1, "ascii"); // regular file
+    header.write("ustar\0", 257, 6, "ascii");
+    header.write("00", 263, 2, "ascii");
+    // Compute checksum
+    header.write("        ", 148, 8, "ascii");
+    let sum = 0;
+    for (let i = 0; i < 512; i++) sum += header[i];
+    header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "ascii");
+
+    // Only provide 512 bytes of data (< 10000 claimed)
+    const data = Buffer.alloc(512, 0x41); // 'A' padding
+    const terminator = Buffer.alloc(1024); // end-of-archive
+    const tarBuf = Buffer.concat([header, data, terminator]);
+    const tgz = gzipSync(tarBuf);
+
+    const tarballPath = join(tmpDir, "truncated.tgz");
+    writeFileSync(tarballPath, tgz);
+
+    assert.throws(
+      () => extractTarGz(tarballPath, destDir),
+      (err: unknown) =>
+        err instanceof Error && err.message.includes("Truncated tar entry"),
+      "Should throw on truncated tar entry",
+    );
+  });
 });

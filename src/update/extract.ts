@@ -123,6 +123,13 @@ export function extractTarGz(tarballPath: string, destDir: string): void {
     // Data is padded to the next 512-byte boundary
     const dataBlocks = Math.ceil(size / 512) * 512;
 
+    // Bounds check: ensure the claimed data does not extend past the buffer
+    if (size > 0 && dataStart + size > tar.length) {
+      throw new Error(
+        `Truncated tar entry "${entryName}": expected ${size} bytes at offset ${dataStart}, but archive is only ${tar.length} bytes`,
+      );
+    }
+
     if (typeflag === "5") {
       // Directory
       mkdirSync(fullPath, { recursive: true });

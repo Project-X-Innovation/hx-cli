@@ -70,7 +70,7 @@ function safeRename(oldPath: string, newPath: string): void {
  *
  * Staged install flow:
  *   1. Download the tarball to a staging directory.
- *   2. Extract via system `tar`.
+ *   2. Extract in-process via extractTarGz (no external binary).
  *   3. Validate the staged candidate (entrypoint + --version).
  *   4. Rename-based swap with .bak backup dirs for rollback.
  *   5. Clean up staging and backup on success; restore on failure.
