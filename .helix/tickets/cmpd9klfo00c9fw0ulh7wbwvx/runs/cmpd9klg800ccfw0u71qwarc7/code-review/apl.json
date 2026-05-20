@@ -1,0 +1,40 @@
+{
+  "questions": [
+    "Does the implementation correctly replace all npm registry references with GitHub SHA-based comparison in the update flow?",
+    "Are error handling semantics correct: fail-closed for runUpdate, fail-open for checkAutoUpdate?",
+    "Does the migration path for npm-sourced installs work correctly?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. All npm registry infrastructure is removed: NPM_PACKAGE constant, fetchLatestVersion() (npm view), and isNewerVersion() (semver comparison) are deleted from check.ts. GIT_INSTALL_SPEC is added and used in perform.ts. Both runUpdate() and checkAutoUpdate() in index.ts use fetchRemoteSha() for SHA comparison. Grep confirms zero matches for fetchLatestVersion, isNewerVersion, NPM_PACKAGE, npm view, npm registry, and @projectxinnovation/helix-cli@latest in src/. All user-facing documentation and error messages reference the git+https URL.",
+      "evidence": [
+        "src/update/check.ts: GIT_INSTALL_SPEC exported at line 9; fetchLatestVersion/isNewerVersion/NPM_PACKAGE absent",
+        "src/update/perform.ts: imports and uses GIT_INSTALL_SPEC (lines 2, 15)",
+        "src/update/index.ts: imports fetchRemoteSha and GIT_INSTALL_SPEC; calls fetchRemoteSha() in runUpdate (line 55) and checkAutoUpdate (line 146)",
+        "grep for @projectxinnovation/helix-cli@latest in src/ and skill-content/: zero matches",
+        "grep for fetchLatestVersion|isNewerVersion|NPM_PACKAGE in src/: zero matches"
+      ]
+    },
+    {
+      "answer": "Yes. runUpdate() calls fetchRemoteSha() and exits non-zero (process.exit(1)) when it returns null, when performUpdate fails, or when validateInstall fails. Each failure path prints a clear error message and a recovery command using GIT_INSTALL_SPEC. checkAutoUpdate() calls fetchRemoteSha() and returns silently when it returns null (with a stderr warning). On update failure, it prints a stderr warning and continues. It never calls process.exit().",
+      "evidence": [
+        "src/update/index.ts:56-61: runUpdate exits 1 when remoteSha is null",
+        "src/update/index.ts:87-91: runUpdate exits 1 on install failure with recovery command",
+        "src/update/index.ts:95-103: runUpdate exits 1 on validation failure with recovery command",
+        "src/update/index.ts:147-149: checkAutoUpdate warns and returns on null remoteSha",
+        "src/update/index.ts:182-184: checkAutoUpdate warns and continues on update failure"
+      ]
+    },
+    {
+      "answer": "Yes. In runUpdate() (lines 67-73), migration is detected when installSource is undefined, mode is 'npm', or mode is 'unknown'. A notice is printed: 'Switching install source from npm to GitHub main...'. The install proceeds via performUpdate, validation runs, and on success saveConfig records {mode: 'github', repo, branch, commit: remoteSha}. For npm-sourced installs, the commit field is absent (old code saved version, not commit), so the SHA comparison always falls through to the install path. checkAutoUpdate() handles npm mode via isCanonicalSource() which returns true for npm mode, allowing the auto-update to proceed and record github mode on success.",
+      "evidence": [
+        "src/update/index.ts:67-73: migration detection for !installSource, mode=npm, mode=unknown",
+        "src/update/index.ts:107-114: saveConfig records github mode with SHA on success",
+        "src/update/index.ts:20-28: isCanonicalSource accepts npm mode as canonical",
+        "src/lib/config.ts:5-11: InstallSource type has commit field (optional)"
+      ]
+    }
+  ],
+  "statement": "Code review complete. All 9 changed files reviewed against ticket requirements, product spec, and implementation plan. No issues requiring code fixes were found. Implementation correctly replaces npm-registry semver comparison with GitHub-main SHA-based comparison, adds npm-install migration detection, extends --version with commit SHA, and updates all user-facing documentation. All quality gates pass: typecheck clean, build succeeds, 51/51 tests pass, --version output correct.",
+  "followups": []
+}
