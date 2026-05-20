@@ -1,72 +1,67 @@
 {
-  "title": "Replace tar extraction with in-process JS implementation",
-  "description": "Walkthrough of changes replacing execSync('tar -xzf ...') with an in-process extractTarGz function using Node.js built-in modules, fixing the Windows GNU tar colon-interpretation failure.",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-527: Replace hlx self-update with GitHub Release assets",
+  "description": "This tour walks through the complete replacement of the hlx update mechanism. The old approach ran 'npm install -g git+https://...#main', which triggered a TypeScript build (tsc) on the user's machine — failing when devDependencies were unavailable and bricking the CLI if the install failed mid-way. The new approach builds a prebuilt tarball in CI, publishes it as a rolling GitHub Release tagged 'latest', and installs via a staged download-validate-swap mechanism with rollback. The auto-tag workflow that chained every main merge to npm publish was also deleted.",
   "steps": [
     {
-      "file": "src/update/extract.ts",
-      "line": 65,
-      "title": "New extractTarGz function — the core fix",
-      "description": "This is the new in-process tar extraction function that replaces the execSync('tar -xzf ...') call. It reads the .tgz file, decompresses with gunzipSync, then parses tar entries in a loop over 512-byte blocks. Uses only node:zlib, node:fs, and node:path — zero third-party dependencies."
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 1,
+      "description": "This entire workflow has been deleted. It previously fired on every push to main, read the version from package.json, and pushed a v{version} tag — which chained through publish.yml to trigger an npm publish. This created unwanted coupling: every merge to main risked an accidental npm publish and required a custom RELEASE_TOKEN secret. Removing it decouples CI builds from npm releases; publish.yml still exists and still triggers on v* tags pushed manually when a real npm release is intended.",
+      "title": "Deleted: auto-tag workflow"
     },
     {
-      "file": "src/update/extract.ts",
-      "line": 9,
-      "title": "Tar header parsing helpers",
-      "description": "Helper functions for reading null-terminated ASCII strings, octal numbers, computing checksums, and detecting zero blocks from tar headers. These implement the USTAR tar format spec at the byte level."
+      "file": ".github/workflows/build-release.yml",
+      "line": 1,
+      "description": "This new workflow replaces auto-tag.yml. It triggers on push to main and builds a prebuilt tarball (helix-cli.tgz) containing dist/, skill-content/, package.json, and build-metadata.json — deliberately excluding src/ and test files. The tarball is published as a rolling GitHub Release under the tag 'latest' (not a v* tag, so publish.yml is never triggered). Using 'contents: write' permission with the built-in github.token avoids the RELEASE_TOKEN secret. The concurrency group ensures only one build-release runs at a time.",
+      "title": "New: build-release workflow"
     },
     {
-      "file": "src/update/extract.ts",
-      "line": 86,
-      "title": "Header field parsing and validation",
-      "description": "Parses the key header fields: name (bytes 0-99), size (bytes 124-135), typeflag (byte 156), and USTAR prefix (bytes 345-499). Validates the stored checksum against a computed checksum to detect corruption."
+      "file": ".github/workflows/build-release.yml",
+      "line": 26,
+      "description": "The workflow runs 'npm ci' (which triggers the prepare script and runs tsc, building dist/) and then 'npm test' before creating the tarball. This guarantees the tarball always contains a tested, compiled artifact. The comment notes that the prepare script runs build automatically — this is why src/ is not needed in the tarball: the compiled output in dist/ is already present.",
+      "title": "npm ci + npm test before packaging"
     },
     {
-      "file": "src/update/extract.ts",
-      "line": 104,
-      "title": "Path traversal protection",
-      "description": "Security check: strips leading slashes, rejects entries containing '..' path components, and validates the resolved path starts with the destination directory. Prevents zip-slip style attacks on the extraction path."
+      "file": ".github/workflows/build-release.yml",
+      "line": 30,
+      "description": "A build-metadata.json file is generated and embedded in the tarball containing the commit SHA and build timestamp. This allows 'hlx --version' to surface the exact commit that produced the installed binary, satisfying acceptance criterion AC-9. The metadata file is created inline using GITHUB_SHA (available as an environment variable in all GitHub Actions runners).",
+      "title": "Build metadata injection"
     },
     {
-      "file": "src/update/extract.ts",
-      "line": 126,
-      "title": "Entry type handling",
-      "description": "Handles three entry types: directories (typeflag '5') via mkdirSync, regular files (typeflag '0' or null) via writeFileSync, and PAX extended headers (typeflag 'x' or 'g') which are silently skipped. Other types (symlinks, etc.) are also skipped for safety."
+      "file": ".github/workflows/build-release.yml",
+      "line": 35,
+      "description": "The tarball explicitly excludes *.test.js and *.test.d.ts and does NOT include src/. This is the critical design decision: users installing from the tarball get prebuilt dist/ files only. The old 'npm install -g git+https://' path included src/ and triggered tsc via the prepare script, which failed when TypeScript was unavailable. With this tarball, no build step is needed on the user's machine.",
+      "title": "Tarball creation — no src/, no test files"
     },
     {
-      "file": "src/update/perform.ts",
-      "line": 14,
-      "title": "Import the new extraction function",
-      "description": "Added import for extractTarGz from the new extract.ts module. The execSync import at line 1 is deliberately retained — it's still used by copyDirRecursive (line 34) for the EXDEV cross-filesystem fallback."
+      "file": ".github/workflows/build-release.yml",
+      "line": 47,
+      "description": "The workflow deletes any existing 'latest' release (with '|| true' to tolerate the first run where none exists), then recreates it pointing to the current commit SHA. This rolling release pattern means the update check in check.ts can always fetch a stable URL: the GitHub Releases API for tag 'latest' always returns the most recent main build. The tag 'latest' does not match the 'v*' glob in publish.yml's trigger, so npm publish is never accidentally invoked.",
+      "title": "Rolling 'latest' release — delete and recreate"
     },
     {
-      "file": "src/update/perform.ts",
-      "line": 123,
-      "title": "Replacement of the bug site",
-      "description": "The original execSync('tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"') is replaced with extractTarGz(tarballPath, stagingDir). The try/catch error handling structure is preserved exactly — extraction errors are caught and returned as { success: false, error: 'Extraction failed: ...' }."
+      "file": ".helix/tickets/cmpea6fdz001bjo0uktcklzhb/runs/cmpea6fee001ejo0u41xf8d7o/diagnosis/diagnosis-statement.md",
+      "line": 1,
+      "description": "The diagnosis statement captures the three root causes addressed by this change: (1) source-based install requires tsc on user machines, (2) npm install -g is destructive with no staging or rollback, and (3) auto-tag.yml coupled every main merge to npm publish. The diagnosis drove the implementation plan: prebuilt tarball in CI eliminates cause 1, staged download-validate-swap eliminates cause 2, and deleting auto-tag.yml eliminates cause 3.",
+      "title": "Diagnosis: root causes documented"
     },
     {
-      "file": "src/update/extract.test.ts",
-      "line": 32,
-      "title": "Test helper: programmatic tarball creation",
-      "description": "The makeTarHeader and createTestTarGz helpers build valid USTAR-format tar archives programmatically using gzipSync. This avoids opaque binary fixture files and keeps tests self-contained with zero test-only dependencies."
+      "file": ".helix/tickets/cmpea6fdz001bjo0uktcklzhb/runs/cmpea6fee001ejo0u41xf8d7o/code-review/code-review-actual.md",
+      "line": 1,
+      "description": "The code review identified one correctness issue: the installation instruction in src/docs/cli-content.ts originally told users to run 'npm install -g ./' from the extracted tarball without --ignore-scripts. This would have triggered the prepare script (tsc), which fails because src/ is not in the tarball. The fix adds '--ignore-scripts' to the npm install command, ensuring users install the prebuilt dist/ files directly without any build step. This is the only post-implementation correctness fix.",
+      "title": "Code review: correctness fix for --ignore-scripts"
     },
     {
-      "file": "src/update/extract.test.ts",
-      "line": 131,
-      "title": "Test 1: Representative CI-shaped tarball",
-      "description": "Creates a .tgz with the exact structure the CI workflow produces (dist/index.js, skill-content/SKILL.md, package.json, build-metadata.json), extracts it, and verifies all files exist with correct content."
+      "file": ".helix/tickets/cmpea6fdz001bjo0uktcklzhb/runs/cmpea6fee001ejo0u41xf8d7o/code-review/apl.json",
+      "line": 1,
+      "description": "The code review confirms all 10 acceptance criteria are met after the --ignore-scripts fix: build-release.yml creates a GitHub Release without a v* tag (AC-1), auto-tag.yml is deleted (AC-2), publish.yml is unchanged (AC-3), hlx update uses the prebuilt artifact (AC-4), failed updates preserve the current install via backup/rollback (AC-5), auto-update uses the same staged mechanism (AC-6), auth failures provide explicit guidance (AC-7), no npm install -g git+https references remain (AC-8), hlx --version shows commit SHA (AC-9), and staged validation prevents bricking (AC-10).",
+      "title": "All 10 acceptance criteria satisfied"
     },
     {
-      "file": "src/update/extract.test.ts",
-      "line": 174,
-      "title": "Test 2: Colon-in-path — validates the original failure mode",
-      "description": "Extracts to a directory with a colon in its name (staging:test), directly validating the original GNU tar failure mode where C: was interpreted as a remote host. This test confirms the fix works because no external tar binary is involved."
-    },
-    {
-      "file": "src/update/extract.test.ts",
-      "line": 204,
-      "title": "Test 3: Corrupt tarball error handling",
-      "description": "Passes garbage bytes as a .tgz file and asserts that extractTarGz throws an error. This validates the error contract — performStagedUpdate's try/catch catches the throw and returns { success: false, error }."
+      "file": ".github/workflows/build-release.yml",
+      "line": 59,
+      "description": "The new release pipeline is self-contained and safe: every push to main produces a tested, prebuilt tarball published as a rolling 'latest' GitHub Release. The hlx update path in src/update/ downloads this tarball, extracts it to a staging directory, validates the staged install by running the entrypoint with HLX_SKIP_UPDATE_CHECK=1, and only then performs an atomic rename-based swap with a .bak backup and rollback on failure. The publish.yml workflow for npm releases remains completely unchanged and is only triggered by manually pushed v* tags.",
+      "title": "Summary: clean code paths confirmed"
     }
   ]
 }
