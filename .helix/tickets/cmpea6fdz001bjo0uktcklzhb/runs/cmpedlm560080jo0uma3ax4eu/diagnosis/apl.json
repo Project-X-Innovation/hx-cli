@@ -1,73 +1,73 @@
 {
   "questions": [
-    "What exactly causes the current hlx update to fail, especially on Windows?",
-    "How does the current update mechanism risk bricking the CLI?",
-    "Why does the auto-tag workflow create unwanted release friction?",
-    "What GitHub artifact mechanism should replace the current npm-based update path?",
-    "What is the minimum set of files and changes required for the replacement?",
-    "Are there cross-repo impacts?"
+    "What exactly causes the tar extraction to fail on Windows with Git for Windows installed?",
+    "Where is the bug located in the codebase and what is the exact failing code?",
+    "Are there other execSync/child_process tar invocations in the update module beyond the known one?",
+    "What JavaScript tar library best fits this project's constraints (ESM, Node >=18, no native deps, zero current runtime deps)?",
+    "What is the exact tarball format the extraction must handle?",
+    "What post-extraction contract must the replacement satisfy?",
+    "Could the bug be fixed by quoting paths differently or using --force-local instead of replacing the binary?"
   ],
   "answers": [
     {
-      "answer": "performUpdate() in src/update/perform.ts:17 runs 'npm install -g git+https://...#main' via spawnSync. This triggers the 'prepare' script (package.json:19 -> 'npm run build' -> 'tsc'). TypeScript is listed only as a devDependency (package.json:41-43), so it is not available in the transient npm global install environment. On Windows (and other environments without a pre-existing TypeScript toolchain), the tsc step fails, aborting the install.",
+      "answer": "GNU tar (shipped with Git for Windows via MSYS2/mingw) interprets colon characters in path arguments as remote host designators using traditional Unix remote-tape syntax (host:path). When the staging path contains a Windows drive letter like C:\\Users\\...\\staging\\abc123.tgz, GNU tar parses 'C' as a hostname and attempts a network connection, producing: 'tar (child): Cannot connect to C: resolve failed'. This is intrinsic to GNU tar's command-line parser and not a shell escaping issue. Windows' built-in bsdtar (C:\\Windows\\System32\\tar.exe) does not have this behavior, but Git for Windows places its GNU tar earlier in PATH.",
       "evidence": [
-        "src/update/perform.ts:17 — spawnSync('npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main')",
-        "package.json:19 — 'prepare': 'npm run build'",
-        "package.json:16 — 'build': 'tsc'",
-        "package.json:41-43 — devDependencies: { '@types/node': '^25.5.0', 'typescript': '^6.0.2' }"
+        "Ticket continuation context — exact error: 'tar (child): Cannot connect to C: resolve failed'",
+        "src/update/perform.ts:124 — execSync(`tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"`, ...)",
+        "Staging paths include drive letters: perform.ts:16 — STAGING_BASE = join(homedir(), '.hlx', 'staging') which resolves to e.g. C:\\Users\\user\\.hlx\\staging on Windows",
+        "Reproduced from PowerShell (not Git Bash) — confirms this is a PATH ordering issue, not MSYS shell quirk"
       ]
     },
     {
-      "answer": "npm install -g removes the existing package before installing the replacement. If the new install fails mid-way (e.g., tsc failure), the old CLI files are already gone and hlx becomes unusable. The current code has no staging mechanism — performUpdate() directly runs npm install -g, and validateInstall() only checks AFTER the destructive operation completes. By the time validation fails, the damage is done.",
+      "answer": "The bug is at src/update/perform.ts line 124, inside the performStagedUpdate function. The exact code is: execSync(`tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"`, { stdio: 'pipe', timeout: 30_000 }). The error is caught at lines 128-131 and returns { success: false, error: 'Extraction failed: ...' }. The function's error handling contract is already correct (returns structured error, does not throw). Only the extraction mechanism itself needs replacement.",
       "evidence": [
-        "src/update/perform.ts:17 — single npm install -g call with no staging",
-        "src/update/index.ts:85-104 — flow is performUpdate() then validateInstall() — validation is post-hoc",
-        "src/update/validate.ts:40-47 — resolves npm root -g and checks for dist/index.js at the npm package path — verifies after the fact",
-        "src/update/index.ts:100-103 — recovery message after validation failure acknowledges 'The update installed a broken package'"
+        "src/update/perform.ts:122-131 — extract block with execSync and catch",
+        "src/update/perform.ts:77-81 — function signature returning Promise<{ success: boolean; error?: string }>"
       ]
     },
     {
-      "answer": "auto-tag.yml triggers on every push to main, reads the version from package.json, and pushes a v{version} tag using secrets.RELEASE_TOKEN. This chains to publish.yml (triggered by v* tags), coupling every main merge to a potential npm publish. It requires maintaining a custom RELEASE_TOKEN secret (the standard GITHUB_TOKEN has only 'contents: read' in that workflow) and creates unwanted release frequency.",
+      "answer": "There is exactly one tar invocation in the update module: perform.ts:124. The other execSync/child_process usages are: (1) perform.ts:33 — copyDirRecursive shells out to xcopy/cp-R for EXDEV fallback (not tar), (2) check.ts:30 — execSync('gh auth token') for GitHub token discovery (not tar), (3) validate.ts:38 — spawnSync('node', ...) for version check (not tar). Acceptance criteria #3 scopes removal to 'external tar invocation' specifically, so only perform.ts:124 needs replacement.",
       "evidence": [
-        "auto-tag.yml:3-6 — on: push: branches: [main]",
-        "auto-tag.yml:19 — token: ${{ secrets.RELEASE_TOKEN }}",
-        "auto-tag.yml:8-9 — permissions: contents: read (insufficient for tag pushing, hence RELEASE_TOKEN needed)",
-        "auto-tag.yml:50-52 — git tag + git push origin tag",
-        "publish.yml:5-6 — on: push: tags: ['v*'] — receives the auto-pushed tag"
+        "src/update/perform.ts:33 — execSync for xcopy/cp-R (EXDEV fallback)",
+        "src/update/check.ts:30 — execSync('gh auth token')",
+        "src/update/validate.ts:38 — spawnSync('node', [entrypoint, '--version'])"
       ]
     },
     {
-      "answer": "GitHub Releases with a rolling non-version tag (e.g., 'latest') is the correct mechanism. Key reasons: (1) Release assets are permanent (no expiration, unlike Actions artifacts which expire in 90 days). (2) A tag named 'latest' does NOT match the 'v*' pattern in publish.yml, so it will not trigger npm publish. (3) The built-in GITHUB_TOKEN with 'contents: write' permission can create releases and push tags — no custom RELEASE_TOKEN needed. (4) Release assets have stable download URLs suitable for the updater. (5) The release body or a metadata file in the asset can record the commit SHA. (6) For private repos, asset downloads require GitHub auth, enabling clear error messaging. The project has zero production dependencies (only devDependencies), so the prebuilt tarball needs only dist/, skill-content/, and package.json — no node_modules bundling required.",
+      "answer": "The best fit is the 'tar' package (isaacs/node-tar, npm package name 'tar'). It was rewritten in TypeScript for v7+, provides ESM/CJS hybrid exports, is pure JavaScript with no native build dependency, and is used by npm itself (extremely battle-tested). It offers a high-level tar.x({ file, cwd }) API that directly replaces the execSync call. It handles gzip decompression automatically for .tgz files. The alternative 'tar-stream' (mafintosh/tar-stream) is lower-level and would require manually writing directory creation, file writing, and permission handling code — significantly more implementation work for no practical benefit. The project currently has zero runtime dependencies, so adding 'tar' introduces a new dependency, but the ticket explicitly says adding a runtime dependency is in scope.",
       "evidence": [
-        "package.json:40-43 — only devDependencies, no production dependencies",
-        "package.json:24-29 — files array defines artifact contents: dist/ (minus tests) and skill-content/",
-        "publish.yml:5-6 — trigger pattern 'v*' will not match tag 'latest'",
-        "GitHub Actions docs — GITHUB_TOKEN with 'contents: write' can create releases via gh release create",
-        "package.json:6-8 — bin entry 'hlx' -> 'dist/index.js' — the shebang allows direct execution"
+        "package.json — zero runtime dependencies currently, only devDependencies",
+        "Ticket continuation context — 'Adding a runtime dependency to package.json if needed for the JS tar library' is explicitly in scope",
+        "node-tar GitHub — rewritten in TypeScript, ESM/CJS hybrid via tshy, used by npm itself",
+        "Context7 tar-stream docs — lower-level API requires manual file writing per entry",
+        "Ticket requirements — 'no native build dependency', 'works without invoking external tar'"
       ]
     },
     {
-      "answer": "The change set spans 4 areas: (A) New CI workflow (build-release.yml) — triggered on push to main, builds, tests, creates/updates a GitHub Release with tag 'latest' and uploads the prebuilt tarball as an asset. (B) Remove auto-tag.yml, preserve publish.yml unchanged. (C) Rewrite src/update/ module (5 files) — check.ts: replace git ls-remote with GitHub API release metadata query; perform.ts: replace npm install -g with staged tarball download+unpack; validate.ts: remove npm-path dependency, validate staged artifact; index.ts: update flow and error messages; version.ts: minor adjustment if needed. (D) Update 6 documentation/error-message surfaces that contain hardcoded 'npm install -g git+https://...' references.",
+      "answer": "The tarball is a standard gzip-compressed tar (.tgz) with top-level entries (no nested prefix directory): dist/, skill-content/, package.json, build-metadata.json. It excludes *.test.js and *.test.d.ts. Created by GNU tar on ubuntu-latest in CI. This is a simple, standard format with no symlinks, long paths, or special attributes — any JS tar library will handle it correctly.",
       "evidence": [
-        "src/update/check.ts — fetchRemoteSha() uses git ls-remote, must switch to GitHub API",
-        "src/update/perform.ts — performUpdate() uses npm install -g, must switch to tarball download",
-        "src/update/validate.ts — validateInstall() resolves npm root -g, must validate staged directory",
-        "src/update/index.ts:89,101 — recovery messages reference npm install -g",
-        "src/docs/cli-content.ts:18,301 — installation and troubleshooting docs",
-        "src/skill/show.ts:15 — error recovery message",
-        "src/skill/paths.ts:25 — error recovery message",
-        ".github/workflows/auto-tag.yml — to be deleted",
-        ".github/workflows/publish.yml — to be preserved unchanged"
+        ".github/workflows/build-release.yml:36-43 — tar -czf helix-cli.tgz --exclude='*.test.js' --exclude='*.test.d.ts' dist/ skill-content/ package.json build-metadata.json",
+        "scout/reference-map.json — confirms top-level entries with no nested prefix"
       ]
     },
     {
-      "answer": "No cross-repo impact. This is entirely self-contained within helix-cli. The repository topology is single-repository, and the update mechanism, CI workflows, documentation, and config are all within helix-cli.",
+      "answer": "After extraction, the staging directory must contain the files that validateStaged() checks: dist/index.js must exist, package.json must exist, and 'node dist/index.js --version' must produce output and exit 0. The swap step also expects dist/, skill-content/ (optional), package.json, and build-metadata.json (optional) at the staging directory root. The extraction must produce the same filesystem layout as the current tar command.",
       "evidence": [
-        "Run context — repo_topology: single_repository, repository_count: 1",
-        "All changed files are within helix-cli repo boundaries"
+        "src/update/validate.ts:22 — existsSync(join(stagingDir, 'dist', 'index.js'))",
+        "src/update/validate.ts:30 — existsSync(join(stagingDir, 'package.json'))",
+        "src/update/validate.ts:38 — spawnSync('node', [entrypoint, '--version'])",
+        "src/update/perform.ts:160-163 — swap references stagedDist, stagedSkillContent, stagedPackageJson, stagedBuildMeta"
+      ]
+    },
+    {
+      "answer": "No. Quoting paths differently does not help because the colon interpretation is intrinsic to GNU tar's argument parser, not a shell escaping issue. The --force-local flag exists in GNU tar to disable remote-host interpretation, but it is GNU-specific and not supported by macOS BSD tar, so using it would break macOS. Hardcoding C:\\Windows\\System32\\tar.exe would still depend on an external binary (violating the ticket's goal) and assumes bsdtar's availability (only since Windows 10 1803). The ticket explicitly rejects these workarounds: 'Do not paper over the bug by detecting and rejecting GNU tar at runtime, or by hardcoding C:\\Windows\\System32\\tar.exe. The fix must remove the shell dependency entirely.'",
+      "evidence": [
+        "Ticket continuation context — explicit rejection of --force-local and System32 hardcoding",
+        "GNU tar man page — --force-local is GNU extension, not in POSIX tar or BSD tar",
+        "Ticket goal — 'no user-side toolchain required to install'"
       ]
     }
   ],
-  "statement": "The current hlx update fails because performUpdate() runs 'npm install -g git+https://...#main' which requires a user-side TypeScript build via the prepare script, and npm install -g destructively replaces the existing install before validation can prevent data loss. The fix requires four coordinated changes: (1) a new CI workflow that produces a prebuilt tarball and publishes it as a GitHub Release asset using the standard GITHUB_TOKEN with a rolling 'latest' tag that won't trigger npm publish, (2) a complete rewrite of the src/update/ module (5 files) to implement staged download-validate-swap instead of destructive npm install -g, (3) removal of auto-tag.yml while preserving publish.yml for intentional manual releases, and (4) documentation updates across 6 files to replace hardcoded npm install references.",
+  "statement": "The hlx update extraction step at src/update/perform.ts:124 shells out to system tar via execSync, which fails on Windows when GNU tar (from Git for Windows) is first in PATH because GNU tar interprets Windows drive-letter colons as remote-host syntax. The fix is to replace this single execSync('tar -xzf ...') call with an in-process extraction using the 'tar' npm package (isaacs/node-tar), which provides a direct tar.x({ file, cwd }) API, is pure JavaScript with no native dependencies, and is ESM-compatible. The change is confined to the extraction block in perform.ts (lines 122-131) plus adding 'tar' as a runtime dependency in package.json. A new test file must exercise extraction of a representative .tgz and verify the output layout. No other update module files, CI workflows, or validation logic need changes.",
   "followups": []
 }

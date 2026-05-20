@@ -1,111 +1,110 @@
-# Diagnosis Statement — BLD-527: Replace hlx self-update with GitHub release assets
+# Diagnosis Statement — BLD-527 (Continuation): Replace tar extraction with in-process JS library
 
 ## Problem Summary
 
-The `hlx update` command and auto-update mechanism fail because they depend on `npm install -g git+https://...#main`, which triggers a user-side TypeScript build (`prepare` -> `tsc`) that fails when the build toolchain is unavailable. Worse, `npm install -g` destructively removes the existing CLI before the new install completes, so a failed update bricks the CLI. Separately, the `auto-tag.yml` workflow auto-pushes version tags on every `main` merge, chaining to npm publish via `publish.yml` and requiring a custom `RELEASE_TOKEN` — adding unwanted coupling and friction.
+The `hlx update` staged-update flow shells out to system `tar` via `execSync` at `src/update/perform.ts:124` to extract the downloaded GitHub release tarball. On Windows machines where Git for Windows is installed — the default developer setup — GNU tar (from MSYS2/mingw) appears first in PATH and interprets Windows drive-letter colons (e.g., `C:\Users\...`) as remote-host syntax (traditional Unix `host:path` tape-archive semantics). This produces the error `tar (child): Cannot connect to C: resolve failed` and makes `hlx update` non-functional for this large segment of Windows users. The failure occurs before the swap step, so the existing live install is left intact (fail-closed behavior is preserved), but the update cannot complete.
 
 ## Root Cause Analysis
 
-### Cause 1: Source-based install requires build toolchain on user machines
+### Single Root Cause: Shell-based tar invocation with platform-dependent path interpretation
 
-`performUpdate()` (`src/update/perform.ts:17`) executes `npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main` via `spawnSync`. This triggers the `prepare` script (`package.json:19` -> `npm run build` -> `tsc`). TypeScript is a `devDependency` only (`package.json:41-43`), so it is not available in the transient npm global install sandbox. On Windows and other environments without a pre-existing TypeScript toolchain, the build step fails.
+**Location**: `src/update/perform.ts`, line 124
 
-### Cause 2: Destructive update with no staging
+```typescript
+execSync(`tar -xzf "${tarballPath}" -C "${stagingDir}"`, {
+  stdio: "pipe",
+  timeout: 30_000,
+});
+```
 
-`npm install -g` removes the existing package before installing the replacement. The current update flow calls `performUpdate()` first (destructive), then `validateInstall()` (post-hoc check). If the install fails mid-way, the old CLI files are already gone. The recovery message at `src/update/index.ts:100-103` acknowledges this: _"The update installed a broken package."_ There is no staging directory, no pre-switch validation, and no rollback mechanism.
+**Mechanism**:
+1. `STAGING_BASE` is `join(homedir(), '.hlx', 'staging')` (line 16), which resolves to `C:\Users\<user>\.hlx\staging` on Windows
+2. `tarballPath` becomes e.g. `C:\Users\<user>\.hlx\staging\abc123.tgz`
+3. `stagingDir` becomes e.g. `C:\Users\<user>\.hlx\staging\abc123`
+4. When `tar` resolves to GNU tar (from Git for Windows), it parses the `C:` prefix as a remote hostname — not a drive letter
+5. GNU tar attempts a network connection to host `C`, which fails: `Cannot connect to C: resolve failed`
 
-### Cause 3: Auto-tag workflow chains every merge to npm publish
+**Why it is not a quoting or escaping issue**: The colon interpretation is intrinsic to GNU tar's argument parser. Double-quoting the paths (already done) does not prevent GNU tar from interpreting the colon. The `--force-local` flag disables this in GNU tar but is not recognized by macOS BSD tar, making it non-portable.
 
-`auto-tag.yml` triggers on `push to main`, reads the version from `package.json`, and pushes a `v{version}` tag using `secrets.RELEASE_TOKEN`. Since `publish.yml` triggers on `v*` tags, every merge to main potentially triggers an npm publish. The workflow requires a custom `RELEASE_TOKEN` because its own permissions are only `contents: read`, insufficient for tag pushing with the standard `GITHUB_TOKEN`.
+**Why workarounds were rejected**: The ticket explicitly prohibits runtime detection of GNU tar, hardcoding `C:\Windows\System32\tar.exe`, or any fix that still depends on an external binary. The ticket's core goal is "no user-side toolchain required."
 
-### Cause 4: No prebuilt artifact exists
+### Alternative hypotheses considered and rejected
 
-No CI workflow produces a prebuilt artifact. The only two workflows are `auto-tag.yml` (tagging) and `publish.yml` (npm publish). Users and the updater are forced to build from source.
+| Hypothesis | Why Rejected |
+|---|---|
+| Shell escaping issue — quoting would fix | Colon interpretation is in GNU tar's argument parser, not the shell. Paths are already quoted. |
+| Use `--force-local` flag | GNU-specific; breaks macOS BSD tar. Still depends on external binary. |
+| Hardcode `C:\Windows\System32\tar.exe` | Still an external binary dependency. Only available since Windows 10 1803. Violates ticket requirements. |
+| Detect GNU tar and error with clear message | Does not actually fix the update for Windows users. Just a better error message. |
+| Use `tar-stream` (lower-level library) | Would work but requires significantly more code (manual directory creation, file writing, permission handling). No benefit over higher-level `tar` package. |
 
 ## Evidence Summary
 
 | Evidence | Location | Finding |
-|----------|----------|---------|
-| npm install -g with git source | `src/update/perform.ts:17` | `spawnSync('npm install -g git+https://...#main')` — requires user-side build |
-| prepare script triggers tsc | `package.json:19` | `"prepare": "npm run build"` where `"build": "tsc"` |
-| TypeScript is devDependency only | `package.json:41-43` | Not available during npm global install |
-| No staging mechanism | `src/update/perform.ts` | Single npm install -g call, no temp directory, no rollback |
-| Post-hoc validation only | `src/update/index.ts:85-104` | `performUpdate()` then `validateInstall()` — too late |
-| Validation is npm-path-dependent | `src/update/validate.ts:40-47` | Resolves `npm root -g`, checks `@projectxinnovation/helix-cli/dist/index.js` |
-| Auto-tag pushes version tags | `auto-tag.yml:50-52` | `git tag $TAG && git push origin $TAG` using RELEASE_TOKEN |
-| Auto-tag chains to npm publish | `publish.yml:5-6` | Triggered by `v*` tag push from auto-tag |
-| Zero production dependencies | `package.json:40-43` | Only devDependencies — prebuilt artifact needs no node_modules |
-| Existing version display supports SHA | `src/update/version.ts:30-31` | Already formats as `"1.3.4 (c8620a5)"` |
-| Config already tracks install source | `src/lib/config.ts:5-11` | `InstallSource` type with mode/repo/branch/commit/version fields |
-| git ls-remote for SHA check | `src/update/check.ts:18-19` | Requires `git` binary on user machine |
-| Six hardcoded npm install references | Multiple files | `perform.ts`, `check.ts`, `index.ts`, `cli-content.ts`, `show.ts`, `paths.ts` |
-| No update module tests | `src/update/` | No `.test.ts` files exist |
-| No runtime inspection available | `/tmp/helix-inspect/manifest.json` | Not present — this is a CLI tool repo, no production runtime to inspect |
+|---|---|---|
+| Exact bug: execSync tar call | `src/update/perform.ts:124` | `execSync('tar -xzf "${tarballPath}" -C "${stagingDir}"')` — single external tar invocation |
+| Error handling is correct | `src/update/perform.ts:128-131` | Catches exceptions, returns `{ success: false, error }` — no throw, contract preserved |
+| Staging paths include drive letters | `src/update/perform.ts:16,82-83` | `STAGING_BASE = join(homedir(), '.hlx', 'staging')` resolves to `C:\Users\...` on Windows |
+| No other tar invocations | `src/update/perform.ts:33`, `check.ts:30`, `validate.ts:38` | Other child_process calls are xcopy/cp-R, gh auth token, node --version — not tar |
+| execSync import still needed | `src/update/perform.ts:1,33` | Import used by both tar (line 124) and copyDirRecursive (line 33); import must remain for the latter |
+| Tarball format is standard .tgz | `.github/workflows/build-release.yml:36-43` | Top-level entries: dist/, skill-content/, package.json, build-metadata.json; excludes *.test.js |
+| Post-extraction validation contract | `src/update/validate.ts:22,30,38` | Checks dist/index.js exists, package.json exists, node --version runs |
+| Swap step expectations | `src/update/perform.ts:160-163` | Expects dist/, skill-content/, package.json, build-metadata.json at staging dir root |
+| Zero runtime dependencies | `package.json` | Only devDependencies; adding runtime dep is explicitly in scope |
+| ESM project | `package.json:7`, `tsconfig.json:4-5` | `"type": "module"`, ES2022 target, Node16 modules |
+| Node engine requirement | `package.json:21` | `>=18` — all modern stream/fs APIs available |
+| No existing update tests | `src/update/` directory | No .test.ts files; new test needed |
+| Test infrastructure | `src/skill/skill.test.ts` | node:test (describe/it) + node:assert (strict) + mkdtempSync for temp dirs |
+| No runtime inspection | `/tmp/helix-inspect/manifest.json` | Not present — expected for CLI tool repo |
 
 ## Success Criteria
 
-1. **New CI workflow**: A merge to `main` produces a prebuilt GitHub Release asset (tarball of `dist/` + `skill-content/` + `package.json`) under a rolling `latest` tag using `GITHUB_TOKEN` with `contents: write`. The tag `latest` must NOT match `v*` to avoid triggering `publish.yml`.
+1. **In-process extraction**: The extraction step at `src/update/perform.ts:122-131` uses a JavaScript tar library (recommended: `tar` npm package / isaacs/node-tar) instead of `execSync('tar ...')`. No external `tar` binary is invoked on any platform.
 
-2. **Remove auto-tag.yml**: Deleted entirely. The `publish.yml` workflow remains unchanged for intentional tag-driven npm releases.
+2. **Same output layout**: After extraction, the staging directory contains the same files the existing flow expects: `dist/`, `skill-content/`, `package.json`, `build-metadata.json`. `validateStaged()` continues to pass without modification.
 
-3. **Staged update mechanism**: The `src/update/` module is rewritten to: (a) query the GitHub Release API for the latest release metadata and commit SHA, (b) download the tarball to a staging directory, (c) validate the staged candidate (entrypoint exists, `--version` runs), (d) only after validation swap the staged files into the live install location, (e) record install-source metadata (source=github, commit SHA) to config.
+3. **Error contract preserved**: Extraction errors return `{ success: false, error: string }` from the same code path. They do not throw out of the update flow. Manual `hlx update` exits non-zero; auto-update logs warning and continues.
 
-4. **Safe failure behavior**: Manual `hlx update` exits non-zero on any failure and keeps the current install intact. Auto-update logs a warning and continues command dispatch on failure. Auth failures produce explicit GitHub auth guidance.
+4. **Runtime dependency added**: `tar` (or equivalent JS tar library) is added to `dependencies` in `package.json`. The library must be pure JavaScript with no native build dependency and must support ESM.
 
-5. **Version display**: `hlx --version` continues to show the commit SHA suffix (already supported).
+5. **New extraction test**: A test file (e.g., `src/update/perform.test.ts`) creates a representative .tgz payload, extracts it using the new code path, and asserts the resulting directory layout matches expectations (dist/index.js exists, package.json exists, etc.).
 
-6. **Documentation**: All six hardcoded `npm install -g git+https://...` references are replaced with updated install/recovery instructions.
+6. **Cross-platform correctness**: Extraction works on Windows (with GNU tar in PATH), macOS, and Linux without regression.
 
-7. **No bricking**: Failed updates never leave the CLI unusable because the live install is only replaced after full staged validation passes.
+7. **Quality gates pass**: `npm test` passes, `npm run build` passes, `node dist/index.js --version` reports the installed commit SHA.
 
 ### Scope of Changes
 
-| Area | Files | Change Type |
-|------|-------|-------------|
-| New CI workflow | `.github/workflows/build-release.yml` (new) | Create: build, test, tarball, publish GitHub Release |
-| Remove auto-tag | `.github/workflows/auto-tag.yml` | Delete |
-| Update check | `src/update/check.ts` | Rewrite: replace `git ls-remote` with GitHub API release query |
-| Update execution | `src/update/perform.ts` | Rewrite: replace `npm install -g` with staged tarball download |
-| Update validation | `src/update/validate.ts` | Rewrite: validate staged directory instead of npm global path |
-| Update orchestration | `src/update/index.ts` | Update: flow changes, error messages, recovery guidance |
-| Version display | `src/update/version.ts` | Minor: may need adjustment for non-npm install paths |
-| Config types | `src/lib/config.ts` | Minor: `InstallSource` type may need extension |
-| CLI docs | `src/docs/cli-content.ts` | Update: replace npm install references (lines 18, 301) |
-| Skill show error | `src/skill/show.ts` | Update: replace npm install reference (line 15) |
-| Skill paths error | `src/skill/paths.ts` | Update: replace npm install reference (line 25) |
-| Command reference | `skill-content/references/commands.md` | Update: if install instructions present |
-| Preserve npm publish | `.github/workflows/publish.yml` | No change |
+| Area | File | Change Type |
+|---|---|---|
+| Extraction step | `src/update/perform.ts` | Modify: Replace execSync tar call (lines 122-131) with tar library call |
+| Dependencies | `package.json` | Modify: Add `tar` to runtime dependencies |
+| Extraction test | `src/update/perform.test.ts` (new) | Create: Test extraction of .tgz payload, verify layout |
 
-### Key Architectural Decisions for Implementation
+### Files NOT Changed
 
-1. **GitHub Releases with rolling `latest` tag**: Not `v*`, so it won't trigger `publish.yml`. `GITHUB_TOKEN` + `contents: write` can create releases (confirmed by GitHub Actions docs). Assets are permanent and have stable URLs.
-
-2. **Tarball contents**: `dist/` (excluding tests) + `skill-content/` + `package.json` + a metadata file with the commit SHA. Zero production dependencies means no `node_modules/` needed.
-
-3. **Install location determination**: The running CLI knows its own location via `import.meta.url` (already used in `version.ts` and `paths.ts`). The updater replaces files at the current install root, preserving existing PATH and npm symlinks.
-
-4. **GitHub API replaces git ls-remote**: Since the updater already needs GitHub API for release discovery, `git ls-remote` can be replaced with GitHub API, removing the `git` binary dependency from the user's machine.
-
-5. **Auth handling**: Private repo asset downloads require GitHub auth. The updater should check for `GITHUB_TOKEN` env var or `gh` CLI auth, and produce explicit guidance on auth failure.
+| File | Reason |
+|---|---|
+| `src/update/validate.ts` | Post-extraction validation — no change needed |
+| `src/update/index.ts` | Orchestrator/caller — no change needed |
+| `src/update/check.ts` | Release discovery — not in scope |
+| `src/update/version.ts` | Version display — not in scope |
+| `.github/workflows/build-release.yml` | CI workflow — explicitly out of scope |
+| `tsconfig.json` | Build config — no change needed (tar v7+ ships its own types) |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
-|----------|----------|--------------|
-| `ticket.md` | Primary requirements and acceptance criteria | Detailed non-negotiable invariants for staged update, failure behavior, and workflow changes |
-| `scout/reference-map.json` | File inventory and factual claims from scout | Confirmed 5 update module files, 2 workflows, 6 hardcoded references, zero tests, zero production deps |
-| `scout/scout-summary.md` | Structured summary of codebase analysis | Confirmed update architecture, CI/CD setup, and documentation surfaces |
-| `src/update/perform.ts` | Current update executor source code | Direct evidence: `npm install -g git+https://...#main` via `spawnSync` — the root cause mechanism |
-| `src/update/check.ts` | Remote SHA check source code | Uses `git ls-remote` (not GitHub API); defines `GIT_INSTALL_SPEC` constant used across module |
-| `src/update/index.ts` | Update orchestration source code | Confirmed fail-open (auto) vs fail-closed (manual) patterns; recovery messages reference npm install |
-| `src/update/validate.ts` | Post-update validation source code | Entirely npm-path-dependent — resolves `npm root -g`, checks hardcoded npm package path |
-| `src/update/version.ts` | Version display source code | Already supports commit SHA suffix format; uses `import.meta.url` for package root resolution |
-| `src/index.ts` | CLI entry point | Confirmed auto-update call at line 74, SKIP_AUTO_UPDATE set, --version handling |
-| `src/lib/config.ts` | Config and InstallSource type | InstallSource type already has mode/repo/branch/commit fields; saveConfig uses read-merge-write |
-| `.github/workflows/auto-tag.yml` | Auto-tag workflow | Confirmed: push-to-main trigger, RELEASE_TOKEN usage, v{version} tag creation/push |
-| `.github/workflows/publish.yml` | npm publish workflow | Confirmed: v* tag trigger, OIDC trusted publishing, tarball validation — must be preserved |
-| `src/docs/cli-content.ts` | CLI documentation content | Two hardcoded `npm install -g git+https://...` references at lines 18 and 301 |
-| `src/skill/show.ts` | Skill show command | Hardcoded npm install recovery message at line 15 |
-| `src/skill/paths.ts` | Skill path resolution | Hardcoded npm install recovery message at line 25 |
-| `package.json` | Project configuration | Confirmed prepare -> tsc pipeline, zero production deps, bin entry, files array |
-| Context7 GitHub Actions docs | GitHub Actions documentation | Confirmed GITHUB_TOKEN with contents: write can create releases via gh release create |
+|---|---|---|
+| `ticket.md` (continuation context) | Primary scope and requirements | Extraction-only fix; must remove tar binary dependency; preserve error contract; add test; explicit rejection of workarounds |
+| `scout/reference-map.json` | File inventory, facts, and code boundaries | Confirmed bug at perform.ts:124, three other non-tar child_process calls, tarball shape, validation contract |
+| `scout/scout-summary.md` | Structured analysis summary | Confirmed extraction flow isolation, error handling contract, dependency landscape, test infrastructure |
+| `repo-guidance.json` | Repository role | helix-cli is sole target; no cross-repo impact |
+| `src/update/perform.ts` (source) | Direct inspection of bug location | Confirmed execSync tar call at line 124, error catch at 128-131, staging path construction, execSync import also used by copyDirRecursive |
+| `src/update/validate.ts` (source) | Post-extraction contract | Checks dist/index.js, package.json, runs node --version — defines what extraction output must look like |
+| `src/update/index.ts` (source) | Caller error handling | Manual: exit(1) + recovery msg; Auto: log warning + continue — error contract must be preserved |
+| `package.json` (source) | Dependency and build constraints | Zero runtime deps, ESM, Node >=18, test runner pattern |
+| `tsconfig.json` (source) | Build config | ES2022, Node16 modules, strict — new code and imports must compile |
+| `.github/workflows/build-release.yml` (source) | Tarball shape definition | Top-level dist/, skill-content/, package.json, build-metadata.json in .tgz — no prefix |
+| Context7 tar-stream docs | JS tar library API verification | Confirmed tar-stream is lower-level (manual file writing per entry) vs node-tar's higher-level tar.x() API |
+| Web search: node-tar | Library fitness confirmation | Confirmed node-tar v7+ is TypeScript-native, ESM/CJS hybrid, pure JS, used by npm itself |

@@ -3,7 +3,7 @@
     {
       "repoKey": "helix-cli",
       "intent": "target",
-      "rationale": "Single repository in scope. All changes — CI workflows (new build-release, remove auto-tag), update module rewrite (5 files in src/update/), config type extension, documentation updates (6 files with hardcoded npm install references), and preserving publish.yml — are entirely within helix-cli. No cross-repo impact identified."
+      "rationale": "Single repository in scope. The bug is in src/update/perform.ts (line 124 execSync tar call). Fix requires modifying perform.ts to replace the shell-based tar extraction with an in-process JS tar library call, adding a runtime dependency to package.json, and creating a new test file. No cross-repo impact."
     }
   ],
   "updatedBy": "diagnosis"
