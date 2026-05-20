@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "Single repository in scope. All changes — CI workflows (new build-release, remove auto-tag), update module rewrite (5 files in src/update/), config type extension, documentation updates (6 files with hardcoded npm install references), and preserving publish.yml — are entirely within helix-cli. No cross-repo impact identified."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

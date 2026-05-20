@@ -1,0 +1,189 @@
+{
+  "problem": "The current hlx self-update mechanism shells out to 'npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main' which triggers 'tsc' via the prepare script, can fail when the build toolchain is unavailable (especially on Windows), and can brick the existing CLI installation on failure. Additionally, an auto-tag workflow pushes git tags on every main merge using a RELEASE_TOKEN, adding unwanted release friction. The ticket requires replacing the update path with prebuilt GitHub release assets, removing auto-tag, and ensuring failed updates never leave the CLI unusable.",
+  "files": [
+    {
+      "path": "src/update/perform.ts",
+      "why": "Primary change target. Line 17 executes 'npm install -g git+https://...' via spawnSync — this is the exact mechanism being replaced with prebuilt artifact download."
+    },
+    {
+      "path": "src/update/check.ts",
+      "why": "Defines CANONICAL_REPO_URL, CANONICAL_BRANCH, GIT_INSTALL_SPEC constants (lines 3-9) and fetchRemoteSha() using 'git ls-remote' (lines 16-30). The constants are imported by perform.ts and index.ts. GIT_INSTALL_SPEC must be removed or repurposed."
+    },
+    {
+      "path": "src/update/index.ts",
+      "why": "Contains runUpdate() (lines 38-117) and checkAutoUpdate() (lines 124-185) — both orchestrate the update flow. Recovery messages on lines 89, 101 direct users to 'npm install -g git+https://...' and must change. Both functions call performUpdate() and validateInstall() which are being redesigned."
+    },
+    {
+      "path": "src/update/validate.ts",
+      "why": "Post-update validation (lines 14-79) is npm-specific: resolves global npm root, checks for dist/index.js at the npm package path, runs 'node <binTarget> --version'. Must be redesigned for non-npm artifact layout."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Reads package.json version and appends commit SHA from config (lines 15-38). Version display format '1.3.4 (c8620a5)' is a ticket invariant. May need adjustment depending on how the prebuilt artifact stores version info."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and dispatcher. Line 69 defines SKIP_AUTO_UPDATE command set. Line 74 calls checkAutoUpdate() before dispatch. Lines 122-129 handle --version output with commit SHA display."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines InstallSource type (lines 5-11) with mode/repo/branch/commit/version fields. saveConfig() (lines 201-212) does read-merge-write to ~/.hlx/config.json. loadFullConfig() (lines 89-96) reads install metadata. The installSource schema may need extension for the new artifact channel."
+    },
+    {
+      "path": ".github/workflows/auto-tag.yml",
+      "why": "TO BE REMOVED. Triggers on push to main (line 4), reads version from package.json, creates and pushes v{version} tags using secrets.RELEASE_TOKEN. Entire file is deleted per ticket requirements."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "TO BE PRESERVED. Triggers on v* tag push (line 6), uses OIDC trusted publishing. Must remain available for intentional manual npm releases. No changes needed unless the build/validate steps can be shared with a new artifact workflow."
+    },
+    {
+      "path": "src/docs/cli-content.ts",
+      "why": "CLI documentation content. Lines 18 and 301 contain 'npm install -g git+https://...' instructions that must be replaced with the new GitHub artifact install path."
+    },
+    {
+      "path": "src/skill/show.ts",
+      "why": "Error recovery message on line 15 references 'npm install -g git+https://...' — must be updated to new install instructions."
+    },
+    {
+      "path": "src/skill/paths.ts",
+      "why": "Error recovery message on line 25 references 'npm install -g git+https://...' — must be updated to new install instructions."
+    },
+    {
+      "path": "package.json",
+      "why": "Defines bin entry (hlx -> dist/index.js), prepare script (npm run build -> tsc), files array, publishConfig. The prepare script is what causes the tsc requirement during 'npm install -g git+https://...' source installs. Build scripts (build, typecheck, test) define the CI validation steps."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config targeting ES2022, module Node16, output to dist/. Defines the build that must happen in CI (not on user machines)."
+    },
+    {
+      "path": ".npmignore",
+      "why": "Excludes test files from npm package. Relevant to understanding what the prebuilt artifact should contain."
+    },
+    {
+      "path": "skill-content/references/commands.md",
+      "why": "Command reference documentation. Lines 92-99 describe hlx update. May need updating to reflect the new update mechanism."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Existing test file. No update module tests exist — new tests will be needed for the replacement update mechanism."
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Current update mechanism executes 'npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main' via spawnSync in perform.ts line 17",
+      "source": "src/update/perform.ts:17"
+    },
+    {
+      "claim": "The prepare script in package.json runs 'npm run build' which runs 'tsc', confirming that source-based installs require the TypeScript compiler on the user's machine",
+      "source": "package.json scripts.prepare and scripts.build"
+    },
+    {
+      "claim": "Remote SHA detection uses 'git ls-remote https://github.com/Project-X-Innovation/helix-cli.git refs/heads/main' — not the GitHub API",
+      "source": "src/update/check.ts:18-19"
+    },
+    {
+      "claim": "Install metadata is stored in ~/.hlx/config.json under the installSource field with type {mode: 'github'|'npm'|'unknown', repo?, branch?, commit?, version?}",
+      "source": "src/lib/config.ts:5-11"
+    },
+    {
+      "claim": "auto-tag.yml triggers on push to main, requires secrets.RELEASE_TOKEN, and creates/pushes v{version} git tags",
+      "source": ".github/workflows/auto-tag.yml"
+    },
+    {
+      "claim": "publish.yml triggers on v* tags and uses OIDC trusted publishing with npm provenance — no NPM_TOKEN secret needed",
+      "source": ".github/workflows/publish.yml:9 (id-token: write) and line 62 (--provenance)"
+    },
+    {
+      "claim": "No existing GitHub release or artifact creation workflow exists — a new workflow for CI-built release artifacts must be created",
+      "source": "Only two workflow files exist: auto-tag.yml and publish.yml"
+    },
+    {
+      "claim": "validateInstall() resolves the global npm root path, checks for dist/index.js at '@projectxinnovation/helix-cli/dist/index.js', and runs 'node <path> --version' — this is entirely npm-path-dependent",
+      "source": "src/update/validate.ts:40-47"
+    },
+    {
+      "claim": "Recovery messages in update/index.ts lines 89 and 101 direct users to 'npm install -g git+https://...' — these must change",
+      "source": "src/update/index.ts:89, 101"
+    },
+    {
+      "claim": "The --version output already supports commit SHA display: format is '1.3.4 (c8620a5)' when installSource.commit exists in config",
+      "source": "src/update/version.ts:30-31"
+    },
+    {
+      "claim": "Pre-command auto-update via checkAutoUpdate() is called in src/index.ts:74, skipped for commands in SKIP_AUTO_UPDATE set: --version, -v, update, --help, -h, skill",
+      "source": "src/index.ts:69, 74"
+    },
+    {
+      "claim": "HLX_SKIP_UPDATE_CHECK env var is used for loop prevention during update subprocess calls",
+      "source": "src/update/index.ts:126, src/update/perform.ts:22, src/update/validate.ts:63"
+    },
+    {
+      "claim": "No tests exist for the update module — no src/update/*.test.ts files found",
+      "source": "Glob search for src/update/*.test.ts returned no results"
+    },
+    {
+      "claim": "Six source files contain hardcoded 'npm install -g git+https://...' references: perform.ts, check.ts, index.ts (update), cli-content.ts, show.ts, paths.ts",
+      "source": "Grep for 'npm install -g|GIT_INSTALL_SPEC|git+https' across src/"
+    },
+    {
+      "claim": "Package version is 1.3.4, package name is @projectxinnovation/helix-cli, bin entry is hlx -> dist/index.js",
+      "source": "package.json:2, 7"
+    },
+    {
+      "claim": "The package files array includes dist/ (excluding tests) and skill-content/ — these define what a prebuilt artifact should contain",
+      "source": "package.json:24-29"
+    },
+    {
+      "claim": "The project is an ES module (type: module) targeting ES2022 with Node16 module resolution",
+      "source": "package.json:4, tsconfig.json:3-4"
+    },
+    {
+      "claim": "Auto-update fails open (warns and continues) while manual hlx update fails closed (process.exit(1))",
+      "source": "src/update/index.ts:88-91 (exit 1) vs src/update/index.ts:167,183 (warn and return)"
+    },
+    {
+      "claim": "The saveConfig function does read-merge-write, preserving unrelated config fields when updating installSource or autoUpdate",
+      "source": "src/lib/config.ts:201-212"
+    },
+    {
+      "claim": "No runtime inspection manifest found — no production runtime evidence available for this CLI tool repo",
+      "source": "/tmp/helix-inspect/manifest.json does not exist"
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "What GitHub mechanism should serve the prebuilt artifact — GitHub Releases (with assets), or GitHub Actions workflow artifacts (which expire)?",
+      "impact": "GitHub Releases with assets are permanent and publicly addressable; workflow artifacts expire (default 90 days) and require authenticated API access. This fundamentally affects the download mechanism and auth requirements."
+    },
+    {
+      "question": "What should the prebuilt artifact contain and how should it be structured — a tarball of the full package (dist/ + skill-content/ + package.json) or a self-contained binary?",
+      "impact": "Affects the artifact creation workflow, the unpack/validation logic in the updater, and how the CLI binary entrypoint works without npm's global bin linking."
+    },
+    {
+      "question": "How will the installed CLI binary be linked/invoked without npm's global bin symlink mechanism?",
+      "impact": "Currently npm creates a symlink from a PATH location to dist/index.js. Without npm, the updater must handle PATH integration or replace files at a known install location."
+    },
+    {
+      "question": "Is the GitHub repository private or public? This determines whether artifact downloads require authentication tokens.",
+      "impact": "Private repo requires GitHub token auth for release asset downloads. The error messaging for auth failures (a ticket requirement) depends on this."
+    },
+    {
+      "question": "Should git ls-remote for SHA comparison be replaced with a GitHub API call, given that the release artifact already implies a GitHub API dependency?",
+      "impact": "git ls-remote requires git on the user's machine. If the update mechanism already uses GitHub API for artifact download, consolidating to API-only removes the git dependency."
+    },
+    {
+      "question": "How should the staged-then-swap install mechanism work to guarantee atomicity — especially on Windows where file locking prevents replacing running executables?",
+      "impact": "The ticket requires that the live CLI is never replaced until validation passes. Windows file locking adds complexity to the swap step."
+    },
+    {
+      "question": "What validation criteria are appropriate for a non-npm artifact? The current validateInstall() is entirely npm-path-dependent.",
+      "impact": "The validation approach must be redesigned. The ticket requires at minimum checking entrypoint existence and --version output."
+    },
+    {
+      "question": "How will the CI workflow determine the commit SHA to embed in the release asset metadata?",
+      "impact": "The updater needs to compare remote vs local commit SHA. The release must associate a commit SHA for comparison."
+    }
+  ]
+}
