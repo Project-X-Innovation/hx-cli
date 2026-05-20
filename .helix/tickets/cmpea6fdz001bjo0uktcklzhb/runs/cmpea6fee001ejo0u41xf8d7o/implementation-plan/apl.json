@@ -1,0 +1,43 @@
+{
+  "questions": [
+    "What is the correct step ordering and dependency chain for the implementation?",
+    "Which files need changes and what is the minimal change for each?",
+    "What verification checks can be performed without a live GitHub Release?",
+    "Are there any blocking dependencies or risks in the implementation sequence?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation follows an 8-step sequence: (1) Create build-release.yml CI workflow, (2) Delete auto-tag.yml, (3) Rewrite check.ts (GitHub API + auth), (4) Rewrite validate.ts (staged validation), (5) Rewrite perform.ts (staged download+swap, depends on steps 3-4), (6) Update index.ts (orchestration, depends on steps 3-5), (7) Update documentation files (independent of code logic), (8) Quality gates. Steps 1-2 are independent. Steps 3-4 are independent of each other but must precede step 5. Step 6 depends on steps 3-5. Step 7 is independent. Step 8 depends on all prior steps.",
+      "evidence": [
+        "src/update/perform.ts imports from check.ts (GIT_INSTALL_SPEC) and will import from validate.ts",
+        "src/update/index.ts imports from check.ts, perform.ts, and validate.ts",
+        "Documentation files are independent of update module internals"
+      ]
+    },
+    {
+      "answer": "13 files are affected: 1 new (.github/workflows/build-release.yml), 1 deleted (.github/workflows/auto-tag.yml), 3 rewritten (src/update/check.ts, perform.ts, validate.ts), 1 updated (src/update/index.ts), 4 documentation updates (src/docs/cli-content.ts, src/skill/show.ts, src/skill/paths.ts, skill-content/references/commands.md). 3 files confirmed unchanged: publish.yml, version.ts, config.ts. The existing InstallSource type already has mode: 'github' with all needed fields — no type changes required.",
+      "evidence": [
+        "src/lib/config.ts:5-11 — InstallSource type already includes mode: 'github', repo, branch, commit, version",
+        "src/update/version.ts uses import.meta.url and config SHA — already works for new mechanism",
+        "tech-research/tech-research.md confirms no changes needed for version.ts, config.ts, publish.yml"
+      ]
+    },
+    {
+      "answer": "All quality gates (typecheck, build, tests) can run locally. CLI --version can be tested after build via 'node dist/index.js --version'. Static verification of workflow YAML structure, absence of npm install references, and presence of new API patterns can all be done. The only check that cannot run is an end-to-end update test requiring a live GitHub Release, since the CI workflow has not run yet. This is noted in pre-conditions.",
+      "evidence": [
+        "package.json scripts: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js)",
+        "No GitHub Release exists for the 'latest' tag — the workflow is new and has not run"
+      ]
+    },
+    {
+      "answer": "No blocking dependencies exist for the implementation. All changes are within the helix-cli repo. The CI workflow can be created and validated structurally but cannot be tested until it runs on GitHub after merge. The update module rewrite uses only Node.js built-in APIs (fetch, fs, child_process) and requires no new dependencies. The zero-production-dependency constraint is preserved. The main risk is the rename-based swap on Windows, mitigated by retry logic and EXDEV fallback as specified in tech-research.",
+      "evidence": [
+        "package.json:40-43 — only devDependencies",
+        "tech-research/tech-research.md — cross-platform considerations section confirms tar availability and rename behavior",
+        "Node.js >= 18 provides native fetch()"
+      ]
+    }
+  ],
+  "statement": "The implementation plan defines 8 atomic, sequenced steps to replace the hlx self-update mechanism with GitHub Release assets. Steps 1-2 handle CI workflow changes (new build-release.yml, delete auto-tag.yml). Steps 3-6 rewrite the src/update/ module in dependency order: check.ts (GitHub API), validate.ts (staged validation), perform.ts (staged download+swap), index.ts (orchestration). Step 7 updates 4 documentation files to remove npm install references. Step 8 runs quality gates. The verification plan includes 12 required checks covering quality gates, workflow structure, code patterns, and behavioral verification via the built CLI.",
+  "followups": []
+}

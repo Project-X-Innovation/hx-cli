@@ -4,14 +4,13 @@ import {
   type InstallSource,
 } from "../lib/config.js";
 import {
-  fetchRemoteSha,
-  GIT_INSTALL_SPEC,
+  fetchLatestRelease,
+  getGitHubToken,
   CANONICAL_REPO,
   CANONICAL_BRANCH,
 } from "./check.js";
 import { getPackageVersion } from "./version.js";
-import { performUpdate } from "./perform.js";
-import { validateInstall } from "./validate.js";
+import { performStagedUpdate } from "./perform.js";
 
 /**
  * Check whether an installSource matches a canonical source.
@@ -52,10 +51,24 @@ export async function runUpdate(args: string[]): Promise<void> {
   // Run the update check flow
   console.log("Checking for updates...");
 
-  const remoteSha = fetchRemoteSha();
-  if (remoteSha === null) {
+  const token = getGitHubToken();
+  const result = await fetchLatestRelease(token);
+
+  if (result.authRequired) {
     console.error(
-      "Failed to check for updates. Could not reach GitHub.",
+      "Failed to check for updates: GitHub authentication required.\n\n" +
+        "The helix-cli repository requires authentication to access release assets.\n" +
+        "Provide a GitHub token using one of these methods:\n\n" +
+        "  1. Set the GITHUB_TOKEN environment variable\n" +
+        "  2. Set the GH_TOKEN environment variable\n" +
+        "  3. Run `gh auth login` to authenticate the GitHub CLI\n",
+    );
+    process.exit(1);
+  }
+
+  if (!result.release) {
+    console.error(
+      "Failed to check for updates. Could not reach GitHub or no release found.",
     );
     process.exit(1);
   }
@@ -73,6 +86,7 @@ export async function runUpdate(args: string[]): Promise<void> {
   }
 
   const localSha = installSource?.commit;
+  const remoteSha = result.release.commitSha;
 
   if (localSha && remoteSha.toLowerCase() === localSha.toLowerCase()) {
     console.log("Already up to date.");
@@ -82,24 +96,20 @@ export async function runUpdate(args: string[]): Promise<void> {
   const version = getPackageVersion();
   console.log(`Update available: ${version} → ${remoteSha.slice(0, 7)}`);
 
-  const result = performUpdate({ quiet: false });
+  const updateResult = await performStagedUpdate(
+    result.release.assetUrl,
+    remoteSha,
+    token,
+  );
 
-  if (!result.success) {
-    console.error(`Update failed: ${result.error}`);
-    console.error(`\nTo recover, run:\n  npm install -g ${GIT_INSTALL_SPEC}`);
-    process.exit(1);
-  }
-
-  // Validate the installed package before declaring success
-  const validation = validateInstall();
-  if (!validation.valid) {
-    console.error(`\nUpdate validation failed: ${validation.error}`);
-    if (result.stderr) {
-      console.error(`\nnpm output:\n${result.stderr}`);
-    }
-    console.error(`\nThe update installed a broken package. To recover:`);
-    console.error(`  1. Run: npm install -g ${GIT_INSTALL_SPEC}`);
-    console.error(`  2. Or re-run 'hlx update' to retry.`);
+  if (!updateResult.success) {
+    console.error(`Update failed: ${updateResult.error}`);
+    console.error(
+      "\nTo recover, retry with:\n" +
+        "  hlx update\n\n" +
+        "Or download the latest release manually from:\n" +
+        "  https://github.com/Project-X-Innovation/helix-cli/releases/latest\n",
+    );
     process.exit(1);
   }
 
@@ -142,34 +152,43 @@ export async function checkAutoUpdate(): Promise<void> {
     return;
   }
 
-  // Check remote SHA — silently skip on failure
-  const remoteSha = fetchRemoteSha();
-  if (remoteSha === null) {
+  // Discover auth token
+  const token = getGitHubToken();
+
+  // Check latest release — silently skip on failure
+  const result = await fetchLatestRelease(token);
+
+  if (result.authRequired) {
+    console.error(
+      "Warning: could not check for updates — GitHub authentication required. Run `hlx update` for details.",
+    );
+    return;
+  }
+
+  if (!result.release) {
     console.error("Warning: could not check for updates.");
     return;
   }
 
   const localSha = config.installSource?.commit;
+  const remoteSha = result.release.commitSha;
 
   // Already current
   if (localSha && remoteSha.toLowerCase() === localSha.toLowerCase()) {
     return;
   }
 
-  // Perform quiet update
+  // Perform staged update
   const version = getPackageVersion();
   console.error(`Updating CLI (${version} → ${remoteSha.slice(0, 7)})...`);
-  const result = performUpdate({ quiet: true });
 
-  if (result.success) {
-    const validation = validateInstall();
-    if (!validation.valid) {
-      console.error(`Warning: auto-update installed a broken package (${validation.error}). Run 'hlx update' to retry.`);
-      if (result.stderr) {
-        console.error(`npm output:\n${result.stderr}`);
-      }
-      return;
-    }
+  const updateResult = await performStagedUpdate(
+    result.release.assetUrl,
+    remoteSha,
+    token,
+  );
+
+  if (updateResult.success) {
     saveConfig({
       installSource: {
         mode: "github",
@@ -180,6 +199,8 @@ export async function checkAutoUpdate(): Promise<void> {
     });
     console.error("Updated to latest. Changes take effect on the next invocation.");
   } else {
-    console.error(`Warning: auto-update failed (${result.error}). Continuing with current version.`);
+    console.error(
+      `Warning: auto-update failed (${updateResult.error}). Continuing with current version.`,
+    );
   }
 }

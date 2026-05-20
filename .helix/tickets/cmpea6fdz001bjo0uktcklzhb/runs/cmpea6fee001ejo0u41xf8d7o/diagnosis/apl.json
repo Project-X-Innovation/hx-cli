@@ -1,0 +1,73 @@
+{
+  "questions": [
+    "What exactly causes the current hlx update to fail, especially on Windows?",
+    "How does the current update mechanism risk bricking the CLI?",
+    "Why does the auto-tag workflow create unwanted release friction?",
+    "What GitHub artifact mechanism should replace the current npm-based update path?",
+    "What is the minimum set of files and changes required for the replacement?",
+    "Are there cross-repo impacts?"
+  ],
+  "answers": [
+    {
+      "answer": "performUpdate() in src/update/perform.ts:17 runs 'npm install -g git+https://...#main' via spawnSync. This triggers the 'prepare' script (package.json:19 -> 'npm run build' -> 'tsc'). TypeScript is listed only as a devDependency (package.json:41-43), so it is not available in the transient npm global install environment. On Windows (and other environments without a pre-existing TypeScript toolchain), the tsc step fails, aborting the install.",
+      "evidence": [
+        "src/update/perform.ts:17 — spawnSync('npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main')",
+        "package.json:19 — 'prepare': 'npm run build'",
+        "package.json:16 — 'build': 'tsc'",
+        "package.json:41-43 — devDependencies: { '@types/node': '^25.5.0', 'typescript': '^6.0.2' }"
+      ]
+    },
+    {
+      "answer": "npm install -g removes the existing package before installing the replacement. If the new install fails mid-way (e.g., tsc failure), the old CLI files are already gone and hlx becomes unusable. The current code has no staging mechanism — performUpdate() directly runs npm install -g, and validateInstall() only checks AFTER the destructive operation completes. By the time validation fails, the damage is done.",
+      "evidence": [
+        "src/update/perform.ts:17 — single npm install -g call with no staging",
+        "src/update/index.ts:85-104 — flow is performUpdate() then validateInstall() — validation is post-hoc",
+        "src/update/validate.ts:40-47 — resolves npm root -g and checks for dist/index.js at the npm package path — verifies after the fact",
+        "src/update/index.ts:100-103 — recovery message after validation failure acknowledges 'The update installed a broken package'"
+      ]
+    },
+    {
+      "answer": "auto-tag.yml triggers on every push to main, reads the version from package.json, and pushes a v{version} tag using secrets.RELEASE_TOKEN. This chains to publish.yml (triggered by v* tags), coupling every main merge to a potential npm publish. It requires maintaining a custom RELEASE_TOKEN secret (the standard GITHUB_TOKEN has only 'contents: read' in that workflow) and creates unwanted release frequency.",
+      "evidence": [
+        "auto-tag.yml:3-6 — on: push: branches: [main]",
+        "auto-tag.yml:19 — token: ${{ secrets.RELEASE_TOKEN }}",
+        "auto-tag.yml:8-9 — permissions: contents: read (insufficient for tag pushing, hence RELEASE_TOKEN needed)",
+        "auto-tag.yml:50-52 — git tag + git push origin tag",
+        "publish.yml:5-6 — on: push: tags: ['v*'] — receives the auto-pushed tag"
+      ]
+    },
+    {
+      "answer": "GitHub Releases with a rolling non-version tag (e.g., 'latest') is the correct mechanism. Key reasons: (1) Release assets are permanent (no expiration, unlike Actions artifacts which expire in 90 days). (2) A tag named 'latest' does NOT match the 'v*' pattern in publish.yml, so it will not trigger npm publish. (3) The built-in GITHUB_TOKEN with 'contents: write' permission can create releases and push tags — no custom RELEASE_TOKEN needed. (4) Release assets have stable download URLs suitable for the updater. (5) The release body or a metadata file in the asset can record the commit SHA. (6) For private repos, asset downloads require GitHub auth, enabling clear error messaging. The project has zero production dependencies (only devDependencies), so the prebuilt tarball needs only dist/, skill-content/, and package.json — no node_modules bundling required.",
+      "evidence": [
+        "package.json:40-43 — only devDependencies, no production dependencies",
+        "package.json:24-29 — files array defines artifact contents: dist/ (minus tests) and skill-content/",
+        "publish.yml:5-6 — trigger pattern 'v*' will not match tag 'latest'",
+        "GitHub Actions docs — GITHUB_TOKEN with 'contents: write' can create releases via gh release create",
+        "package.json:6-8 — bin entry 'hlx' -> 'dist/index.js' — the shebang allows direct execution"
+      ]
+    },
+    {
+      "answer": "The change set spans 4 areas: (A) New CI workflow (build-release.yml) — triggered on push to main, builds, tests, creates/updates a GitHub Release with tag 'latest' and uploads the prebuilt tarball as an asset. (B) Remove auto-tag.yml, preserve publish.yml unchanged. (C) Rewrite src/update/ module (5 files) — check.ts: replace git ls-remote with GitHub API release metadata query; perform.ts: replace npm install -g with staged tarball download+unpack; validate.ts: remove npm-path dependency, validate staged artifact; index.ts: update flow and error messages; version.ts: minor adjustment if needed. (D) Update 6 documentation/error-message surfaces that contain hardcoded 'npm install -g git+https://...' references.",
+      "evidence": [
+        "src/update/check.ts — fetchRemoteSha() uses git ls-remote, must switch to GitHub API",
+        "src/update/perform.ts — performUpdate() uses npm install -g, must switch to tarball download",
+        "src/update/validate.ts — validateInstall() resolves npm root -g, must validate staged directory",
+        "src/update/index.ts:89,101 — recovery messages reference npm install -g",
+        "src/docs/cli-content.ts:18,301 — installation and troubleshooting docs",
+        "src/skill/show.ts:15 — error recovery message",
+        "src/skill/paths.ts:25 — error recovery message",
+        ".github/workflows/auto-tag.yml — to be deleted",
+        ".github/workflows/publish.yml — to be preserved unchanged"
+      ]
+    },
+    {
+      "answer": "No cross-repo impact. This is entirely self-contained within helix-cli. The repository topology is single-repository, and the update mechanism, CI workflows, documentation, and config are all within helix-cli.",
+      "evidence": [
+        "Run context — repo_topology: single_repository, repository_count: 1",
+        "All changed files are within helix-cli repo boundaries"
+      ]
+    }
+  ],
+  "statement": "The current hlx update fails because performUpdate() runs 'npm install -g git+https://...#main' which requires a user-side TypeScript build via the prepare script, and npm install -g destructively replaces the existing install before validation can prevent data loss. The fix requires four coordinated changes: (1) a new CI workflow that produces a prebuilt tarball and publishes it as a GitHub Release asset using the standard GITHUB_TOKEN with a rolling 'latest' tag that won't trigger npm publish, (2) a complete rewrite of the src/update/ module (5 files) to implement staged download-validate-swap instead of destructive npm install -g, (3) removal of auto-tag.yml while preserving publish.yml for intentional manual releases, and (4) documentation updates across 6 files to replace hardcoded npm install references.",
+  "followups": []
+}

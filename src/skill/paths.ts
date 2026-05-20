@@ -22,7 +22,9 @@ export function getSkillContentDir(): string {
     process.stderr.write(
       "Error: Bundled skill content is missing from this installation.\n" +
         "Reinstall the CLI to restore it:\n\n" +
-        "  npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main\n\n",
+        "  hlx update\n\n" +
+        "Or download the latest release from:\n" +
+        "  https://github.com/Project-X-Innovation/helix-cli/releases/latest\n\n",
     );
     process.exit(1);
   }

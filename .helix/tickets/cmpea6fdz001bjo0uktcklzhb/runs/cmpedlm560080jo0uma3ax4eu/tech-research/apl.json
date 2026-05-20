@@ -1,0 +1,65 @@
+{
+  "questions": [
+    "Can the diagnosis-recommended tar npm package (node-tar) be used as a runtime dependency given the release tarball has no node_modules/?",
+    "What JavaScript tar library options exist and which fits the project constraints (zero deps, ESM, no bundler, no node_modules in release)?",
+    "Should the extraction be synchronous or streaming?",
+    "How should the tar format be parsed — what header fields and entry types must be handled for the CI-produced tarball?",
+    "How should tests create representative .tgz payloads without adding test-only dependencies?",
+    "Does the execSync import need to remain in perform.ts after removing the tar call?"
+  ],
+  "answers": [
+    {
+      "answer": "No. The tar npm package cannot be used as a runtime dependency without additional build infrastructure. The release tarball (created by .github/workflows/build-release.yml lines 37-43) contains only dist/, skill-content/, package.json, and build-metadata.json — no node_modules/. The build step is solely tsc (TypeScript compiler), which outputs individual .js files with bare specifier imports (e.g., import { x } from 'tar'). Node.js resolves bare specifiers via node_modules/, which does not exist in GitHub-release-installed copies. Adding tar to dependencies would produce code that fails at runtime with ERR_MODULE_NOT_FOUND. To fix this would require either (a) bundling with esbuild (changes build system, risks breaking import.meta.url at perform.ts:24) or (b) including node_modules in the tarball (CI workflow change, out of scope). This revises the diagnosis recommendation.",
+      "evidence": [
+        ".github/workflows/build-release.yml:37-43 — tarball created with: tar -czf helix-cli.tgz dist/ skill-content/ package.json build-metadata.json (no node_modules/)",
+        "package.json scripts.build = 'tsc' — no bundler, TypeScript compilation only",
+        "grep of all src/ imports — every import is node:* or relative path, zero third-party modules in entire codebase",
+        "package.json devDependencies only (@types/node, typescript) — zero runtime dependencies",
+        "src/update/perform.ts:24 — import.meta.url used for install root resolution, would be broken by naive esbuild bundling"
+      ]
+    },
+    {
+      "answer": "No npm tar library fits all constraints. The three candidates evaluated were: (1) tar (node-tar v7.5) — battle-tested, used by npm, TypeScript-native, but fails the runtime resolution constraint. (2) tar-stream (mafintosh) — lower-level streaming API, well-maintained, but same resolution blocker and requires more implementation code. (3) tar-fs — higher-level than tar-stream but doesn't gunzip by default and same resolution blocker. All three fail because the release tarball has no node_modules/. The correct approach is to implement extraction using Node.js built-in modules: node:zlib (gunzipSync) for decompression + manual tar header parsing + node:fs for file writing. This preserves the zero-dependency pattern, requires no build system changes, and works in all deployment contexts.",
+      "evidence": [
+        "Web search — node-tar v7.5.13 has 5 transitive deps (all pure JS): @isaacs/fs-minipass, chownr, minipass, minizlib, yallist",
+        "Context7 tar-stream docs — requires manual file writing per entry (header/stream/next pattern), needs separate zlib pipe for .tgz",
+        "Web search — tar-fs doesn't gunzip by default, needs gunzip-maybe or zlib pipe",
+        "package.json — zero runtime dependencies, all imports are node:* or relative"
+      ]
+    },
+    {
+      "answer": "Synchronous. The existing code uses execSync (synchronous process spawn with 30s timeout). The tarball is small (< 5MB compressed, < 15MB uncompressed). readFileSync + gunzipSync + buffer-based tar parsing is simpler than a streaming pipeline and avoids stream error-handling complexity. Memory is not a concern — 15MB is trivial for Node.js. The synchronous approach maintains the same blocking behavior as the original code and integrates cleanly with the existing try/catch error handling in performStagedUpdate.",
+      "evidence": [
+        "src/update/perform.ts:124 — current code: execSync('tar -xzf ...', { timeout: 30_000 }) — synchronous with timeout",
+        "src/update/perform.ts:128-131 — error handling: catch block returns { success: false, error } — synchronous error contract",
+        ".github/workflows/build-release.yml — tarball contains dist/ + skill-content/ + 2 JSON files — small payload"
+      ]
+    },
+    {
+      "answer": "The tar format parsing must handle: (1) 512-byte header blocks with fields: name (bytes 0-99), size (bytes 124-135 as octal), typeflag (byte 156), prefix (bytes 345-499 for USTAR format). (2) Entry types: regular file (typeflag '0' or '\\0') — write size bytes to filesystem; directory (typeflag '5') — create with mkdirSync; PAX extended header (typeflag 'x') — skip data blocks; global PAX header (typeflag 'g') — skip data blocks. (3) End-of-archive: two consecutive 512-byte all-zero blocks. (4) Data padding: file data is padded to next 512-byte boundary. (5) USTAR prefix support: if prefix (bytes 345-499) is non-empty, full path is prefix + '/' + name. (6) Path safety: resolve against destDir and reject entries that escape it. The CI tarball (created by GNU tar on ubuntu-latest) uses standard POSIX/USTAR format. Our payload has short paths (max ~30 chars), no symlinks, and no special attributes, so exotic format features are not relevant.",
+      "evidence": [
+        ".github/workflows/build-release.yml:17 — runs-on: ubuntu-latest (GNU tar)",
+        ".github/workflows/build-release.yml:37-43 — entries: dist/, skill-content/, package.json, build-metadata.json",
+        "POSIX tar format specification — 512-byte header blocks, octal size field, typeflag field",
+        "scout/reference-map.json facts — tarball is standard .tgz with top-level entries, no nested prefix directory"
+      ]
+    },
+    {
+      "answer": "Tests should create .tgz payloads programmatically using the same Node.js built-in modules: gzipSync (from node:zlib) wrapping manually constructed tar blocks. A test helper function creates tar entries by writing 512-byte headers (name, size, typeflag, checksum) followed by data blocks padded to 512 bytes, terminated by two zero blocks. This approach: (1) requires zero test-only dependencies, (2) creates human-readable test setup code, (3) allows precise control over tarball content including error cases (corrupt data, PAX headers, empty archives). Alternative rejected: checking in binary .tgz fixture files — opaque, harder to review and maintain.",
+      "evidence": [
+        "src/skill/skill.test.ts — existing tests create test fixtures programmatically (writeFileSync, mkdirSync) rather than using checked-in fixtures",
+        "package.json — zero dependencies (including devDependencies beyond @types/node and typescript)"
+      ]
+    },
+    {
+      "answer": "Yes, the execSync import must remain. It is used by copyDirRecursive at perform.ts:33 for the EXDEV cross-filesystem fallback (xcopy on Windows, cp -R on POSIX). This is NOT a tar invocation. Acceptance criteria #3 says 'Grep for execSync / spawnSync / child_process in the update module finds no remaining external tar invocation' — scoped specifically to tar invocations, not to all child_process usage. The import line changes from importing execSync alone to importing both execSync and any new symbols, or the extractTarGz import is added separately.",
+      "evidence": [
+        "src/update/perform.ts:1 — import { execSync } from 'node:child_process'",
+        "src/update/perform.ts:33 — execSync used for xcopy/cp-R in copyDirRecursive",
+        "Ticket acceptance criteria #3 — 'no remaining external tar invocation' (not 'no remaining execSync')"
+      ]
+    }
+  ],
+  "statement": "The extraction step at src/update/perform.ts:124 must be replaced with an in-process function using Node.js built-in modules (node:zlib gunzipSync for decompression + manual tar header parsing for extraction). The diagnosis-recommended node-tar npm package cannot be used because the release tarball has no node_modules/ and the build uses tsc without bundling — any bare specifier import would fail at runtime in GitHub-release-installed copies. The built-in approach requires zero new dependencies, zero build system changes, and zero CI changes, while fully eliminating the external tar binary dependency that causes the Windows/GNU-tar failure. Implementation creates a new src/update/extract.ts file with an extractTarGz(tarballPath, destDir) function, and a new src/update/extract.test.ts file with tests covering successful extraction, error cases, PAX header handling, and path-with-special-characters scenarios. Only src/update/perform.ts is modified (import + one call-site replacement). The execSync import remains for the non-tar copyDirRecursive usage.",
+  "followups": []
+}

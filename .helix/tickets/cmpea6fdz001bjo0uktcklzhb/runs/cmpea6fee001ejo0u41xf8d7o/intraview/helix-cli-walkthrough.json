@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-527: Replace hlx self-update with GitHub Release assets",
+  "description": "This tour walks through the replacement of the 'hlx update' mechanism, which previously ran 'npm install -g git+https://...#main' (triggering a TypeScript build on the user's machine, bricking the CLI if it failed) with a staged download-validate-swap mechanism using prebuilt GitHub Release assets. The auto-tag workflow that chained every main-branch merge to an npm publish is also removed. The tour follows the data-flow order: CI workflow changes, then the update module internals, then documentation fixes.",
+  "steps": [
+    {
+      "file": ".github/workflows/auto-tag.yml",
+      "line": 1,
+      "description": "This file is entirely deleted. auto-tag.yml previously triggered on every push to main, read the version from package.json, and pushed a v{version} tag — which in turn triggered publish.yml (npm publish). This created unwanted coupling: every merge to main could trigger an npm release, required a custom RELEASE_TOKEN secret, and added friction to the release process. Removing it decouples merges from npm publishing; publish.yml still exists and fires only on explicit v* tags when a human decides to publish.",
+      "title": "Overview: Why auto-tag.yml is deleted"
+    },
+    {
+      "file": ".github/workflows/build-release.yml",
+      "line": 1,
+      "description": "This is the new workflow that replaces the role auto-tag.yml played in triggering artifacts, but without coupling to npm publish. It triggers on push to main, builds the project (npm ci runs the prepare script which compiles TypeScript), runs tests, then creates a tarball containing only the prebuilt dist/, skill-content/, package.json, and build-metadata.json — crucially NOT src/ or devDependencies. This means end-users never need a TypeScript toolchain to install the update.",
+      "title": "New CI workflow: build and publish a rolling 'latest' release"
+    },
+    {
+      "file": ".github/workflows/build-release.yml",
+      "line": 29,
+      "description": "The build metadata file embeds the GITHUB_SHA and build timestamp. This JSON is included in the tarball and later read by the CLI's --version and config-display logic to show the user which commit they are running. This replaces the previous approach of inferring version from package.json alone.",
+      "title": "Generate build-metadata.json with commit SHA"
+    },
+    {
+      "file": ".github/workflows/build-release.yml",
+      "line": 35,
+      "description": "The tar command explicitly excludes *.test.js and *.test.d.ts and only packages dist/, skill-content/, package.json, and build-metadata.json. No src/ directory is included. This is the key fix: when a user runs 'hlx update', the downloaded tarball can be installed with 'npm install -g --ignore-scripts' (no tsc invocation needed) because all JavaScript is already compiled.",
+      "title": "Tarball excludes test files and source — only prebuilt artifacts"
+    },
+    {
+      "file": ".github/workflows/build-release.yml",
+      "line": 47,
+      "description": "The release uses the tag name 'latest' (not v1.2.3). First the old 'latest' release is deleted (idempotent, '|| true' handles the case where it doesn't exist yet), then a new one is created pointing at the current commit SHA. Using 'latest' instead of a semver v* tag means publish.yml (which triggers on v* tags) is never accidentally triggered by this workflow, preserving the separation between CI builds and npm releases.",
+      "title": "Rolling 'latest' release tag — not a v* tag"
+    },
+    {
+      "file": ".github/workflows/build-release.yml",
+      "line": 53,
+      "description": "The workflow uses 'permissions: contents: write' and the built-in 'github.token' (via GH_TOKEN: ${{ github.token }}) to create releases. This eliminates the need for the custom RELEASE_TOKEN secret that auto-tag.yml required, reducing secret management overhead and improving security posture.",
+      "title": "permissions: contents: write and github.token — no RELEASE_TOKEN needed"
+    }
+  ]
+}

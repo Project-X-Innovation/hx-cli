@@ -1,0 +1,86 @@
+{
+  "problem": "The staged-update flow in src/update/perform.ts shells out to system tar via execSync (line 124) to extract the GitHub release tarball. On Windows machines where Git for Windows is installed, GNU tar appears first in PATH and misinterprets Windows drive-letter paths (e.g. C:\\Users\\...) as remote host syntax (tar remote-tape semantics), causing extraction to fail with 'Cannot connect to C: resolve failed'. This makes hlx update non-functional for the majority of Windows developers. The fix must replace the shell-based tar invocation with an in-process JavaScript tar extraction that has no external binary dependency.",
+  "files": [
+    {
+      "path": "src/update/perform.ts",
+      "why": "Contains the bug: line 124 calls execSync('tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"') which fails on Windows with GNU tar in PATH. Also contains copyDirRecursive (line 33) which shells out to xcopy/cp-R for EXDEV fallback, and safeRename (line 45) with Windows retry logic. The performStagedUpdate function (line 77) orchestrates download->extract->validate->swap->cleanup. Extract step is lines 122-131."
+    },
+    {
+      "path": "src/update/validate.ts",
+      "why": "Called immediately after extraction at perform.ts line 134. Validates staged directory has dist/index.js (line 22), package.json (line 30), and runs node --version check (line 38). Defines the contract the extraction output must satisfy. Uses spawnSync('node', ...) which is NOT a tar invocation."
+    },
+    {
+      "path": "src/update/index.ts",
+      "why": "Orchestrator for both manual hlx update (runUpdate line 37) and auto-update (checkAutoUpdate line 134). Calls performStagedUpdate at line 99. Handles error results: manual exits non-zero (line 113), auto logs warning and continues (line 203). Error contract must be preserved."
+    },
+    {
+      "path": "src/update/check.ts",
+      "why": "Release discovery module. Fetches latest release info from GitHub API (line 56). Uses execSync('gh auth token') at line 30 for token fallback — not a tar invocation and not in scope. Defines ReleaseInfo type (commitSha, assetUrl) consumed by performStagedUpdate."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Version display. Reads package.json and config installSource.commit. Unaffected by extraction change but documents the version format contract (semver + short SHA)."
+    },
+    {
+      "path": "package.json",
+      "why": "Currently has zero runtime dependencies (only devDependencies: @types/node ^25.5.0, typescript ^6.0.2). Will need a new runtime dependency for a JS tar library. Defines scripts: build=tsc, test='tsc && node --test dist/**/*.test.js', typecheck='tsc --noEmit'. ESM module (type: module). Node >=18."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "Build config: ES2022 target, Node16 modules, strict mode, output to dist/. New code and test files must compile under these settings."
+    },
+    {
+      "path": ".github/workflows/build-release.yml",
+      "why": "Defines the tarball shape at lines 36-43: tar -czf helix-cli.tgz with top-level entries dist/, skill-content/, package.json, build-metadata.json (excluding *.test.js, *.test.d.ts). This is the payload the extraction step must handle. Out of scope for changes."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines InstallSource type (line 5) and HxConfig (line 13). saveConfig (line 201) persists install metadata after update. loadFullConfig (line 89) reads install metadata. Context only — no changes needed."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point. Line 73: auto-update check runs before command dispatch. Line 119: routes 'update' command to runUpdate. Line 69: SKIP_AUTO_UPDATE set. Context only — no changes needed."
+    },
+    {
+      "path": "src/skill/skill.test.ts",
+      "why": "Existing test file demonstrating the project's test patterns: node:test describe/it, node:assert strict, mkdtempSync for temp dirs, beforeEach/afterEach cleanup. Reference for writing new extraction tests."
+    },
+    {
+      "path": "src/lib/flags.test.ts",
+      "why": "Additional test pattern reference. Same node:test + node:assert approach."
+    },
+    {
+      "path": "src/lib/resolve-ticket.test.ts",
+      "why": "Third existing test file. Confirms test runner pattern consistency."
+    }
+  ],
+  "facts": [
+    "The tar extraction bug is at src/update/perform.ts line 124: execSync(`tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"`, { stdio: 'pipe', timeout: 30_000 })",
+    "There are three execSync usages in the update module: (1) perform.ts:124 tar extraction [THE BUG], (2) perform.ts:33 copyDirRecursive xcopy/cp-R for EXDEV fallback, (3) check.ts:30 'gh auth token' for GitHub token discovery. Only #1 is a tar invocation.",
+    "validate.ts:38 uses spawnSync('node', ...) — not a tar invocation",
+    "The tarball is .tgz format (gzip-compressed tar) with top-level entries: dist/, skill-content/, package.json, build-metadata.json — no nested prefix directory",
+    "The tarball is created on ubuntu-latest by GNU tar in build-release.yml lines 37-43",
+    "The project has zero runtime dependencies — only devDependencies: @types/node ^25.5.0, typescript ^6.0.2",
+    "The project uses ESM (type: module in package.json) with ES2022 target and Node16 module resolution",
+    "Test infrastructure uses Node.js built-in test runner: npm test runs 'tsc && node --test dist/**/*.test.js'",
+    "Test API is node:test (describe/it) + node:assert (strict). Tests use mkdtempSync for temp dirs and beforeEach/afterEach for cleanup.",
+    "There are no existing tests for the update flow — the 3 test files cover flags, resolve-ticket, and skill install",
+    "Node engine requirement is >=18",
+    "Staging directory is ~/.hlx/staging/{commitSha}/ and tarball is ~/.hlx/staging/{commitSha}.tgz (perform.ts lines 16, 82-83)",
+    "After extraction, validateStaged checks for dist/index.js and package.json in the staging dir, then runs 'node dist/index.js --version' (validate.ts lines 22-64)",
+    "The extract step error handling (perform.ts:128-131) catches exceptions and returns { success: false, error: msg } — this contract must be preserved",
+    "The performStagedUpdate function signature is: (assetUrl: string, commitSha: string, token?: string | null) => Promise<{ success: boolean; error?: string }> (perform.ts:77-81)",
+    "copyDirRecursive (perform.ts:32-39) also uses execSync for xcopy/cp-R but is only invoked on EXDEV (cross-filesystem rename failure) — it is not a tar invocation",
+    "Acceptance criteria #3 from the ticket: 'Grep for execSync / spawnSync / child_process in the update module finds no remaining external tar invocation' — scoped specifically to tar invocations",
+    "The execSync import at perform.ts:1 is used for both tar extraction (line 124) and copyDirRecursive (line 33). If only the tar call is removed, the import may still be needed for copyDirRecursive.",
+    "safeRename at perform.ts:45 handles both EXDEV cross-filesystem errors and Windows file-locking (500ms retry with Atomics.wait)",
+    "build-release.yml excludes *.test.js and *.test.d.ts from the tarball (line 38-39)"
+  ],
+  "unknowns": [
+    "Which specific JS tar library will be used — the ticket says 'no native build dependency' and 'works without invoking external tar'. This is an implementation decision not yet made.",
+    "Whether copyDirRecursive (perform.ts:33) which shells out to xcopy/cp-R should also be replaced — it is not a tar invocation and the acceptance criteria specifically say 'no remaining external tar invocation', suggesting it is not required.",
+    "Whether the .tgz tarball created by GNU tar on Ubuntu CI contains any format nuances (long paths, symlinks, special attributes) that might affect JS library compatibility — likely standard given the simple payload structure.",
+    "Runtime inspection manifest not available (/tmp/helix-inspect/manifest.json not found) — no production runtime evidence collected. This is expected for a CLI tool repo.",
+    "Whether the chosen JS tar library will need type declarations or whether it ships its own — affects devDependencies and tsconfig compatibility."
+  ]
+}

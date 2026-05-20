@@ -1,0 +1,44 @@
+{
+  "questions": [
+    "Does the in-process tar extraction correctly handle all format features present in the CI-produced tarball?",
+    "Is the extraction robust against corrupt or truncated tar data, preserving the fail-closed error contract?",
+    "Are there any remaining external tar binary invocations in the update module?",
+    "Does the implementation introduce any regression risk to the existing update flow?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The parser correctly handles USTAR format headers (name, size, typeflag, prefix), directory entries (typeflag '5'), regular files (typeflag '0'/NUL), and PAX extended headers (typeflag 'x'/'g' — skipped). Checksum validation catches format corruption. The CI tarball shape (dist/, skill-content/, package.json, build-metadata.json with short paths, no symlinks) is well within the parser's capabilities. All 6 extraction test cases pass, including the representative CI-shaped tarball test.",
+      "evidence": [
+        "src/update/extract.ts lines 65-148: extractTarGz handles USTAR headers, typeflags, PAX skip, checksum validation",
+        "src/update/extract.test.ts test 1: CI-shaped tarball with dist/, skill-content/, package.json, build-metadata.json",
+        ".github/workflows/build-release.yml lines 37-43: tarball contains only dist/, skill-content/, package.json, build-metadata.json"
+      ]
+    },
+    {
+      "answer": "Yes, after code-review fix. The original implementation had a gap: if a tar header claimed a data size larger than the remaining buffer, tar.subarray() would silently return a truncated slice, writing a partial file without error. Code review added a bounds check (extract.ts lines 127-131) that throws on truncated entries. This preserves the fail-closed contract — the throw is caught by performStagedUpdate's try/catch and returns { success: false, error }. A new test case validates this behavior.",
+      "evidence": [
+        "src/update/extract.ts lines 127-131: bounds check added by code review",
+        "src/update/extract.test.ts test 6: 'throws on truncated tar entry' validates the bounds check",
+        "src/update/perform.ts lines 124-129: try/catch catches the throw and returns { success: false, error }"
+      ]
+    },
+    {
+      "answer": "No remaining tar shell invocations. The only grep match for execSync+tar in src/update/ is a JSDoc comment in extract.ts line 55 explaining the prior implementation. The execSync import in perform.ts is retained solely for copyDirRecursive (EXDEV fallback), which is not a tar invocation.",
+      "evidence": [
+        "grep -rn 'execSync.*tar|spawnSync.*tar' src/update/: only extract.ts:55 JSDoc comment",
+        "grep -n 'execSync' src/update/perform.ts: line 1 (import) and line 34 (copyDirRecursive only)"
+      ]
+    },
+    {
+      "answer": "No regression risk. The change is confined to the extraction step within performStagedUpdate. The function signature, error contract ({ success: false, error }), and all other stages (download, validate, swap, cleanup) are unchanged. The extractTarGz function is a new isolated module with no side effects beyond the destination directory. All 57 tests pass (51 existing + 6 new). The execSync import is retained for copyDirRecursive.",
+      "evidence": [
+        "npm test: 57 tests, 57 pass, 0 fail",
+        "npm run build: exits 0",
+        "node dist/index.js --version: outputs 1.3.4",
+        "src/update/perform.ts: only lines 14, 73, 124-125 changed (import + call + JSDoc fix)"
+      ]
+    }
+  ],
+  "statement": "Code review complete with two fixes applied. (1) Added a bounds check in extract.ts (lines 127-131) that throws on truncated tar entries where the header claims more data than exists in the buffer — this converts a silent data truncation into a visible error, preserving the fail-closed contract. Added a corresponding test case (test 6). (2) Fixed a stale JSDoc comment in perform.ts line 73 that still referenced 'system tar' after the implementation replaced it with in-process extraction. All 57 tests pass, build succeeds, CLI version output works. No other issues found — the tar parser, path traversal protection, error handling, and test coverage are correct.",
+  "followups": []
+}

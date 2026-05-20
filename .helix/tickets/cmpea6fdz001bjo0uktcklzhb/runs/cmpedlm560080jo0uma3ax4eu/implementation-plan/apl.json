@@ -1,0 +1,52 @@
+{
+  "questions": [
+    "What is the correct step ordering for replacing the tar extraction and adding tests?",
+    "Which files need to be created vs modified?",
+    "What tar format features must the in-process parser handle for the CI-produced tarball?",
+    "How should tests create representative .tgz payloads without external dependencies?",
+    "What verification checks confirm the fix eliminates the Windows GNU tar failure?"
+  ],
+  "answers": [
+    {
+      "answer": "The implementation has 4 ordered steps: (1) Create src/update/extract.ts with the extractTarGz function, (2) Modify src/update/perform.ts to import and call extractTarGz replacing the execSync tar call, (3) Create src/update/extract.test.ts with 5 test cases, (4) Run quality gates (build, test, version check). Step 2 depends on step 1 (import target must exist). Step 3 also depends on step 1 (tests import the extraction function). Step 4 depends on all prior steps.",
+      "evidence": [
+        "src/update/perform.ts:122-131 — the extraction block to replace, depends on the new extract.ts function",
+        "tech-research/tech-research.md — decided on built-in modules, separate extract.ts file, test structure",
+        "package.json scripts — build: tsc, test: tsc && node --test dist/**/*.test.js"
+      ]
+    },
+    {
+      "answer": "Two new files are created: src/update/extract.ts (extraction function) and src/update/extract.test.ts (test file with 5 test cases). One file is modified: src/update/perform.ts (import added, execSync tar call replaced with extractTarGz call at lines 122-131). No other files are changed — package.json stays the same (zero new dependencies), tsconfig.json stays the same, and no CI workflow files are touched.",
+      "evidence": [
+        "tech-research/tech-research.md Summary Table — files created: extract.ts, extract.test.ts; files modified: perform.ts; files NOT changed: package.json, tsconfig.json, build-release.yml",
+        "tech-research/apl.json — confirmed no npm dependency needed because release tarball has no node_modules/"
+      ]
+    },
+    {
+      "answer": "The parser must handle: (1) 512-byte header blocks with name (bytes 0-99), size (bytes 124-135 as octal), typeflag (byte 156), and USTAR prefix (bytes 345-499). (2) Regular files (typeflag '0' or '\\0') — write data blocks. (3) Directories (typeflag '5') — create with mkdirSync. (4) PAX extended headers (typeflag 'x' or 'g') — skip data blocks. (5) End-of-archive: two consecutive all-zero 512-byte blocks. (6) Data padding to 512-byte boundaries. The CI tarball is created by GNU tar on ubuntu-latest with simple content (short paths, no symlinks, no special attributes).",
+      "evidence": [
+        "tech-research/tech-research.md — Core API/Methods section and Decision 3 (PAX), Decision 5 (USTAR prefix)",
+        ".github/workflows/build-release.yml:37-43 — tar -czf with dist/, skill-content/, package.json, build-metadata.json",
+        "scout/reference-map.json facts — tarball is standard .tgz with top-level entries, no nested prefix"
+      ]
+    },
+    {
+      "answer": "Tests create .tgz payloads programmatically using Node.js built-in modules: gzipSync (from node:zlib) wrapping manually constructed tar blocks. A test helper function builds 512-byte headers (name, size, typeflag, checksum fields) followed by data blocks padded to 512 bytes, terminated by two zero blocks. This requires zero additional dependencies and follows the project's pattern of programmatic fixture creation (observed in src/skill/skill.test.ts).",
+      "evidence": [
+        "tech-research/tech-research.md — Decision 7: Test tarball creation approach",
+        "src/skill/skill.test.ts — existing tests create fixtures programmatically with writeFileSync/mkdirSync",
+        "package.json — zero runtime deps; only devDeps are @types/node and typescript"
+      ]
+    },
+    {
+      "answer": "Five verification checks confirm the fix: CHK-01 (build passes, extract.js generated), CHK-02 (all tests pass including 5 new extraction tests), CHK-03 (grep confirms no tar invocation remains in update module, extract.ts has only node:* imports), CHK-04 (node dist/index.js --version works), CHK-05 (extraction tests specifically pass including the colon-in-path test that reproduces the original GNU tar failure mode). The colon-in-path test in CHK-05 directly validates that the extraction now succeeds where the old execSync('tar ...') approach would have failed.",
+      "evidence": [
+        "ticket.md acceptance criteria #1-5 — Windows tar fix, cross-platform, no tar in grep, test passes, quality gates",
+        "tech-research/tech-research.md Test Strategy — Test 2 specifically tests colon-in-path",
+        "diagnosis/diagnosis-statement.md — root cause is GNU tar colon interpretation in path arguments"
+      ]
+    }
+  ],
+  "statement": "The implementation plan consists of 4 atomic, ordered steps: (1) Create src/update/extract.ts with an extractTarGz function using only node:zlib, node:fs, and node:path built-in modules to decompress and parse tar archives synchronously via buffer-based 512-byte block parsing. (2) Modify src/update/perform.ts to import extractTarGz and replace the execSync('tar -xzf ...') call at lines 122-131, preserving the existing try/catch error contract. (3) Create src/update/extract.test.ts with 5 test cases covering successful extraction, colon-in-path (original failure mode), corrupt tarball, empty archive, and PAX header handling. (4) Run quality gates (npm run build, npm test, node dist/index.js --version). No new dependencies are added — the zero-dependency design is preserved. No CI workflow, build system, or other update module files are changed.",
+  "followups": []
+}

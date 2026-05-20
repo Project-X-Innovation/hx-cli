@@ -1,0 +1,33 @@
+{
+  "questions": [
+    "Does the new extractTarGz function correctly replace the execSync tar call without breaking the error contract?",
+    "Does the implementation use only node:* built-in modules with zero third-party dependencies?",
+    "Do all 5 extraction test cases pass, including the colon-in-path test that validates the original Windows GNU tar failure mode?",
+    "Does npm run build and npm test pass with no regressions to existing tests?",
+    "Is the execSync import retained in perform.ts only for the copyDirRecursive EXDEV fallback (not for tar)?"
+  ],
+  "answers": [
+    {
+      "answer": "Yes. The extractTarGz function is called at perform.ts:125 inside the same try/catch block (lines 124-129). It throws on error, which is caught and converted to { success: false, error: 'Extraction failed: ...' } — identical error contract to the prior execSync call.",
+      "evidence": ["src/update/perform.ts lines 123-129", "src/update/extract.ts lines 65-141"]
+    },
+    {
+      "answer": "Yes. extract.ts imports only node:zlib, node:fs, and node:path. extract.test.ts imports only node:test, node:assert, node:fs, node:path, node:os, and node:zlib. No third-party modules are used anywhere.",
+      "evidence": ["grep '^import' src/update/extract.ts shows only node:zlib, node:fs, node:path", "grep '^import' src/update/extract.test.ts shows only node:* modules"]
+    },
+    {
+      "answer": "Yes. All 5 tests pass: (1) representative CI tarball extraction with content verification, (2) colon-in-path extraction succeeds, (3) corrupt tarball throws, (4) empty archive is handled gracefully, (5) PAX headers are skipped and subsequent file is extracted correctly.",
+      "evidence": ["node --test dist/update/extract.test.js output: 5 tests, 5 pass, 0 fail"]
+    },
+    {
+      "answer": "Yes. npm run build exits 0. npm test runs all 56 tests (51 existing + 5 new) with 0 failures. node dist/index.js --version outputs '1.3.4'.",
+      "evidence": ["npm test output: tests 56, pass 56, fail 0", "npm run build exits cleanly", "node dist/index.js --version outputs 1.3.4"]
+    },
+    {
+      "answer": "Yes. grep -n 'execSync' src/update/perform.ts shows only two matches: line 1 (import) and line 34 (copyDirRecursive function). No tar invocation remains.",
+      "evidence": ["grep -n execSync src/update/perform.ts: line 1 import, line 34 copyDirRecursive"]
+    }
+  ],
+  "statement": "Implementation complete. The execSync tar call at perform.ts:124 has been replaced with an in-process extractTarGz function using only Node.js built-in modules (node:zlib, node:fs, node:path). This eliminates the dependency on any external tar binary, resolving the Windows GNU tar failure where drive-letter colons are interpreted as remote-host syntax. The error contract is preserved exactly. Five test cases cover representative extraction, colon-in-path (original failure mode), corrupt input, empty archive, and PAX header handling. All 56 tests pass, the build succeeds, and no third-party dependencies were added.",
+  "followups": []
+}

@@ -1,0 +1,73 @@
+{
+  "questions": [
+    "What exactly causes the tar extraction to fail on Windows with Git for Windows installed?",
+    "Where is the bug located in the codebase and what is the exact failing code?",
+    "Are there other execSync/child_process tar invocations in the update module beyond the known one?",
+    "What JavaScript tar library best fits this project's constraints (ESM, Node >=18, no native deps, zero current runtime deps)?",
+    "What is the exact tarball format the extraction must handle?",
+    "What post-extraction contract must the replacement satisfy?",
+    "Could the bug be fixed by quoting paths differently or using --force-local instead of replacing the binary?"
+  ],
+  "answers": [
+    {
+      "answer": "GNU tar (shipped with Git for Windows via MSYS2/mingw) interprets colon characters in path arguments as remote host designators using traditional Unix remote-tape syntax (host:path). When the staging path contains a Windows drive letter like C:\\Users\\...\\staging\\abc123.tgz, GNU tar parses 'C' as a hostname and attempts a network connection, producing: 'tar (child): Cannot connect to C: resolve failed'. This is intrinsic to GNU tar's command-line parser and not a shell escaping issue. Windows' built-in bsdtar (C:\\Windows\\System32\\tar.exe) does not have this behavior, but Git for Windows places its GNU tar earlier in PATH.",
+      "evidence": [
+        "Ticket continuation context — exact error: 'tar (child): Cannot connect to C: resolve failed'",
+        "src/update/perform.ts:124 — execSync(`tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"`, ...)",
+        "Staging paths include drive letters: perform.ts:16 — STAGING_BASE = join(homedir(), '.hlx', 'staging') which resolves to e.g. C:\\Users\\user\\.hlx\\staging on Windows",
+        "Reproduced from PowerShell (not Git Bash) — confirms this is a PATH ordering issue, not MSYS shell quirk"
+      ]
+    },
+    {
+      "answer": "The bug is at src/update/perform.ts line 124, inside the performStagedUpdate function. The exact code is: execSync(`tar -xzf \"${tarballPath}\" -C \"${stagingDir}\"`, { stdio: 'pipe', timeout: 30_000 }). The error is caught at lines 128-131 and returns { success: false, error: 'Extraction failed: ...' }. The function's error handling contract is already correct (returns structured error, does not throw). Only the extraction mechanism itself needs replacement.",
+      "evidence": [
+        "src/update/perform.ts:122-131 — extract block with execSync and catch",
+        "src/update/perform.ts:77-81 — function signature returning Promise<{ success: boolean; error?: string }>"
+      ]
+    },
+    {
+      "answer": "There is exactly one tar invocation in the update module: perform.ts:124. The other execSync/child_process usages are: (1) perform.ts:33 — copyDirRecursive shells out to xcopy/cp-R for EXDEV fallback (not tar), (2) check.ts:30 — execSync('gh auth token') for GitHub token discovery (not tar), (3) validate.ts:38 — spawnSync('node', ...) for version check (not tar). Acceptance criteria #3 scopes removal to 'external tar invocation' specifically, so only perform.ts:124 needs replacement.",
+      "evidence": [
+        "src/update/perform.ts:33 — execSync for xcopy/cp-R (EXDEV fallback)",
+        "src/update/check.ts:30 — execSync('gh auth token')",
+        "src/update/validate.ts:38 — spawnSync('node', [entrypoint, '--version'])"
+      ]
+    },
+    {
+      "answer": "The best fit is the 'tar' package (isaacs/node-tar, npm package name 'tar'). It was rewritten in TypeScript for v7+, provides ESM/CJS hybrid exports, is pure JavaScript with no native build dependency, and is used by npm itself (extremely battle-tested). It offers a high-level tar.x({ file, cwd }) API that directly replaces the execSync call. It handles gzip decompression automatically for .tgz files. The alternative 'tar-stream' (mafintosh/tar-stream) is lower-level and would require manually writing directory creation, file writing, and permission handling code — significantly more implementation work for no practical benefit. The project currently has zero runtime dependencies, so adding 'tar' introduces a new dependency, but the ticket explicitly says adding a runtime dependency is in scope.",
+      "evidence": [
+        "package.json — zero runtime dependencies currently, only devDependencies",
+        "Ticket continuation context — 'Adding a runtime dependency to package.json if needed for the JS tar library' is explicitly in scope",
+        "node-tar GitHub — rewritten in TypeScript, ESM/CJS hybrid via tshy, used by npm itself",
+        "Context7 tar-stream docs — lower-level API requires manual file writing per entry",
+        "Ticket requirements — 'no native build dependency', 'works without invoking external tar'"
+      ]
+    },
+    {
+      "answer": "The tarball is a standard gzip-compressed tar (.tgz) with top-level entries (no nested prefix directory): dist/, skill-content/, package.json, build-metadata.json. It excludes *.test.js and *.test.d.ts. Created by GNU tar on ubuntu-latest in CI. This is a simple, standard format with no symlinks, long paths, or special attributes — any JS tar library will handle it correctly.",
+      "evidence": [
+        ".github/workflows/build-release.yml:36-43 — tar -czf helix-cli.tgz --exclude='*.test.js' --exclude='*.test.d.ts' dist/ skill-content/ package.json build-metadata.json",
+        "scout/reference-map.json — confirms top-level entries with no nested prefix"
+      ]
+    },
+    {
+      "answer": "After extraction, the staging directory must contain the files that validateStaged() checks: dist/index.js must exist, package.json must exist, and 'node dist/index.js --version' must produce output and exit 0. The swap step also expects dist/, skill-content/ (optional), package.json, and build-metadata.json (optional) at the staging directory root. The extraction must produce the same filesystem layout as the current tar command.",
+      "evidence": [
+        "src/update/validate.ts:22 — existsSync(join(stagingDir, 'dist', 'index.js'))",
+        "src/update/validate.ts:30 — existsSync(join(stagingDir, 'package.json'))",
+        "src/update/validate.ts:38 — spawnSync('node', [entrypoint, '--version'])",
+        "src/update/perform.ts:160-163 — swap references stagedDist, stagedSkillContent, stagedPackageJson, stagedBuildMeta"
+      ]
+    },
+    {
+      "answer": "No. Quoting paths differently does not help because the colon interpretation is intrinsic to GNU tar's argument parser, not a shell escaping issue. The --force-local flag exists in GNU tar to disable remote-host interpretation, but it is GNU-specific and not supported by macOS BSD tar, so using it would break macOS. Hardcoding C:\\Windows\\System32\\tar.exe would still depend on an external binary (violating the ticket's goal) and assumes bsdtar's availability (only since Windows 10 1803). The ticket explicitly rejects these workarounds: 'Do not paper over the bug by detecting and rejecting GNU tar at runtime, or by hardcoding C:\\Windows\\System32\\tar.exe. The fix must remove the shell dependency entirely.'",
+      "evidence": [
+        "Ticket continuation context — explicit rejection of --force-local and System32 hardcoding",
+        "GNU tar man page — --force-local is GNU extension, not in POSIX tar or BSD tar",
+        "Ticket goal — 'no user-side toolchain required to install'"
+      ]
+    }
+  ],
+  "statement": "The hlx update extraction step at src/update/perform.ts:124 shells out to system tar via execSync, which fails on Windows when GNU tar (from Git for Windows) is first in PATH because GNU tar interprets Windows drive-letter colons as remote-host syntax. The fix is to replace this single execSync('tar -xzf ...') call with an in-process extraction using the 'tar' npm package (isaacs/node-tar), which provides a direct tar.x({ file, cwd }) API, is pure JavaScript with no native dependencies, and is ESM-compatible. The change is confined to the extraction block in perform.ts (lines 122-131) plus adding 'tar' as a runtime dependency in package.json. A new test file must exercise extraction of a representative .tgz and verify the output layout. No other update module files, CI workflows, or validation logic need changes.",
+  "followups": []
+}
