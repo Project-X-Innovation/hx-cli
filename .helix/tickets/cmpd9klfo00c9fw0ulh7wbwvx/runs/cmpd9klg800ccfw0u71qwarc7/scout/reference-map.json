@@ -1,0 +1,96 @@
+{
+  "problem": "The hlx CLI currently installs and self-updates via the npm registry (npm view / npm install -g @projectxinnovation/helix-cli@latest). The ticket requires switching to install and update directly from the GitHub main branch using npm install -g git+https://... URL, with SHA-based version comparison replacing semver comparison, migration for existing npm-sourced installs, and --version output that includes the installed commit SHA.",
+  "files": [
+    {
+      "path": "src/update/index.ts",
+      "why": "Contains runUpdate() and checkAutoUpdate() — the two primary flows that must switch from npm-registry semver checks to GitHub SHA-based checks. Currently calls fetchLatestVersion() (npm registry) and isNewerVersion() (semver), saves installSource as {mode:'npm', version}. Recovery error message hardcodes npm install command. No migration logic for npm-sourced installs exists yet."
+    },
+    {
+      "path": "src/update/check.ts",
+      "why": "Contains both the current npm-based infrastructure (fetchLatestVersion via `npm view`, isNewerVersion for semver, NPM_PACKAGE constant) AND the future git-based infrastructure that already exists (fetchRemoteSha via `git ls-remote`, isUpdateAvailable for SHA comparison, CANONICAL_REPO_URL/CANONICAL_BRANCH/CANONICAL_REPO constants). The npm functions need to be removed/deprecated and the git functions need to become the primary path."
+    },
+    {
+      "path": "src/update/perform.ts",
+      "why": "Contains performUpdate() which runs `npm install -g ${NPM_PACKAGE}@latest`. The install spec must change from the npm package name to the git+https URL. Imports NPM_PACKAGE from check.ts."
+    },
+    {
+      "path": "src/update/validate.ts",
+      "why": "Contains validateInstall() which resolves global npm root and checks for bin target at `@projectxinnovation/helix-cli/dist/index.js`. This path construction must be verified to still work when npm installs from a git URL rather than the registry — npm may place the package in the same or different directory structure."
+    },
+    {
+      "path": "src/update/version.ts",
+      "why": "Contains getPackageVersion() which reads semver from package.json. Must be extended to include short SHA from config (e.g. '1.3.4 (c8620a5)'). Falls back to semver-only if SHA field is missing (legacy installs)."
+    },
+    {
+      "path": "src/lib/config.ts",
+      "why": "Defines InstallSource type with mode 'github'|'npm'|'unknown', optional commit/repo/branch/version fields. The 'commit' field already exists in the type but is never populated by the current update flow. Config stored at ~/.hlx/config.json. saveConfig() does read-merge-write. loadFullConfig() returns raw config including installSource and autoUpdate."
+    },
+    {
+      "path": "src/index.ts",
+      "why": "CLI entry point and router. The --version case (lines 123-124) calls getPackageVersion() and prints directly — must be updated to show SHA-enhanced version. Usage text (line 60) says 'Check for and apply updates from npm'. Auto-update gating via SKIP_AUTO_UPDATE set and HLX_SKIP_UPDATE_CHECK env var."
+    },
+    {
+      "path": "src/docs/cli-content.ts",
+      "why": "Embedded CLI documentation export. Contains npm install command on line 18, 'checks npm for the latest published version' on line 283, and npm reinstall troubleshooting on line 301. All must be updated to reference the git+https URL."
+    },
+    {
+      "path": "skill-content/references/commands.md",
+      "why": "Command reference documentation. Line 95 describes hlx update as 'Check for and apply CLI updates from npm'. Must be updated."
+    },
+    {
+      "path": "src/skill/show.ts",
+      "why": "Error message on line 15 tells user to reinstall with npm install -g @projectxinnovation/helix-cli@latest. Must update to git+https URL."
+    },
+    {
+      "path": "src/skill/paths.ts",
+      "why": "Error message on line 25 tells user to reinstall with npm install -g @projectxinnovation/helix-cli@latest. Must update to git+https URL."
+    },
+    {
+      "path": "package.json",
+      "why": "Contains publishConfig pointing to npm registry, prepare script that runs tsc (critical for git-based install since npm runs prepare after cloning). Version is 1.3.4. The bin entry maps hlx to dist/index.js."
+    },
+    {
+      "path": "skill-content/SKILL.md",
+      "why": "Agent skill documentation. Does not directly reference npm install for CLI installation, but the 'hlx update' entry may need description update. No npm install command to change here."
+    },
+    {
+      "path": ".github/workflows/auto-tag.yml",
+      "why": "CI workflow that auto-tags releases on main push. Out of scope for code changes per ticket, but documented as context — becomes dead weight after this change."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "why": "CI workflow that publishes to npm on version tags. Out of scope for code changes per ticket, but documented as context — becomes dead weight after this change."
+    },
+    {
+      "path": "tsconfig.json",
+      "why": "TypeScript config: target ES2022, module Node16, outDir dist/, rootDir src/. Relevant because the prepare script in package.json runs tsc which uses this config during git-based installs."
+    }
+  ],
+  "facts": [
+    "fetchRemoteSha() already exists in src/update/check.ts (line 54-68) using `git ls-remote` against CANONICAL_REPO_URL with 10s timeout, returns 40-char hex SHA or null",
+    "isUpdateAvailable() already exists in src/update/check.ts (line 73-85) comparing local SHA against remote SHA",
+    "CANONICAL_REPO_URL is already defined as 'https://github.com/Project-X-Innovation/helix-cli.git' in src/update/check.ts line 3",
+    "CANONICAL_BRANCH is already defined as 'main' in src/update/check.ts line 5",
+    "InstallSource type already has optional 'commit' field (src/lib/config.ts line 9) but it is never written to by the current update flow",
+    "Current runUpdate() saves installSource as {mode:'npm', version: remoteVersion} on line 93-97 of src/update/index.ts",
+    "Current performUpdate() uses NPM_PACKAGE@latest install spec (src/update/perform.ts line 15-17)",
+    "Current fetchLatestVersion() uses `npm view @projectxinnovation/helix-cli version` shell command (src/update/check.ts line 17-19)",
+    "validateInstall() resolves bin target at path: globalRoot/@projectxinnovation/helix-cli/dist/index.js (src/update/validate.ts lines 41-47)",
+    "getPackageVersion() reads version from ../../package.json relative to dist/update/version.js (src/update/version.ts lines 12-14)",
+    "Config file path is ~/.hlx/config.json (src/lib/config.ts line 38)",
+    "HLX_SKIP_UPDATE_CHECK env var prevents auto-update recursion (src/update/index.ts line 110, src/update/perform.ts line 22, src/update/validate.ts line 64)",
+    "package.json prepare script runs 'npm run build' which runs 'tsc' — this is what builds the project when npm installs from a git URL",
+    "No README.md exists in the repo root — documentation lives in src/docs/cli-content.ts and skill-content/",
+    "No tests exist for the update module; existing tests cover flags (flags.test.ts), ticket resolution (resolve-ticket.test.ts), and skill installation (skill.test.ts)",
+    "isCanonicalSource() in src/update/index.ts (line 20-28) considers both mode:'npm' and mode:'github' with matching repo/branch as canonical",
+    "package.json publishConfig has registry: 'https://registry.npmjs.org' — relevant context but out of scope for this ticket",
+    "Test runner is node --test on built dist/**/*.test.js (package.json scripts.test)",
+    "No ORM or database dependencies — no migration strategy needed",
+    "There are 12 locations across 7 files that reference npm registry install or @projectxinnovation package name in error/doc/install contexts"
+  ],
+  "unknowns": [
+    "When npm installs from a git+https URL, does the installed package end up at the same global path (@projectxinnovation/helix-cli/dist/index.js) as when installed from the npm registry? This affects validateInstall() path construction.",
+    "Whether the ticket's requirement for --version to show SHA means getPackageVersion() should read from config (which requires filesystem access to ~/.hlx/config.json) or if a build-time mechanism should embed the SHA — the ticket says 'drawn from the same config field'",
+    "How the initial install records the SHA in config — the install command (npm install -g git+https://...) does not itself run hlx update, so the first hlx invocation after install would need to handle missing SHA gracefully"
+  ]
+}

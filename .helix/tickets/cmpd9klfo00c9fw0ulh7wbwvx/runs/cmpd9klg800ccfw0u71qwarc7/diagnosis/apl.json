@@ -1,0 +1,66 @@
+{
+  "questions": [
+    "Which code paths currently query the npm registry and need to switch to git-based SHA comparison?",
+    "Does validateInstall() path construction still work when npm installs from a git URL instead of the registry?",
+    "How should the first-run migration from npm-sourced installs to GitHub-sourced installs work?",
+    "How should hlx --version incorporate the commit SHA from config?",
+    "What documentation and error-message surfaces reference npm install and need updating?"
+  ],
+  "answers": [
+    {
+      "answer": "Three code paths query the npm registry: (1) fetchLatestVersion() in src/update/check.ts (line 17: `npm view @projectxinnovation/helix-cli version`), used by both runUpdate() and checkAutoUpdate() in src/update/index.ts; (2) performUpdate() in src/update/perform.ts (line 15-17: `npm install -g @projectxinnovation/helix-cli@latest`); (3) install-source recording in runUpdate() and checkAutoUpdate() saves {mode:'npm', version} (index.ts lines 93-98, 155-159). The git-based replacements already exist but are unused: fetchRemoteSha() (check.ts lines 54-68), isUpdateAvailable() (check.ts lines 73-85), CANONICAL_REPO_URL/CANONICAL_BRANCH constants (check.ts lines 3-5). The InstallSource type already has a commit field (config.ts line 9) that is never populated.",
+      "evidence": [
+        "src/update/check.ts:17-19 — fetchLatestVersion() calls `npm view ${NPM_PACKAGE} version`",
+        "src/update/check.ts:54-68 — fetchRemoteSha() exists, uses `git ls-remote`, returns 40-char SHA or null",
+        "src/update/check.ts:73-85 — isUpdateAvailable() exists, compares local SHA against remote",
+        "src/update/perform.ts:15-17 — installSpec = `${NPM_PACKAGE}@latest`, spawnSync `npm install -g ${installSpec}`",
+        "src/update/index.ts:93-97 — saveConfig({installSource: {mode:'npm', version: remoteVersion}})",
+        "src/lib/config.ts:5-11 — InstallSource type has commit?: string field, never written"
+      ]
+    },
+    {
+      "answer": "validateInstall() should continue to work. npm places packages in node_modules using the package's name field from package.json, not the source URL. Since the name is @projectxinnovation/helix-cli (package.json line 2), installing from git+https://...#main will place it at the same path: <npm root -g>/@projectxinnovation/helix-cli/dist/index.js. npm docs confirm prepare scripts run for git installs, and devDependencies are installed to execute them. The current validateInstall() path (validate.ts lines 41-47) should work unchanged.",
+      "evidence": [
+        "package.json:2 — name: '@projectxinnovation/helix-cli'",
+        "src/update/validate.ts:41-47 — binTargetPath = join(globalRoot, '@projectxinnovation', 'helix-cli', 'dist', 'index.js')",
+        "npm docs (Context7): 'npm will clone the repository using git to perform the installation' — uses package name for node_modules directory",
+        "npm docs (Context7): 'prepare script will run if it exists' for git installs",
+        "package.json:19 — prepare: 'npm run build' which runs tsc"
+      ]
+    },
+    {
+      "answer": "When runUpdate() detects installSource is missing or mode:'npm', it should: (a) print a one-line migration notice, (b) fetch remote SHA via fetchRemoteSha(), (c) run the git-based install via performUpdate() with the new git+https URL spec, (d) validate via validateInstall(), (e) record installSource as {mode:'github', repo: CANONICAL_REPO, branch: CANONICAL_BRANCH, commit: newSha}. The existing isCanonicalSource() function (index.ts lines 20-28) already accepts both mode:'npm' and mode:'github' as canonical, so the migration is just the install-source recording change. Config corruption or missing config triggers the same migration path per ticket spec.",
+      "evidence": [
+        "src/update/index.ts:20-28 — isCanonicalSource() accepts mode:'npm' as canonical",
+        "src/lib/config.ts:5-11 — InstallSource type supports mode:'github' with repo/branch/commit",
+        "src/lib/config.ts:201-212 — saveConfig() does read-merge-write, preserving unrelated fields",
+        "Ticket: 'First-run migration: when hlx update runs and the recorded install source is missing or marked as npm...'"
+      ]
+    },
+    {
+      "answer": "getPackageVersion() in src/update/version.ts should be extended to load the config's installSource.commit field and, if present, append the short SHA: e.g. '1.3.4 (c8620a5)'. If the commit field is missing (legacy installs), fall back to semver-only. The --version handler in src/index.ts (line 124) calls getPackageVersion() and prints directly — the change is contained within getPackageVersion(). The ticket specifies 'drawn from the same config field' meaning ~/.hlx/config.json installSource.commit.",
+      "evidence": [
+        "src/update/version.ts:10-20 — getPackageVersion() reads semver from package.json only",
+        "src/index.ts:122-124 — --version case prints getPackageVersion() directly",
+        "src/lib/config.ts:88-96 — loadFullConfig() reads raw config including installSource",
+        "Ticket: 'hlx --version must include the short SHA of the installed commit, drawn from the same config field'"
+      ]
+    },
+    {
+      "answer": "12 locations across 7 files reference npm install or @projectxinnovation in install/error/doc contexts. Grouped by change type: (A) Core update flow (already covered above): check.ts, perform.ts, index.ts. (B) Documentation: cli-content.ts lines 8,18,283,301 — package name, install command, update description, troubleshooting reinstall. (C) Error messages: show.ts line 15, paths.ts line 25 — reinstall commands. (D) Command reference: commands.md line 95 — 'updates from npm'. (E) Entry point: index.ts line 60 — usage text 'updates from npm'. No README.md exists in the repo.",
+      "evidence": [
+        "src/docs/cli-content.ts:8 — 'Package: @projectxinnovation/helix-cli'",
+        "src/docs/cli-content.ts:18 — 'npm install -g @projectxinnovation/helix-cli@latest'",
+        "src/docs/cli-content.ts:283 — 'checks npm for the latest published version'",
+        "src/docs/cli-content.ts:301 — 'npm install -g @projectxinnovation/helix-cli@latest' in troubleshooting",
+        "src/skill/show.ts:15 — 'npm install -g @projectxinnovation/helix-cli@latest'",
+        "src/skill/paths.ts:25 — 'npm install -g @projectxinnovation/helix-cli@latest'",
+        "skill-content/references/commands.md:95 — 'Check for and apply CLI updates from npm'",
+        "src/index.ts:60 — usage text 'Check for and apply updates from npm'",
+        "No README.md exists in repo root"
+      ]
+    }
+  ],
+  "statement": "The hlx update system is built around the npm registry as the source of truth. Three code paths query the registry or install from it (fetchLatestVersion, performUpdate, install-source recording). Git-based primitives (fetchRemoteSha, isUpdateAvailable) already exist in check.ts but are not wired into the update flows. The fix is to rewire runUpdate() and checkAutoUpdate() to use SHA-based comparison via the existing git primitives, change the install spec in performUpdate() from NPM_PACKAGE@latest to the git+https URL, extend getPackageVersion() to append the SHA from config, add migration logic for npm-sourced installs, and update 12 documentation/error-message locations across 7 files. validateInstall() should work unchanged since npm places git-installed packages using the package name. The scope is well-contained within the src/update/ module plus documentation surfaces.",
+  "followups": []
+}
