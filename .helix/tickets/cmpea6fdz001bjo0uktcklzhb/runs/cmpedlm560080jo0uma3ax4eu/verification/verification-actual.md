@@ -1,67 +1,77 @@
-# Verification Actual — BLD-527: Replace hlx self-update with GitHub release assets
+# Verification Actual — BLD-527 (Continuation): Replace tar extraction with in-process JS library
+
+## Plan Adaptation
+
+The base Verification Plan defines 5 Required Checks (CHK-01 through CHK-05). The continuation context reaffirms the same goals: replace shell-based tar extraction with in-process extraction, eliminate external tar dependency, test the Windows colon-in-path failure mode, and ensure build/tests pass. The code review added a 6th test case (truncated tar entry with bounds check). The adapted plan retains all 5 base checks with minor modifications to account for the code review addition:
+
+| Check ID | Base Requirement | Adaptation | Rationale |
+|----------|-----------------|------------|-----------|
+| CHK-01 | Build passes, new files generated | No change | Directly applicable |
+| CHK-02 | All tests pass including extraction tests | Modified: expect 57 total tests (not 56) and 6 extraction tests (not 5) due to code review adding test case 6 | Code review added a truncated tar entry test |
+| CHK-03 | No external tar invocation in update module | No change | Directly applicable |
+| CHK-04 | CLI version command works after build | No change | Directly applicable |
+| CHK-05 | Extraction tests validate original failure mode | Modified: expect 6 test cases (not 5) including the code-review-added truncation test | Code review added test 6 for bounds check |
+
+No checks were removed. No checks were added. Coverage is unchanged relative to the base plan plus the code review addition.
 
 ## Outcome
 
 **pass**
 
-All 12 required checks from the Verification Plan were executed and passed with direct evidence.
+All 5 Required Checks were executed and passed with direct runtime evidence.
 
 ## Steps Taken
 
-1. **[CHK-01] TypeScript typecheck passes** — Ran `npx tsc --noEmit` from the repository root after `npm install`. Command exited with code 0 and reported zero type errors.
+1. **Environment setup** — Wrote `.env` file with configured env vars. Ran `npm install` which also executed the `prepare` script (`npm run build`). Both completed successfully.
 
-2. **[CHK-02] Full build succeeds** — Ran `npm run build`. Command exited with code 0. Verified `dist/update/` contains all expected compiled files: `check.js`, `check.d.ts`, `index.js`, `index.d.ts`, `perform.js`, `perform.d.ts`, `validate.js`, `validate.d.ts`, `version.js`, `version.d.ts`.
+2. **[CHK-01] TypeScript build passes and new files are generated** — Ran `npm run build` in the helix-cli repository root. Command exited with code 0, no type errors. Verified `dist/update/extract.js`, `dist/update/extract.test.js`, and `dist/update/perform.js` all exist with non-zero file sizes.
 
-3. **[CHK-03] Tests pass** — Ran `npm test`. Command exited with code 0. Output: 51 tests passed, 0 failed, 0 skipped, 0 cancelled across 17 test suites. Tests cover flag parsing, ticket resolution, and skill operations.
+3. **[CHK-02] All tests pass including new extraction tests** — Ran `npm test` in the helix-cli repository root. Command exited with code 0. Output: 57 tests passed, 0 failed, 0 skipped across 18 test suites. The 6 `extractTarGz` test cases all passed (representative tarball, colon-in-path, corrupt tarball, empty archive, PAX header, truncated entry). Existing tests (flags: 14, resolve-ticket: 18, skill: 19) all continued to pass.
 
-4. **[CHK-04] CLI --version runs after build** — Ran `node dist/index.js --version`. Command exited with code 0, output: `1.3.4` (with an informational message about running `hlx update` to refresh metadata).
+4. **[CHK-03] No external tar invocation remains in the update module** — Ran three targeted grep searches:
+   - `grep -rn "execSync.*tar|spawnSync.*tar" src/update/` — Only match is a JSDoc comment in `extract.ts:55` describing the prior implementation. No code invocations.
+   - `grep -n "execSync" src/update/perform.ts` — Matches at line 1 (import) and line 34 (`copyDirRecursive` EXDEV fallback). No tar usage.
+   - `grep -n "^import" src/update/extract.ts` — Shows only `node:zlib`, `node:fs`, `node:path`. Zero third-party imports.
+   - Additionally confirmed `extractTarGz` is imported at line 14 of `perform.ts` and called at line 125 within the existing error-handling try/catch.
 
-5. **[CHK-05] auto-tag.yml is deleted** — `ls .github/workflows/auto-tag.yml` returned "No such file or directory" (exit code 2). `ls .github/workflows/` shows only `build-release.yml` and `publish.yml`.
+5. **[CHK-04] CLI version command works after build** — Ran `node dist/index.js --version`. Command exited with code 0, output: `1.3.4` (with informational message about `hlx update`).
 
-6. **[CHK-06] publish.yml is preserved unchanged** — Read the full content of `.github/workflows/publish.yml`. Confirmed it triggers on `push: tags: ['v*']` (line 4-6), has `id-token: write` permission (line 9), and runs `npm publish *.tgz --provenance` (line 62). The file contains OIDC trusted publishing, version verification, and tarball validation steps. Note: git diff was unavailable (git commands blocked in sandbox), so verification was done by reading and confirming the file contains all expected structural elements matching the original described in the implementation plan.
+6. **[CHK-05] Extraction test suite validates the original failure mode** — Ran `node --test dist/update/extract.test.js`. All 6 test cases passed:
+   - (1) Representative CI-shaped tarball: extracts `dist/index.js`, `dist/update/perform.js`, `skill-content/SKILL.md`, `package.json`, `build-metadata.json` with correct content.
+   - (2) Colon-in-path: extracts to directory named `staging:test` — the original GNU tar `C:` remote-host failure mode is eliminated because no external binary is invoked.
+   - (3) Corrupt tarball: throws an error (decompression failure).
+   - (4) Empty archive: handled gracefully, no files created.
+   - (5) PAX extended headers: skipped correctly, subsequent file extracted.
+   - (6) Truncated tar entry: throws with "Truncated tar entry" message (added by code review).
 
-7. **[CHK-07] build-release.yml exists with correct structure** — Read `.github/workflows/build-release.yml`. Verified: triggers on `push: branches: [main]` (line 4-6), `permissions: contents: write` (line 8-9), concurrency group `build-release` with `cancel-in-progress: true` (lines 11-13), uses `actions/checkout@v4` and `actions/setup-node@v4` with Node 22, runs `npm ci` and `npm test`, generates `build-metadata.json` with `$GITHUB_SHA`, creates tarball excluding test files, deletes existing `latest` release, creates new `latest` release with `gh release create latest`. Tag `latest` does not match `v*`.
-
-8. **[CHK-08] No hardcoded npm install -g git+https references remain** — Searched `src/`, `.github/`, and `skill-content/` for `npm install -g git+https` — zero matches in all three directories. Searched `src/` for `GIT_INSTALL_SPEC` — zero matches. Matches found only in `.helix/` ticket artifacts (not application code).
-
-9. **[CHK-09] Update module uses GitHub REST API, not git ls-remote** — Searched `src/update/check.ts` for `git ls-remote` — zero matches. Read the file and confirmed: `fetchLatestRelease` function exported (line 50) that calls `https://api.github.com/repos/Project-X-Innovation/helix-cli/releases/tags/latest` (line 56). `getGitHubToken` function exported (line 25) implementing auth chain: `GITHUB_TOKEN` -> `GH_TOKEN` -> `gh auth token` -> null.
-
-10. **[CHK-10] Staged update mechanism implemented in perform.ts** — Read `src/update/perform.ts` and confirmed: `performStagedUpdate` exported (line 77), staging path `~/.hlx/staging/` (line 16), downloads tarball via `fetch()` with `Accept: application/octet-stream` (lines 96-106), extracts via `tar -xzf` (line 124), calls `validateStaged()` (line 134), rename-based swap with `.bak` backup directories (lines 149-188), rollback on swap failure (lines 189-223), cleanup in `finally` block (lines 234-245), EXDEV cross-filesystem fallback (lines 50-54), Windows retry via `Atomics.wait` (lines 56-60). Grep confirmed zero `npm install -g` references.
-
-11. **[CHK-11] Validation operates on staged directory, not npm global path** — Read `src/update/validate.ts`. `validateStaged` exported (line 14), takes `stagingDir: string` parameter, checks `dist/index.js` existence (line 22), checks `package.json` existence (line 30), runs `node <dir>/dist/index.js --version` with `HLX_SKIP_UPDATE_CHECK=1` env var (lines 38-42). Grep confirmed zero `npm root` references.
-
-12. **[CHK-12] Error messages provide explicit GitHub auth guidance** — Read `src/update/index.ts`. Lines 59-64 in `runUpdate()` handle auth failure with explicit guidance mentioning: (1) `GITHUB_TOKEN` environment variable, (2) `GH_TOKEN` environment variable, (3) `gh auth login`. `process.exit(1)` called after the message (line 66). `checkAutoUpdate()` also handles auth failure at line 162 with a warning that references `hlx update` for details.
+7. **Supplementary verification** — Confirmed `package.json` has zero runtime dependencies (only `devDependencies`). Confirmed the error contract is preserved: `extractTarGz()` throws on error, `performStagedUpdate` catches at lines 126-129 and returns `{ success: false, error }`. Confirmed the JSDoc at `perform.ts:73` was updated by code review to say "Extract in-process via extractTarGz (no external binary)".
 
 ## Findings
 
 | Check ID | Outcome | Evidence |
 |----------|---------|----------|
-| CHK-01 | **pass** | `npx tsc --noEmit` exits 0, no type errors reported |
-| CHK-02 | **pass** | `npm run build` exits 0; `dist/update/` contains check.js, perform.js, validate.js, index.js, version.js (plus .d.ts files) |
-| CHK-03 | **pass** | `npm test` exits 0; 51 tests passed, 0 failed, 0 skipped |
-| CHK-04 | **pass** | `node dist/index.js --version` exits 0, outputs `1.3.4` |
-| CHK-05 | **pass** | `auto-tag.yml` does not exist; `ls .github/workflows/` shows only `build-release.yml` and `publish.yml` |
-| CHK-06 | **pass** | `publish.yml` contains expected structure: triggers on `v*` tags, `id-token: write`, `npm publish *.tgz --provenance` |
-| CHK-07 | **pass** | `build-release.yml` has correct trigger (push to main), permissions (contents: write), concurrency group, all build/test/release steps, uses `latest` tag (not `v*`) |
-| CHK-08 | **pass** | Zero matches for `npm install -g git+https` in src/, .github/, skill-content/; zero matches for `GIT_INSTALL_SPEC` in src/ |
-| CHK-09 | **pass** | No `git ls-remote` in check.ts; `fetchLatestRelease` calls `api.github.com`; `getGitHubToken` implements GITHUB_TOKEN -> GH_TOKEN -> gh auth token chain |
-| CHK-10 | **pass** | `performStagedUpdate` stages to `~/.hlx/staging/`, downloads via fetch, extracts via tar, validates, does rename-based swap with `.bak`, rollback on failure, cleanup in finally block; no `npm install -g` |
-| CHK-11 | **pass** | `validateStaged` takes directory path, checks `dist/index.js` and `package.json` existence, runs `--version` with `HLX_SKIP_UPDATE_CHECK=1`; no `npm root` |
-| CHK-12 | **pass** | Auth failure message mentions `GITHUB_TOKEN`, `GH_TOKEN`, and `gh auth login` (lines 59-64 of index.ts) |
+| CHK-01 | **pass** | `npm run build` exits 0. `ls` confirms `dist/update/extract.js` (5278 bytes), `dist/update/extract.test.js` (11317 bytes), `dist/update/perform.js` (8292 bytes) all exist. |
+| CHK-02 | **pass** | `npm test` exits 0. Output: 57 tests, 18 suites, 57 pass, 0 fail. All 6 `extractTarGz` tests and all 51 existing tests pass. |
+| CHK-03 | **pass** | (a) No code-level `execSync.*tar` or `spawnSync.*tar` matches in `src/update/`. (b) `execSync` in `perform.ts` only at line 1 (import) and line 34 (`copyDirRecursive`). (c) `extract.ts` imports only `node:zlib`, `node:fs`, `node:path`. |
+| CHK-04 | **pass** | `node dist/index.js --version` exits 0, outputs `1.3.4`. |
+| CHK-05 | **pass** | `node --test dist/update/extract.test.js` exits 0. All 6 test cases pass individually: representative tarball, colon-in-path, corrupt tarball, empty archive, PAX headers, truncated entry. |
 
 ### Additional Observations
 
-- **Code Review fix verified**: The code review added `--ignore-scripts` to the install instruction in `cli-content.ts`. This is a documentation-only change that does not affect any behavioral verification check.
-- **Fail-open / fail-closed behavior preserved**: `runUpdate()` calls `process.exit(1)` on failure (fail-closed). `checkAutoUpdate()` uses `return` with `console.error` warnings on failure (fail-open, never exits).
-- **No browser verification required**: This ticket is entirely CLI/workflow/API changes with no UI components.
+- **Code Review fixes verified**: (1) Bounds check at `extract.ts:127-131` prevents silent data truncation. (2) Stale JSDoc at `perform.ts:73` updated. (3) Test case 6 (truncated entry) added and passing.
+- **Zero runtime dependencies maintained**: `package.json` has no `dependencies` section. Only `devDependencies` are present (`@types/node`, `typescript`).
+- **Error contract preserved**: `extractTarGz()` throws on any error. The try/catch in `performStagedUpdate` (lines 124-129) catches and converts to `{ success: false, error }` exactly as before.
+- **Path traversal protection present**: `extract.ts` strips leading `/`, rejects `..` components, and validates resolved paths stay within the destination directory (lines 105-119).
+- **No browser verification required**: This ticket is entirely CLI/build/test changes with no UI components.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `implementation-plan/implementation-plan.md` | Verification Plan with 12 Required Checks | Defined CHK-01 through CHK-12 with specific actions, expected outcomes, and required evidence |
-| `implementation/implementation-actual.md` | Context about what implementation agent attempted | All 8 steps claimed complete; used as context only, independently verified each check |
-| `code-review/code-review-actual.md` | Understanding code review changes and verification impact | One fix: `--ignore-scripts` added to cli-content.ts install instruction; no verification impact |
-| `code-review/apl.json` | Structured code review evidence | Confirmed the installation instruction bug and fix; all acceptance criteria satisfied |
-| `implementation/apl.json` | Implementation structured evidence | Cross-referenced claims against direct observation |
-| `ticket.md` | Primary requirements and acceptance criteria | Acceptance criteria used to validate completeness of implementation |
+| `implementation-plan/implementation-plan.md` | Verification Plan with 5 Required Checks (CHK-01 through CHK-05) | Defined actions, expected outcomes, and required evidence for each check |
+| `implementation/implementation-actual.md` | Context about what the implementation agent attempted | All 4 steps claimed complete; used as context only, independently verified each check |
+| `code-review/code-review-actual.md` | Understanding code review changes and verification impact | Three fixes: bounds check in extract.ts, stale JSDoc in perform.ts, new test case 6. Test count increased from 56 to 57 |
+| `src/update/extract.ts` | Direct inspection of the new extraction function | 148 lines; uses only node:zlib, node:fs, node:path; handles USTAR, PAX, path traversal |
+| `src/update/perform.ts` | Direct inspection of the integration point | extractTarGz imported and called at lines 14 and 125; error contract preserved; execSync only for copyDirRecursive |
+| `src/update/extract.test.ts` | Direct inspection of test coverage | 6 test cases covering representative tarball, colon-in-path, corrupt input, empty archive, PAX headers, truncated entry |
+| `package.json` | Dependency and build verification | Zero runtime deps; ESM; tsc-only build; node:test runner; prepare runs build |
