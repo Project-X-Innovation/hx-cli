@@ -16,7 +16,9 @@ Install the CLI from the latest GitHub release:
 
 1. Download the latest release from https://github.com/Project-X-Innovation/helix-cli/releases/latest
 2. Extract the tarball: \`tar -xzf helix-cli.tgz\`
-3. Run: \`npm install -g ./\` from the extracted directory
+3. Run: \`npm install -g ./ --ignore-scripts\` from the extracted directory
+
+The \`--ignore-scripts\` flag is required because the tarball ships prebuilt — no build step is needed.
 
 After installation the \`hlx\` command is available system-wide. Use \`hlx update\` to update to the latest version.
 

@@ -1,0 +1,49 @@
+{
+  "questions": [
+    "Are there correctness issues in the implementation that would cause failures in real-world usage?",
+    "Does the implementation satisfy all ticket acceptance criteria?",
+    "Are there regression risks from the changes to shared utilities or public APIs?",
+    "Does the fail-open (auto-update) and fail-closed (manual update) behavior remain correct?"
+  ],
+  "answers": [
+    {
+      "answer": "One correctness issue found and fixed: the installation instruction in cli-content.ts told users to run `npm install -g ./` from the extracted CI tarball. This would fail because the tarball does not contain `src/` and the `prepare` script runs `tsc` which requires TypeScript source files. Fixed by adding `--ignore-scripts` flag to the npm install command.",
+      "evidence": [
+        "tsconfig.json has rootDir: 'src' and include: ['src'] — tsc requires the src/ directory",
+        "package.json prepare script runs 'npm run build' which runs 'tsc'",
+        "CI tarball (build-release.yml) only contains dist/, skill-content/, package.json, build-metadata.json — no src/ directory",
+        "src/docs/cli-content.ts line 19 instructed 'npm install -g ./' without --ignore-scripts"
+      ]
+    },
+    {
+      "answer": "Yes, all 10 acceptance criteria are satisfied after the documentation fix. AC-1: build-release.yml creates GitHub Release without v* tag. AC-2: auto-tag.yml deleted. AC-3: publish.yml unchanged. AC-4: hlx update uses prebuilt artifact. AC-5: failed update preserves current install via backup/rollback. AC-6: auto-update uses same staged mechanism. AC-7: auth failures provide explicit guidance. AC-8: no npm install -g git+https references remain. AC-9: hlx --version shows commit SHA from config. AC-10: staged validation prevents bricking.",
+      "evidence": [
+        "build-release.yml triggers on push to main, uses 'latest' tag (not v*), creates tarball with dist/ + skill-content/",
+        "auto-tag.yml confirmed absent from .github/workflows/",
+        "publish.yml verified unchanged — triggers on v* tags with OIDC trusted publishing",
+        "src/update/perform.ts implements staged download-validate-swap with backup/rollback",
+        "src/update/index.ts has explicit auth error messages mentioning GITHUB_TOKEN, GH_TOKEN, gh auth login",
+        "grep across src/, skill-content/, .github/ returns zero matches for 'npm install -g git+https'"
+      ]
+    },
+    {
+      "answer": "No regression risks identified. Changes are confined to the update module (src/update/) and CI workflows. The update module's public API changed (new function names and types), but all consumers are internal to the module. No shared utilities outside the update module were modified. The existing test suite (51 tests covering flag parsing, ticket resolution, skill operations) passes without changes.",
+      "evidence": [
+        "npm test: 51 tests passed, 0 failed",
+        "npx tsc --noEmit: zero type errors",
+        "src/lib/config.ts: unchanged — InstallSource type already supported mode: 'github'",
+        "src/index.ts: unchanged — dispatches to update module via existing import"
+      ]
+    },
+    {
+      "answer": "Yes. runUpdate() (manual) exits with process.exit(1) on auth failure, release fetch failure, and update failure — fail-closed behavior preserved. checkAutoUpdate() (auto) returns early with console.error warnings on auth issues, fetch failures, and update failures — fail-open behavior preserved. Neither path was changed in a way that breaks these contracts.",
+      "evidence": [
+        "src/update/index.ts runUpdate(): calls process.exit(1) at lines 67, 73, 113",
+        "src/update/index.ts checkAutoUpdate(): returns (no exit) at lines 137, 144, 152, 162, 169",
+        "checkAutoUpdate output uses console.error for warnings, never calls process.exit()"
+      ]
+    }
+  ],
+  "statement": "Code review complete. One correctness issue found and fixed: the installation instruction `npm install -g ./` in cli-content.ts would fail when run from the extracted CI tarball because the tarball lacks `src/` and the `prepare` script runs `tsc`. Fixed by adding `--ignore-scripts` flag. All other implementation changes are correct: staged download-validate-swap mechanism, fail-open/fail-closed behavior, auth error messaging, backup/rollback, workflow changes, and documentation updates. Quality gates pass after fix: typecheck clean, 51/51 tests pass.",
+  "followups": []
+}
