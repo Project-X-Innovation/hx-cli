@@ -1,279 +1,193 @@
-# Implementation Plan — BLD-527: Replace hlx self-update with GitHub release assets
+# Implementation Plan — BLD-527 (Continuation): Replace tar extraction with in-process JS library
 
 ## Overview
 
-Replace the `hlx update` and auto-update mechanism to use prebuilt GitHub Release assets instead of `npm install -g git+https://...#main`. The change spans three areas: (1) a new CI workflow that publishes a prebuilt tarball on every `main` merge, (2) a rewrite of the `src/update/` module to implement staged download-validate-swap, and (3) documentation updates to remove all hardcoded npm install references. The `auto-tag.yml` workflow is deleted; `publish.yml` is preserved unchanged.
+Replace the `execSync('tar -xzf ...')` call at `src/update/perform.ts:124` with an in-process tar extraction function using only Node.js built-in modules (`node:zlib`, `node:fs`, `node:path`). This eliminates the external `tar` binary dependency that causes `hlx update` to fail on Windows when GNU tar (from Git for Windows) is first in PATH. The approach preserves the project's zero-dependency design and requires no build system or CI workflow changes.
+
+**Files changed:** `src/update/extract.ts` (new), `src/update/extract.test.ts` (new), `src/update/perform.ts` (modified).
+**Files NOT changed:** `package.json`, `tsconfig.json`, `validate.ts`, `index.ts`, `check.ts`, `version.ts`, `.github/workflows/build-release.yml`.
 
 ## Implementation Principles
 
-- **Never brick the CLI:** The live install is never modified until a staged candidate passes validation.
-- **Zero new dependencies:** Use only Node.js built-in APIs (`fetch`, `fs`, `child_process`, `path`, `url`, `os`). No new npm packages.
-- **Minimal surface:** Touch only files identified by diagnosis. No unrelated changes.
-- **Preserve behavior contracts:** Fail-open for auto-update, fail-closed for manual update. `--version` format preserved. Config read-merge-write pattern preserved.
-- **Existing type reuse:** `InstallSource` already has `mode: 'github'`, `repo`, `branch`, `commit` fields — no type changes needed.
+1. **Minimal change surface**: Only the extraction block in `perform.ts` (lines 122-131) is replaced. The download, validation, swap, and cleanup stages are untouched.
+2. **Zero new dependencies**: Use `node:zlib` (gunzipSync) for decompression and manual tar header parsing for extraction. The release tarball has no `node_modules/`, so npm packages would fail to resolve at runtime — this is why the diagnosis recommendation of node-tar was revised by tech-research.
+3. **Preserve error contract**: `extractTarGz()` throws on error; the existing try/catch in `performStagedUpdate` catches it and returns `{ success: false, error }`. No change to the function signature or callers.
+4. **Separation of concerns**: Extraction logic goes in a new `src/update/extract.ts` file for testability, keeping `perform.ts` focused on orchestration.
+5. **Synchronous approach**: Matches the existing synchronous `execSync` pattern. The payload is small (< 5MB compressed, < 15MB uncompressed) so buffer-based processing is appropriate.
 
 ## Implementation Steps Summary
 
 | Step | Goal | Deliverable |
 |------|------|-------------|
-| 1 | Create CI workflow for prebuilt release artifacts | `.github/workflows/build-release.yml` (new) |
-| 2 | Remove auto-tag workflow | `.github/workflows/auto-tag.yml` (deleted) |
-| 3 | Rewrite remote SHA check and auth discovery | `src/update/check.ts` (rewritten) |
-| 4 | Rewrite staged validation | `src/update/validate.ts` (rewritten) |
-| 5 | Rewrite update execution with staged download+swap | `src/update/perform.ts` (rewritten) |
-| 6 | Update orchestration and error messages | `src/update/index.ts` (updated) |
-| 7 | Update documentation and error recovery messages | `src/docs/cli-content.ts`, `src/skill/show.ts`, `src/skill/paths.ts`, `skill-content/references/commands.md` (updated) |
-| 8 | Quality gates and CLI verification | Typecheck, build, test pass; CLI runs |
+| 1 | Create the in-process tar extraction function | `src/update/extract.ts` |
+| 2 | Replace the `execSync` tar call in `perform.ts` with the new function | Modified `src/update/perform.ts` |
+| 3 | Create extraction tests with representative tarball payloads | `src/update/extract.test.ts` |
+| 4 | Run quality gates to verify build, type-check, and tests pass | Passing `npm run build`, `npm test` |
 
 ## Detailed Implementation Steps
 
-### Step 1: Create CI Workflow for Prebuilt Release Artifacts
+### Step 1: Create `src/update/extract.ts`
 
-**Goal:** Every push to `main` builds the CLI, runs tests, and publishes a prebuilt tarball as a GitHub Release asset under a rolling `latest` tag.
+**Goal:** Implement a synchronous, in-process tar extraction function that handles `.tgz` files without invoking any external binary.
 
 **What to Build:**
 
-Create `.github/workflows/build-release.yml` with:
+Create a new file `src/update/extract.ts` with a single exported function:
 
-- **Trigger:** `on: push: branches: [main]`
-- **Permissions:** `contents: write` (sufficient for `gh release create` with standard `GITHUB_TOKEN`)
-- **Concurrency:** `group: build-release, cancel-in-progress: true` to prevent race conditions on rapid pushes
-- **Steps:**
-  1. `actions/checkout@v4`
-  2. `actions/setup-node@v4` with `node-version: '22'`
-  3. `npm ci` (prepare script runs build automatically)
-  4. `npm test`
-  5. Generate `build-metadata.json`: `{ "commit": "$GITHUB_SHA", "builtAt": "<ISO timestamp>" }`
-  6. Create tarball: `tar -czf helix-cli.tgz dist/ skill-content/ package.json build-metadata.json` with `--exclude='*.test.js' --exclude='*.test.d.ts'`
-  7. Delete existing `latest` release: `gh release delete latest --yes --cleanup-tag || true`
-  8. Create new release: `gh release create latest helix-cli.tgz --title "Latest main build" --notes "Commit: $GITHUB_SHA" --target $GITHUB_SHA`
+```
+export function extractTarGz(tarballPath: string, destDir: string): void
+```
 
-**Key details:**
-- Tag `latest` does NOT match `v*` pattern in `publish.yml`, so it will NOT trigger npm publish.
-- `GITHUB_TOKEN` is automatically available with `contents: write` — no custom secret needed.
-- `build-metadata.json` embeds the commit SHA in the tarball for offline identification.
+The function must:
+
+1. **Read** the `.tgz` file with `readFileSync(tarballPath)`.
+2. **Decompress** with `gunzipSync(compressed)` from `node:zlib` to get a raw tar `Buffer`.
+3. **Parse tar entries** in a loop over 512-byte blocks:
+   - Read the 512-byte header block at the current offset.
+   - If the block is all zeros, check the next block — two consecutive zero blocks mark end-of-archive; stop parsing.
+   - Parse header fields from the block:
+     - `name`: bytes 0-99 (null-terminated ASCII string).
+     - `size`: bytes 124-135 (octal ASCII number).
+     - `typeflag`: byte 156 (single character: `'0'` or `'\0'` = regular file, `'5'` = directory, `'x'` or `'g'` = PAX extended header).
+     - `prefix`: bytes 345-499 (USTAR prefix; if non-empty, full path is `prefix + '/' + name`).
+   - **Directory** (typeflag `'5'`): `mkdirSync(fullPath, { recursive: true })`.
+   - **Regular file** (typeflag `'0'` or `'\0'`): Ensure parent directory exists via `mkdirSync(dirname(fullPath), { recursive: true })`, then `writeFileSync(fullPath, tarBuffer.subarray(dataStart, dataStart + size))`.
+   - **PAX header** (typeflag `'x'` or `'g'`): Skip the data blocks (advance offset) and continue to next entry.
+   - Advance offset past data blocks, padded to 512-byte boundary: `Math.ceil(size / 512) * 512`.
+4. **Path traversal protection**: Resolve the target path with `path.resolve(destDir, entryName)` and verify it starts with `path.resolve(destDir)`. Also strip leading `/` from entry names and reject entries containing `..` path components.
+
+**Imports**: Only `node:zlib`, `node:fs`, `node:path` — no third-party modules.
+
+The function throws on any error (corrupt tarball, IO failure, path traversal). The existing try/catch in `performStagedUpdate` (perform.ts:128-131) handles conversion to `{ success: false, error }`.
 
 **Verification (AI Agent Runs):**
-- Verify file exists at `.github/workflows/build-release.yml`.
-- Verify YAML structure: trigger on `push: branches: [main]`, permissions `contents: write`, concurrency group, all required steps present.
-- Verify the tag name `latest` is used (not `v*`).
+```bash
+npx tsc --noEmit
+```
 
 **Success Criteria:**
-- Workflow file is valid YAML with correct trigger, permissions, concurrency, and all build/test/release steps.
+- `src/update/extract.ts` exists with `extractTarGz` exported.
+- Only `node:*` imports used.
+- Compiles with `tsc --noEmit`.
 
 ---
 
-### Step 2: Remove Auto-Tag Workflow
+### Step 2: Replace `execSync` tar call in `src/update/perform.ts`
 
-**Goal:** Delete the `auto-tag.yml` workflow that auto-pushes git tags on every `main` merge.
+**Goal:** Wire the new `extractTarGz` function into the staged-update flow, replacing the shell-based tar extraction at line 124.
 
 **What to Build:**
 
-Delete `.github/workflows/auto-tag.yml`. No replacement needed — the auto-tagging behavior is explicitly unwanted.
+Modify `src/update/perform.ts` with these changes only:
+
+1. **Add import** near the top of the file (after existing imports):
+   ```typescript
+   import { extractTarGz } from "./extract.js";
+   ```
+
+2. **Replace the extraction block** (current lines 122-131) from:
+   ```typescript
+   // ---- Extract ----
+   try {
+     execSync(`tar -xzf "${tarballPath}" -C "${stagingDir}"`, {
+       stdio: "pipe",
+       timeout: 30_000,
+     });
+   } catch (err: unknown) {
+     const msg = err instanceof Error ? err.message : String(err);
+     return { success: false, error: `Extraction failed: ${msg}` };
+   }
+   ```
+   To:
+   ```typescript
+   // ---- Extract ----
+   try {
+     extractTarGz(tarballPath, stagingDir);
+   } catch (err: unknown) {
+     const msg = err instanceof Error ? err.message : String(err);
+     return { success: false, error: `Extraction failed: ${msg}` };
+   }
+   ```
+
+3. **Keep the `execSync` import** on line 1 — it is still used by `copyDirRecursive` at line 33 for the EXDEV cross-filesystem fallback. This is not a tar invocation and is out of scope per acceptance criteria #3.
+
+4. **No other changes** to `perform.ts`. The function signature, error contract, and all other stages (download, validate, swap, cleanup) remain identical.
 
 **Verification (AI Agent Runs):**
-- Confirm `.github/workflows/auto-tag.yml` does not exist.
-- Confirm `.github/workflows/publish.yml` is unchanged (byte-for-byte identical to the original).
+```bash
+npx tsc --noEmit
+grep -n "execSync.*tar" src/update/perform.ts
+# Should return no results — the only execSync usage remaining is for copyDirRecursive
+```
 
 **Success Criteria:**
-- `auto-tag.yml` is removed. `publish.yml` is untouched.
+- The `execSync('tar -xzf ...')` call is replaced with `extractTarGz(tarballPath, stagingDir)`.
+- The try/catch error handling structure is preserved exactly.
+- The `execSync` import remains (needed for `copyDirRecursive`).
+- No tar invocation remains in the file.
+- Compiles with `tsc --noEmit`.
 
 ---
 
-### Step 3: Rewrite Remote SHA Check and Auth Discovery
+### Step 3: Create `src/update/extract.test.ts`
 
-**Goal:** Replace `git ls-remote` with GitHub REST API for release metadata and add GitHub auth token discovery.
+**Goal:** Add test coverage for the extraction function, including a test that validates the original Windows GNU tar failure mode (paths with special characters) is eliminated.
 
 **What to Build:**
 
-Rewrite `src/update/check.ts`:
+Create `src/update/extract.test.ts` following the project's established test patterns (observed in `src/skill/skill.test.ts`):
+- `node:test` (describe/it)
+- `node:assert` (strict)
+- `mkdtempSync(join(tmpdir(), 'prefix-'))` for isolated temp directories
+- `afterEach(() => rmSync(tmpDir, { recursive: true, force: true }))` for cleanup
 
-1. **Remove:** `GIT_INSTALL_SPEC` constant (no longer needed).
-2. **Keep:** `CANONICAL_REPO_URL`, `CANONICAL_BRANCH`, `CANONICAL_REPO` constants.
-3. **Add `getGitHubToken()` function:** Token discovery order:
-   - `process.env.GITHUB_TOKEN`
-   - `process.env.GH_TOKEN`
-   - Try `execSync('gh auth token', { timeout: 5000 })` — catch if `gh` not installed
-   - Return `null` if none found (works for public repos)
-4. **Replace `fetchRemoteSha()` with `fetchLatestRelease()`:**
-   - Call `GET https://api.github.com/repos/Project-X-Innovation/helix-cli/releases/tags/latest` using native `fetch()`.
-   - Pass `Authorization: Bearer <token>` header if token is available, plus `Accept: application/vnd.github+json`.
-   - Parse response JSON to extract `target_commitish` (commit SHA) and `assets[0].url` (API download URL) or `assets[0].browser_download_url`.
-   - Return `{ commitSha: string, assetUrl: string } | null` on success, `null` on failure.
-   - On HTTP 401/403: return a structured error indicating auth is required.
-   - On HTTP 404: return null (no release published yet).
-   - On network error: return null.
-5. **Update `isUpdateAvailable()`:** Use `fetchLatestRelease()` instead of `fetchRemoteSha()`. Return the asset URL alongside the update-available flag.
-6. **Export types:** Define and export `ReleaseInfo = { commitSha: string; assetUrl: string }` and `ReleaseCheckResult = { available: boolean; release: ReleaseInfo | null; authRequired?: boolean }`.
+Include a **test helper function** that programmatically creates `.tgz` payloads:
+- Build tar blocks manually: 512-byte header (name, size, typeflag, checksum) + data blocks padded to 512 bytes + two zero terminator blocks.
+- Wrap in `gzipSync()` from `node:zlib`.
+- Write to a temp file for `extractTarGz()` to consume.
+
+**Test cases (5 total):**
+
+1. **Successful extraction of representative tarball**: Create a `.tgz` with the CI payload structure (`dist/index.js` with content, `skill-content/SKILL.md`, `package.json`, `build-metadata.json`). Extract to a temp directory. Assert all expected files and directories exist with correct content. This validates the extraction produces the same layout that `validateStaged()` expects.
+
+2. **Extraction to path with colon (original failure mode)**: Create a temp directory with a colon in the name (e.g., `staging:test`) on platforms where this is valid (macOS/Linux). On Windows, use another special character. Call `extractTarGz()` with this path as destDir. Assert extraction succeeds. This directly validates that the original GNU tar failure mode — `C:` interpreted as a remote host — is eliminated because the extraction no longer invokes an external binary.
+
+3. **Corrupt tarball handling**: Write random/garbage bytes to a `.tgz` file. Call `extractTarGz()`. Assert it throws an error. This validates the error contract — `performStagedUpdate` catches the throw and returns `{ success: false, error }`.
+
+4. **Empty archive**: Create a valid `.tgz` containing only two consecutive 512-byte zero blocks (end-of-archive marker). Extract. Assert no error and the destination directory is empty (no files created).
+
+5. **PAX extended header handling**: Create a tarball with a PAX extended header entry (typeflag `'x'`) before a regular file entry. Extract. Assert the regular file is extracted correctly and the PAX header data is skipped without error.
 
 **Verification (AI Agent Runs):**
-- Run `npx tsc --noEmit` — check.ts compiles with no errors.
-- Verify no `git ls-remote` string remains in check.ts.
-- Verify `GIT_INSTALL_SPEC` export is removed.
-- Verify `fetchLatestRelease` function is exported.
+```bash
+npm test
+```
 
 **Success Criteria:**
-- `check.ts` compiles. Uses `fetch()` for GitHub API. No `git` dependency. Auth token discovery chain implemented.
+- All 5 test cases pass.
+- Tests use only `node:*` imports.
+- Temp directories are cleaned up in `afterEach`.
+- The colon-in-path test covers the original failure mode.
 
 ---
 
-### Step 4: Rewrite Staged Validation
+### Step 4: Run quality gates
 
-**Goal:** Replace npm-path-dependent validation with validation of a staged directory.
+**Goal:** Confirm the full build, type-check, and test suite pass end-to-end with no regressions.
 
-**What to Build:**
-
-Rewrite `src/update/validate.ts`:
-
-1. **Remove:** All npm-specific logic (`npm root -g`, `@projectxinnovation/helix-cli/dist/index.js` path construction).
-2. **New `validateStaged(stagingDir: string)` function:**
-   - Check `<stagingDir>/dist/index.js` exists using `existsSync`.
-   - Check `<stagingDir>/package.json` exists.
-   - Run `node <stagingDir>/dist/index.js --version` via `spawnSync` with `HLX_SKIP_UPDATE_CHECK=1` env var, `timeout: 10_000`.
-   - Verify exit code 0 and non-empty stdout.
-   - Return `{ valid: boolean; error?: string }`.
-3. **Export:** `validateStaged` as the primary validation function.
+**What to Build:** No new code. Run existing quality gates.
 
 **Verification (AI Agent Runs):**
-- Run `npx tsc --noEmit` — validate.ts compiles.
-- Verify no `npm root` string remains in validate.ts.
-- Verify `validateStaged` function is exported.
+```bash
+npm run build
+npm test
+node dist/index.js --version
+```
 
 **Success Criteria:**
-- `validate.ts` validates a staging directory by checking entrypoint existence and running `--version`. No npm dependency.
-
----
-
-### Step 5: Rewrite Update Execution with Staged Download+Swap
-
-**Goal:** Replace `npm install -g` with a staged tarball download, extract, validate, and rename-based swap mechanism.
-
-**What to Build:**
-
-Rewrite `src/update/perform.ts`:
-
-1. **Remove:** `spawnSync('npm install -g ...')` call and `GIT_INSTALL_SPEC` import.
-2. **Add install root discovery:** `getInstallRoot()` function using `import.meta.url`:
-   - `dirname(fileURLToPath(import.meta.url))` resolves to `dist/update/`.
-   - `join(..., '..', '..')` resolves to the package root.
-   - Already proven in `version.ts:18` and `paths.ts:18`.
-3. **Add staging directory management:**
-   - `STAGING_BASE = join(homedir(), '.hlx', 'staging')`.
-   - Create staging dir: `<STAGING_BASE>/<commitSha>/`.
-   - Clean up staging on completion (success or failure).
-4. **New `performStagedUpdate(assetUrl, commitSha, token?)` function:**
-   - **Download:** Use `fetch(assetUrl, { headers })` to download the tarball. For API asset URLs, include `Accept: application/octet-stream` header. Write response body to `<staging>/<sha>.tgz` using `Uint8Array` from `response.arrayBuffer()` and `writeFileSync`.
-   - **Extract:** `execSync('tar -xzf <tarball> -C <staging-dir>')` — available on macOS, Linux, Windows 10+.
-   - **Validate:** Call `validateStaged(stagingDir)`.
-   - **Swap:** If validation passes:
-     - Determine live install root via `getInstallRoot()`.
-     - Rename live `dist/` to `dist.bak/`, staged `dist/` to live `dist/`.
-     - Rename live `skill-content/` to `skill-content.bak/`, staged to live.
-     - Copy staged `package.json` and `build-metadata.json` over live versions.
-     - On any rename failure (e.g., EXDEV cross-filesystem): fall back to recursive copy+delete.
-     - On Windows rename failure: retry once after 500ms, then abort with guidance.
-   - **Rollback on swap failure:** If any swap step fails, restore `.bak` directories.
-   - **Cleanup:** Remove staging dir and `.bak` dirs on success.
-   - Return `{ success: boolean; error?: string }`.
-5. **Handle edge cases:**
-   - `EXDEV` error (cross-filesystem): detect and use copy instead of rename.
-   - Windows file locking: retry once after 500ms delay.
-
-**Verification (AI Agent Runs):**
-- Run `npx tsc --noEmit` — perform.ts compiles.
-- Verify no `npm install -g` string remains in perform.ts.
-- Verify `performStagedUpdate` function is exported.
-- Verify `GIT_INSTALL_SPEC` import is removed.
-
-**Success Criteria:**
-- `perform.ts` implements staged download → extract → validate → swap. No npm dependency. Backup/rollback on failure. Install root discovered via `import.meta.url`.
-
----
-
-### Step 6: Update Orchestration and Error Messages
-
-**Goal:** Wire up the new update functions in `index.ts` and replace all npm install references in error messages.
-
-**What to Build:**
-
-Update `src/update/index.ts`:
-
-1. **Imports:** Replace `fetchRemoteSha` with `fetchLatestRelease` from check.ts. Replace `performUpdate` with `performStagedUpdate` from perform.ts. Replace `validateInstall` with removal (validation is now internal to `performStagedUpdate`). Remove `GIT_INSTALL_SPEC` import.
-2. **`runUpdate()` changes:**
-   - Call `fetchLatestRelease()` instead of `fetchRemoteSha()`.
-   - Handle auth-required result: print explicit GitHub auth guidance (mention `GITHUB_TOKEN` env var, `GH_TOKEN` env var, or `gh auth login`).
-   - When update available: call `performStagedUpdate(release.assetUrl, release.commitSha, token)` instead of `performUpdate()`.
-   - Remove separate `validateInstall()` call (validation is now inside `performStagedUpdate`).
-   - Update error messages: replace all `npm install -g ${GIT_INSTALL_SPEC}` recovery instructions with `hlx update` retry guidance or GitHub Release download instructions.
-   - Update success message wording if needed.
-   - Keep `saveConfig()` call with `installSource: { mode: 'github', repo: CANONICAL_REPO, branch: CANONICAL_BRANCH, commit: remoteSha }` — no type changes needed.
-3. **`checkAutoUpdate()` changes:**
-   - Same flow changes as `runUpdate()` but with fail-open behavior preserved.
-   - Call `fetchLatestRelease()` instead of `fetchRemoteSha()`.
-   - Call `performStagedUpdate()` instead of `performUpdate()`.
-   - Remove separate `validateInstall()` call.
-   - Preserve: loop prevention via `HLX_SKIP_UPDATE_CHECK`, autoUpdate config check, canonical source check, warn-and-return on failure.
-4. **`isCanonicalSource()` function:** Keep as-is (already checks `mode === 'github'` with repo/branch).
-
-**Verification (AI Agent Runs):**
-- Run `npx tsc --noEmit` — index.ts compiles.
-- Verify no `GIT_INSTALL_SPEC` import or usage remains.
-- Verify no `npm install -g` string remains in error messages.
-- Verify `fetchLatestRelease` is called instead of `fetchRemoteSha`.
-
-**Success Criteria:**
-- `index.ts` orchestrates the new staged update flow. Error messages provide GitHub-appropriate recovery guidance. Fail-open/fail-closed split preserved.
-
----
-
-### Step 7: Update Documentation and Error Recovery Messages
-
-**Goal:** Replace all hardcoded `npm install -g git+https://...` references with GitHub-based install/recovery instructions.
-
-**What to Build:**
-
-1. **`src/docs/cli-content.ts`:**
-   - Line 18 (Installation section): Replace `npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main` with instructions to download the latest release from GitHub (e.g., `Download the latest release from https://github.com/Project-X-Innovation/helix-cli/releases/latest, extract, and add to PATH`).
-   - Line 301 (Troubleshooting, "Stale Symlink After Update" section): Replace the npm reinstall instruction with `hlx update` guidance. Update the section title and content to reflect the new update mechanism.
-
-2. **`src/skill/show.ts`:**
-   - Line 15: Replace `npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main` with GitHub release download instruction.
-
-3. **`src/skill/paths.ts`:**
-   - Line 25: Replace `npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main` with GitHub release download instruction.
-
-4. **`skill-content/references/commands.md`:**
-   - Review the `hlx update` section (lines 92-99). Update description if it references npm. Currently it says "Check for and apply CLI updates from GitHub" — this is already correct and may not need changes.
-
-**Verification (AI Agent Runs):**
-- Run grep across the entire repo for `npm install -g git+https` — zero matches.
-- Run grep for `GIT_INSTALL_SPEC` — zero matches in any source file.
-- Verify each updated file compiles: `npx tsc --noEmit`.
-
-**Success Criteria:**
-- Zero remaining `npm install -g git+https://...` references in the codebase. All recovery messages point to GitHub release or `hlx update`.
-
----
-
-### Step 8: Quality Gates and CLI Verification
-
-**Goal:** Verify the complete implementation compiles, builds, and the CLI entry point works.
-
-**What to Build:**
-
-No new code. Run verification commands:
-
-1. `npx tsc --noEmit` (typecheck)
-2. `npm run build` (full build to dist/)
-3. `npm test` (build + run tests)
-4. `node dist/index.js --version` (verify CLI starts and shows version)
-
-**Verification (AI Agent Runs):**
-- All four commands exit with code 0.
-- `--version` output matches expected format (semver, optionally with SHA suffix).
-
-**Success Criteria:**
-- All quality gates pass. CLI entry point is functional.
+- `npm run build` (tsc) exits 0.
+- `npm test` (tsc + node --test) exits 0 with all tests passing (including existing `flags.test.ts`, `resolve-ticket.test.ts`, `skill.test.ts`).
+- `node dist/index.js --version` produces output containing a version string.
 
 ---
 
@@ -281,123 +195,68 @@ No new code. Run verification commands:
 
 ### Pre-conditions
 
-| Dependency | Status | Source/Evidence | Affects checks |
-|------------|--------|-----------------|----------------|
-| Node.js >= 18 installed | available | `package.json:22` — `engines.node >= 18` | CHK-01, CHK-02, CHK-03, CHK-04 |
-| npm installed (for `npm ci`, `npm test`) | available | Standard dev environment | CHK-01, CHK-02, CHK-03 |
-| TypeScript compiler available via devDependencies | available | `package.json:42` — `typescript: ^6.0.2` | CHK-01, CHK-02, CHK-03 |
-| Repository dependencies installed (`npm ci`) | available | Can be run before checks | CHK-01, CHK-02, CHK-03, CHK-04 |
-| GitHub Release for `latest` tag (for end-to-end update test) | missing | No CI workflow has run yet; the workflow is new | CHK-08 |
+| # | Dependency | Status | Source/Evidence | Affects checks |
+|---|-----------|--------|----------------|----------------|
+| 1 | Node.js >= 18 installed | available | `package.json` engines field `>=18`; sandbox environment | CHK-01, CHK-02, CHK-03, CHK-04, CHK-05 |
+| 2 | npm installed | available | Required for `npm run build` / `npm test` | CHK-01, CHK-02, CHK-03 |
+| 3 | TypeScript compiler available via devDependencies | available | `package.json` devDependencies: `typescript: ^6.0.2` | CHK-01, CHK-02, CHK-03 |
+| 4 | Repository cloned with all source files | available | Workspace at `/vercel/sandbox/workspaces/cmpedlm560080jo0uma3ax4eu/helix-cli` | CHK-01 through CHK-05 |
+| 5 | `npm ci` or `npm install` run before quality gates | unknown | May need to run before checks; `npm ci` installs devDependencies | CHK-01, CHK-02, CHK-03 |
 
 ### Required Checks
 
-**[CHK-01] TypeScript typecheck passes**
+[CHK-01] **TypeScript build passes and new files are generated**
+- Action: Run `npm run build` in the helix-cli repository root.
+- Expected Outcome: The command exits with code 0. No type errors. `dist/update/extract.js` and `dist/update/extract.test.js` are generated alongside the updated `dist/update/perform.js`.
+- Required Evidence: Full command output showing successful compilation with exit code 0. Output of `ls dist/update/extract.js dist/update/extract.test.js dist/update/perform.js` confirming all three files exist.
 
-- Action: Run `npm ci` (if not already done), then run `npx tsc --noEmit` from the repository root.
-- Expected Outcome: Command exits with code 0 and no type errors are reported.
-- Required Evidence: Full command output showing zero errors and exit code 0.
+[CHK-02] **All tests pass including new extraction tests**
+- Action: Run `npm test` in the helix-cli repository root.
+- Expected Outcome: The command exits with code 0. All test files pass, including the new `extract.test.js` with all 5 test cases (successful extraction, colon-in-path, corrupt tarball, empty archive, PAX header handling). Existing tests (`flags.test.js`, `resolve-ticket.test.js`, `skill.test.js`) continue to pass.
+- Required Evidence: Full `npm test` output showing all test files and individual test case pass/fail status. Zero failures or errors.
 
-**[CHK-02] Full build succeeds**
+[CHK-03] **No external tar invocation remains in the update module**
+- Action: Run targeted grep searches across `src/update/` for tar-related shell invocations and verify `src/update/extract.ts` uses only built-in imports.
+- Expected Outcome: (a) No match for `execSync` combined with `tar` anywhere in `src/update/`. (b) The only `execSync` usage in `src/update/perform.ts` is in the `copyDirRecursive` function (around line 33) for the EXDEV xcopy/cp-R fallback. (c) `src/update/extract.ts` contains only `node:*` imports (no third-party bare specifier imports).
+- Required Evidence: Output of `grep -rn "execSync.*tar\|spawnSync.*tar" src/update/` showing zero matches. Output of `grep -n "execSync" src/update/perform.ts` showing only the copyDirRecursive usage. Output of `grep -n "^import" src/update/extract.ts` showing only `node:zlib`, `node:fs`, and/or `node:path` imports.
 
-- Action: Run `npm run build` from the repository root.
-- Expected Outcome: Command exits with code 0. The `dist/` directory contains compiled JavaScript files including `dist/update/check.js`, `dist/update/perform.js`, `dist/update/validate.js`, `dist/update/index.js`, and `dist/index.js`.
-- Required Evidence: Command output showing exit code 0, plus file listing of `dist/update/` confirming all expected files exist.
-
-**[CHK-03] Tests pass**
-
-- Action: Run `npm test` from the repository root.
-- Expected Outcome: Command exits with code 0. All existing tests pass (flag parsing, ticket resolution, skill operations).
-- Required Evidence: Full test runner output showing all tests passed and exit code 0.
-
-**[CHK-04] CLI --version runs after build**
-
-- Action: Run `node dist/index.js --version` from the repository root.
-- Expected Outcome: Command exits with code 0 and outputs a version string matching the pattern `X.Y.Z` (optionally with `(SHA)` suffix).
+[CHK-04] **CLI version command works after build**
+- Action: Run `node dist/index.js --version` in the helix-cli repository root after a successful build.
+- Expected Outcome: The command exits with code 0 and produces output containing a version string.
 - Required Evidence: Command output showing the version string and exit code 0.
 
-**[CHK-05] auto-tag.yml is deleted**
-
-- Action: Check for the file `.github/workflows/auto-tag.yml` in the repository.
-- Expected Outcome: The file does not exist.
-- Required Evidence: Output of `ls .github/workflows/auto-tag.yml` showing "No such file or directory" or equivalent, plus `ls .github/workflows/` showing the file is absent.
-
-**[CHK-06] publish.yml is preserved unchanged**
-
-- Action: Compare `.github/workflows/publish.yml` content against the original. Verify it triggers on `v*` tags, uses OIDC trusted publishing, and contains the same steps.
-- Expected Outcome: The file is identical to its original content. It still triggers on `push: tags: ['v*']`, has `id-token: write` permission, and runs `npm publish *.tgz --provenance`.
-- Required Evidence: `git diff` output for `.github/workflows/publish.yml` showing no changes, or `diff` command output confirming identical content.
-
-**[CHK-07] build-release.yml exists with correct structure**
-
-- Action: Read `.github/workflows/build-release.yml` and verify its YAML structure.
-- Expected Outcome: The workflow triggers on `push: branches: [main]`, has `contents: write` permission, includes a concurrency group, runs `npm ci`, `npm test`, creates `build-metadata.json`, creates a tarball, and publishes a GitHub Release with tag `latest` (not matching `v*`).
-- Required Evidence: Full file content showing all required YAML keys and values.
-
-**[CHK-08] No hardcoded npm install -g git+https references remain**
-
-- Action: Run a case-insensitive search across all source files for `npm install -g git+https` and for `GIT_INSTALL_SPEC`.
-- Expected Outcome: Zero matches for both search patterns across all `.ts`, `.js`, `.yml`, and `.md` files in the repository (excluding `node_modules/` and `.git/`).
-- Required Evidence: grep/search command output showing zero matches for both patterns.
-
-**[CHK-09] Update module uses GitHub REST API, not git ls-remote**
-
-- Action: Search `src/update/check.ts` for `git ls-remote` and verify `fetchLatestRelease` function exists using `fetch()`.
-- Expected Outcome: No `git ls-remote` string in `src/update/check.ts`. A `fetchLatestRelease` function is exported that calls `api.github.com`. A `getGitHubToken` function is exported for auth token discovery.
-- Required Evidence: Search output confirming absence of `git ls-remote` in check.ts, plus source excerpt showing `fetchLatestRelease` function signature and the `api.github.com` URL.
-
-**[CHK-10] Staged update mechanism implemented in perform.ts**
-
-- Action: Read `src/update/perform.ts` and verify it implements staged download-validate-swap with backup/rollback.
-- Expected Outcome: The file exports a `performStagedUpdate` function (or equivalent) that: (a) downloads a tarball to a staging directory under `~/.hlx/staging/`, (b) extracts via `tar`, (c) calls validation on the staged directory, (d) does rename-based swap with `.bak` backup directories, (e) cleans up on success, (f) restores from backup on swap failure. No `npm install -g` string present.
-- Required Evidence: Source code excerpt showing the staging path, download logic, tar extraction, validation call, rename-based swap with `.bak`, cleanup, and rollback logic. Grep output confirming no `npm install -g` in the file.
-
-**[CHK-11] Validation operates on staged directory, not npm global path**
-
-- Action: Read `src/update/validate.ts` and verify it validates a staging directory.
-- Expected Outcome: The file exports a `validateStaged` (or equivalent) function that takes a directory path, checks for `dist/index.js` existence, and runs `node <dir>/dist/index.js --version` with `HLX_SKIP_UPDATE_CHECK=1`. No `npm root -g` string present.
-- Required Evidence: Source code excerpt showing the function signature, entrypoint existence check, `--version` subprocess call, and `HLX_SKIP_UPDATE_CHECK` usage. Grep output confirming no `npm root` in the file.
-
-**[CHK-12] Error messages provide explicit GitHub auth guidance**
-
-- Action: Read `src/update/index.ts` and verify that authentication failure handling includes explicit guidance about `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth login`.
-- Expected Outcome: When the GitHub API returns 401/403, the error message mentions at least one of: setting `GITHUB_TOKEN` environment variable, setting `GH_TOKEN` environment variable, or running `gh auth login`.
-- Required Evidence: Source code excerpt from `index.ts` showing the auth failure error message with specific GitHub auth guidance.
-
----
+[CHK-05] **Extraction test suite validates the original failure mode**
+- Action: Run `node --test dist/update/extract.test.js` in the helix-cli repository root after building.
+- Expected Outcome: All 5 extraction test cases pass: (1) representative CI-shaped tarball extracts correctly with `dist/index.js`, `package.json`, `build-metadata.json`, and `skill-content/` present and content-correct, (2) extraction to a path containing a colon succeeds without error (validating the original GNU tar `C:` remote-host failure mode is eliminated), (3) corrupt tarball input causes the function to throw an error, (4) empty archive is handled gracefully with no files created, (5) PAX extended headers are skipped and the subsequent file entry is extracted correctly.
+- Required Evidence: Full test output from `node --test dist/update/extract.test.js` showing each individual test case name and its pass/fail status. All 5 must show pass.
 
 ## Success Metrics
 
-1. All quality gates pass: typecheck, build, tests.
-2. `auto-tag.yml` removed, `publish.yml` unchanged, `build-release.yml` created.
-3. Zero `npm install -g git+https://...` references in the codebase.
-4. Update module uses GitHub REST API with staged download-validate-swap.
-5. CLI `--version` works after build.
-6. Explicit GitHub auth error messaging implemented.
-7. Fail-open (auto-update) / fail-closed (manual update) behavior preserved.
+1. The extraction step in `src/update/perform.ts` uses `extractTarGz()` from `src/update/extract.ts` instead of `execSync('tar ...')`.
+2. `src/update/extract.ts` uses only `node:*` built-in module imports — zero third-party dependencies.
+3. All 5 extraction test cases in `src/update/extract.test.ts` pass.
+4. `npm run build` and `npm test` exit 0 with zero failures.
+5. `node dist/index.js --version` produces version output.
+6. No external tar invocation remains in any `src/update/` file.
+7. The `execSync` import in `perform.ts` is retained only for `copyDirRecursive` (EXDEV fallback) — not for any tar operation.
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `ticket.md` | Primary requirements and acceptance criteria | Staged update required; failed updates must never brick CLI; `latest` tag must not trigger npm publish; explicit auth messaging required |
-| `scout/reference-map.json` | File inventory, evidence, and unknowns | 5 update files to rewrite, 2 workflows (1 delete, 1 preserve), 6 npm-install references, zero tests, zero production deps |
-| `scout/scout-summary.md` | Architecture overview | Confirmed fail-open/fail-closed patterns, import.meta.url for path resolution, build scripts |
-| `diagnosis/diagnosis-statement.md` | Root cause analysis | 4 root causes: source-based install requires build tools, destructive npm install -g, auto-tag chains to publish, no prebuilt artifact exists |
-| `diagnosis/apl.json` | Structured evidence and answers | Confirmed rolling `latest` tag, GitHub Releases, GITHUB_TOKEN sufficiency, zero production deps |
-| `product/product.md` | Product vision and use cases | MVP features, success criteria, key design principles (never brick, fail-open/closed split) |
-| `tech-research/tech-research.md` | Architecture decisions and API design | Option A chosen (GitHub Releases + rolling `latest` tag); rename-based swap; system tar; build-metadata.json; auth chain; cross-platform considerations |
-| `tech-research/apl.json` | Technical answers with evidence | GitHub REST API for SHA comparison, staged install mechanism details, Windows file-locking risk analysis |
-| `repo-guidance.json` | Repo intent | Single repo `helix-cli` is sole change target |
-| `src/update/perform.ts` | Current update executor | Confirmed `spawnSync('npm install -g ...')` — exact mechanism being replaced |
-| `src/update/check.ts` | Remote SHA check | Confirmed `git ls-remote` and `GIT_INSTALL_SPEC` constant to remove |
-| `src/update/index.ts` | Update orchestration | Confirmed fail-open/fail-closed patterns, recovery messages with npm references |
-| `src/update/validate.ts` | Post-update validation | Entirely npm-path-dependent — resolves `npm root -g` |
-| `src/update/version.ts` | Version display | Confirmed `import.meta.url` pattern; no changes needed |
-| `src/lib/config.ts` | Config and InstallSource type | `InstallSource` already has `mode: 'github'` — no type changes needed |
-| `src/docs/cli-content.ts` | CLI documentation | Two npm install references at lines 18 and 301 |
-| `src/skill/show.ts` | Skill show command | npm install recovery message at line 15 |
-| `src/skill/paths.ts` | Skill path resolution | npm install recovery message at line 25 |
-| `.github/workflows/auto-tag.yml` | Auto-tag workflow | Confirmed to delete |
-| `.github/workflows/publish.yml` | npm publish workflow | Confirmed to preserve unchanged |
-| `package.json` | Project configuration | Zero production deps, prepare -> tsc, bin entry, files array, engines >= 18 |
-| `skill-content/references/commands.md` | Command reference | hlx update description already mentions GitHub — may need minor update |
+| `ticket.md` (continuation context) | Scope, acceptance criteria, explicit constraints | Extraction-only fix; remove tar binary dependency; preserve error contract; add test; no CI changes |
+| `scout/reference-map.json` | File inventory, code boundaries, facts | Bug at perform.ts:124; 3 other non-tar child_process calls; tarball shape; validation contract; zero runtime deps |
+| `scout/scout-summary.md` | Analysis summary | Extraction flow isolated to lines 122-131; error handling contract; test infrastructure patterns |
+| `diagnosis/diagnosis-statement.md` | Root cause analysis, success criteria | GNU tar colon interpretation is root cause; single call-site replacement; error contract preserved |
+| `diagnosis/apl.json` | Structured evidence for root cause | Colon interpretation is intrinsic to GNU tar parser; --force-local is non-portable; only one tar invocation |
+| `product/product.md` | Product spec, use cases, open questions | Open Q#2 about runtime dep resolution answered by tech-research |
+| `tech-research/tech-research.md` | Architecture decision, API design, test strategy | node-tar rejected (no node_modules in release tarball); built-in modules chosen; sync buffer approach; PAX/USTAR handling; path traversal protection; 5 test cases defined |
+| `tech-research/apl.json` | Structured tech decisions with evidence | Confirmed bare specifier imports fail without node_modules; built-in approach is only viable option |
+| `repo-guidance.json` | Repo intent | helix-cli is sole target; no cross-repo impact |
+| `src/update/perform.ts` (lines 1-247) | Direct inspection of bug and orchestration flow | execSync tar at line 124; error catch at 128-131; copyDirRecursive at line 33 also uses execSync; import.meta.url at line 24 |
+| `src/update/validate.ts` (lines 1-66) | Post-extraction contract | Checks dist/index.js, package.json, runs node --version — defines what extraction output must look like |
+| `src/update/index.ts` (lines 1-207) | Caller error handling | Manual: exit(1) + recovery msg at line 113; Auto: log warning at line 203 |
+| `package.json` (full) | Dependency and build constraints | Zero runtime deps; ESM; tsc-only build; node:test runner; Node >=18 |
+| `tsconfig.json` (full) | Build config | ES2022 target, Node16 modules, strict, output to dist/ |
+| `.github/workflows/build-release.yml` (lines 1-60) | Tarball shape confirmation | Lines 37-43: top-level dist/, skill-content/, package.json, build-metadata.json; no node_modules/ |
+| `src/skill/skill.test.ts` (lines 1-289) | Test pattern reference | node:test describe/it; node:assert strict; mkdtempSync; beforeEach/afterEach cleanup |

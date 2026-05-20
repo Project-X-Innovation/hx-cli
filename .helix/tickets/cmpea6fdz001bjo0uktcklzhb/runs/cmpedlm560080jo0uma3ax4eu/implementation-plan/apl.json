@@ -1,43 +1,52 @@
 {
   "questions": [
-    "What is the correct step ordering and dependency chain for the implementation?",
-    "Which files need changes and what is the minimal change for each?",
-    "What verification checks can be performed without a live GitHub Release?",
-    "Are there any blocking dependencies or risks in the implementation sequence?"
+    "What is the correct step ordering for replacing the tar extraction and adding tests?",
+    "Which files need to be created vs modified?",
+    "What tar format features must the in-process parser handle for the CI-produced tarball?",
+    "How should tests create representative .tgz payloads without external dependencies?",
+    "What verification checks confirm the fix eliminates the Windows GNU tar failure?"
   ],
   "answers": [
     {
-      "answer": "The implementation follows an 8-step sequence: (1) Create build-release.yml CI workflow, (2) Delete auto-tag.yml, (3) Rewrite check.ts (GitHub API + auth), (4) Rewrite validate.ts (staged validation), (5) Rewrite perform.ts (staged download+swap, depends on steps 3-4), (6) Update index.ts (orchestration, depends on steps 3-5), (7) Update documentation files (independent of code logic), (8) Quality gates. Steps 1-2 are independent. Steps 3-4 are independent of each other but must precede step 5. Step 6 depends on steps 3-5. Step 7 is independent. Step 8 depends on all prior steps.",
+      "answer": "The implementation has 4 ordered steps: (1) Create src/update/extract.ts with the extractTarGz function, (2) Modify src/update/perform.ts to import and call extractTarGz replacing the execSync tar call, (3) Create src/update/extract.test.ts with 5 test cases, (4) Run quality gates (build, test, version check). Step 2 depends on step 1 (import target must exist). Step 3 also depends on step 1 (tests import the extraction function). Step 4 depends on all prior steps.",
       "evidence": [
-        "src/update/perform.ts imports from check.ts (GIT_INSTALL_SPEC) and will import from validate.ts",
-        "src/update/index.ts imports from check.ts, perform.ts, and validate.ts",
-        "Documentation files are independent of update module internals"
+        "src/update/perform.ts:122-131 — the extraction block to replace, depends on the new extract.ts function",
+        "tech-research/tech-research.md — decided on built-in modules, separate extract.ts file, test structure",
+        "package.json scripts — build: tsc, test: tsc && node --test dist/**/*.test.js"
       ]
     },
     {
-      "answer": "13 files are affected: 1 new (.github/workflows/build-release.yml), 1 deleted (.github/workflows/auto-tag.yml), 3 rewritten (src/update/check.ts, perform.ts, validate.ts), 1 updated (src/update/index.ts), 4 documentation updates (src/docs/cli-content.ts, src/skill/show.ts, src/skill/paths.ts, skill-content/references/commands.md). 3 files confirmed unchanged: publish.yml, version.ts, config.ts. The existing InstallSource type already has mode: 'github' with all needed fields — no type changes required.",
+      "answer": "Two new files are created: src/update/extract.ts (extraction function) and src/update/extract.test.ts (test file with 5 test cases). One file is modified: src/update/perform.ts (import added, execSync tar call replaced with extractTarGz call at lines 122-131). No other files are changed — package.json stays the same (zero new dependencies), tsconfig.json stays the same, and no CI workflow files are touched.",
       "evidence": [
-        "src/lib/config.ts:5-11 — InstallSource type already includes mode: 'github', repo, branch, commit, version",
-        "src/update/version.ts uses import.meta.url and config SHA — already works for new mechanism",
-        "tech-research/tech-research.md confirms no changes needed for version.ts, config.ts, publish.yml"
+        "tech-research/tech-research.md Summary Table — files created: extract.ts, extract.test.ts; files modified: perform.ts; files NOT changed: package.json, tsconfig.json, build-release.yml",
+        "tech-research/apl.json — confirmed no npm dependency needed because release tarball has no node_modules/"
       ]
     },
     {
-      "answer": "All quality gates (typecheck, build, tests) can run locally. CLI --version can be tested after build via 'node dist/index.js --version'. Static verification of workflow YAML structure, absence of npm install references, and presence of new API patterns can all be done. The only check that cannot run is an end-to-end update test requiring a live GitHub Release, since the CI workflow has not run yet. This is noted in pre-conditions.",
+      "answer": "The parser must handle: (1) 512-byte header blocks with name (bytes 0-99), size (bytes 124-135 as octal), typeflag (byte 156), and USTAR prefix (bytes 345-499). (2) Regular files (typeflag '0' or '\\0') — write data blocks. (3) Directories (typeflag '5') — create with mkdirSync. (4) PAX extended headers (typeflag 'x' or 'g') — skip data blocks. (5) End-of-archive: two consecutive all-zero 512-byte blocks. (6) Data padding to 512-byte boundaries. The CI tarball is created by GNU tar on ubuntu-latest with simple content (short paths, no symlinks, no special attributes).",
       "evidence": [
-        "package.json scripts: build (tsc), typecheck (tsc --noEmit), test (tsc && node --test dist/**/*.test.js)",
-        "No GitHub Release exists for the 'latest' tag — the workflow is new and has not run"
+        "tech-research/tech-research.md — Core API/Methods section and Decision 3 (PAX), Decision 5 (USTAR prefix)",
+        ".github/workflows/build-release.yml:37-43 — tar -czf with dist/, skill-content/, package.json, build-metadata.json",
+        "scout/reference-map.json facts — tarball is standard .tgz with top-level entries, no nested prefix"
       ]
     },
     {
-      "answer": "No blocking dependencies exist for the implementation. All changes are within the helix-cli repo. The CI workflow can be created and validated structurally but cannot be tested until it runs on GitHub after merge. The update module rewrite uses only Node.js built-in APIs (fetch, fs, child_process) and requires no new dependencies. The zero-production-dependency constraint is preserved. The main risk is the rename-based swap on Windows, mitigated by retry logic and EXDEV fallback as specified in tech-research.",
+      "answer": "Tests create .tgz payloads programmatically using Node.js built-in modules: gzipSync (from node:zlib) wrapping manually constructed tar blocks. A test helper function builds 512-byte headers (name, size, typeflag, checksum fields) followed by data blocks padded to 512 bytes, terminated by two zero blocks. This requires zero additional dependencies and follows the project's pattern of programmatic fixture creation (observed in src/skill/skill.test.ts).",
       "evidence": [
-        "package.json:40-43 — only devDependencies",
-        "tech-research/tech-research.md — cross-platform considerations section confirms tar availability and rename behavior",
-        "Node.js >= 18 provides native fetch()"
+        "tech-research/tech-research.md — Decision 7: Test tarball creation approach",
+        "src/skill/skill.test.ts — existing tests create fixtures programmatically with writeFileSync/mkdirSync",
+        "package.json — zero runtime deps; only devDeps are @types/node and typescript"
+      ]
+    },
+    {
+      "answer": "Five verification checks confirm the fix: CHK-01 (build passes, extract.js generated), CHK-02 (all tests pass including 5 new extraction tests), CHK-03 (grep confirms no tar invocation remains in update module, extract.ts has only node:* imports), CHK-04 (node dist/index.js --version works), CHK-05 (extraction tests specifically pass including the colon-in-path test that reproduces the original GNU tar failure mode). The colon-in-path test in CHK-05 directly validates that the extraction now succeeds where the old execSync('tar ...') approach would have failed.",
+      "evidence": [
+        "ticket.md acceptance criteria #1-5 — Windows tar fix, cross-platform, no tar in grep, test passes, quality gates",
+        "tech-research/tech-research.md Test Strategy — Test 2 specifically tests colon-in-path",
+        "diagnosis/diagnosis-statement.md — root cause is GNU tar colon interpretation in path arguments"
       ]
     }
   ],
-  "statement": "The implementation plan defines 8 atomic, sequenced steps to replace the hlx self-update mechanism with GitHub Release assets. Steps 1-2 handle CI workflow changes (new build-release.yml, delete auto-tag.yml). Steps 3-6 rewrite the src/update/ module in dependency order: check.ts (GitHub API), validate.ts (staged validation), perform.ts (staged download+swap), index.ts (orchestration). Step 7 updates 4 documentation files to remove npm install references. Step 8 runs quality gates. The verification plan includes 12 required checks covering quality gates, workflow structure, code patterns, and behavioral verification via the built CLI.",
+  "statement": "The implementation plan consists of 4 atomic, ordered steps: (1) Create src/update/extract.ts with an extractTarGz function using only node:zlib, node:fs, and node:path built-in modules to decompress and parse tar archives synchronously via buffer-based 512-byte block parsing. (2) Modify src/update/perform.ts to import extractTarGz and replace the execSync('tar -xzf ...') call at lines 122-131, preserving the existing try/catch error contract. (3) Create src/update/extract.test.ts with 5 test cases covering successful extraction, colon-in-path (original failure mode), corrupt tarball, empty archive, and PAX header handling. (4) Run quality gates (npm run build, npm test, node dist/index.js --version). No new dependencies are added — the zero-dependency design is preserved. No CI workflow, build system, or other update module files are changed.",
   "followups": []
 }
