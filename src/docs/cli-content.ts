@@ -5,17 +5,17 @@ export const cliDocsContent = {
 
 The Helix CLI (\`hlx\`) is the command-line interface for the Helix platform. It lets you manage tickets, inspect production systems, post comments, and keep the tool itself up to date — all from your terminal.
 
-**Package:** \`@projectxinnovation/helix-cli\`
+**Source:** \`github.com/Project-X-Innovation/helix-cli\`
 **Binary:** \`hlx\`
 
 ---
 
 ## Installation
 
-Install the CLI globally from npm:
+Install the CLI globally from GitHub:
 
 \`\`\`bash
-npm install -g @projectxinnovation/helix-cli@latest
+npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main
 \`\`\`
 
 After installation the \`hlx\` command is available system-wide.
@@ -280,7 +280,7 @@ To update the CLI to the latest version:
 hlx update
 \`\`\`
 
-This checks npm for the latest published version and applies the update automatically.
+This checks GitHub for the latest commit on main and applies the update automatically.
 
 You can also enable or disable automatic update checks:
 
@@ -298,7 +298,7 @@ hlx update --disable-auto   # Turn off automatic checks
 If \`hlx\` stops working after an update (e.g. "command not found" or "module not found" errors), the global npm symlink may be stale. Fix it with a clean reinstall:
 
 \`\`\`bash
-npm install -g @projectxinnovation/helix-cli@latest
+npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main
 \`\`\`
 
 ### Authentication Issues
@@ -337,7 +337,7 @@ This file contains your authentication tokens and organization settings. If you 
     "comments",
     "update",
     "troubleshooting",
-    "npm",
+    "github",
     "helix-cli",
     "artifacts",
     "token",

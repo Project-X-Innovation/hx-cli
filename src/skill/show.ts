@@ -12,7 +12,7 @@ export function cmdShow(skillContentDir: string): void {
     process.stderr.write(
       "Error: SKILL.md not found in bundled skill content.\n" +
         "Reinstall the CLI to restore it:\n\n" +
-        "  npm install -g @projectxinnovation/helix-cli@latest\n\n",
+        "  npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main\n\n",
     );
     process.exit(1);
   }

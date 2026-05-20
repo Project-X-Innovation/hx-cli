@@ -57,7 +57,7 @@ Usage:
   hlx library comments post <ref> Post a section rating
   hlx skill show                Print the bundled hlx-cli skill to stdout
   hlx skill install [flags]     Install the skill to an agent's skills directory
-  hlx update                    Check for and apply updates from npm
+  hlx update                    Check for and apply updates from GitHub
   hlx update --enable-auto      Enable automatic update checks
   hlx update --disable-auto     Disable automatic update checks
   hlx --version                 Show version`);
@@ -120,9 +120,14 @@ try {
       break;
 
     case "--version":
-    case "-v":
-      console.log(getPackageVersion());
+    case "-v": {
+      const version = getPackageVersion();
+      console.log(version);
+      if (!version.includes("(")) {
+        console.error("Run 'hlx update' to refresh install metadata.");
+      }
       break;
+    }
 
     case "--help":
     case "-h":

@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { NPM_PACKAGE } from "./check.js";
+import { GIT_INSTALL_SPEC } from "./check.js";
 
 /**
- * Execute the self-update via npm install -g from the npm registry.
+ * Execute the self-update via npm install -g from the GitHub repository.
  * Returns a structured result — never throws.
  *
  * When `quiet` is true, stderr is captured and returned for downstream
@@ -12,7 +12,7 @@ export function performUpdate(options?: {
   quiet?: boolean;
 }): { success: boolean; error?: string; stderr?: string } {
   const quiet = options?.quiet ?? false;
-  const installSpec = `${NPM_PACKAGE}@latest`;
+  const installSpec = GIT_INSTALL_SPEC;
 
   const result = spawnSync(`npm install -g ${installSpec}`, {
     timeout: 120_000,

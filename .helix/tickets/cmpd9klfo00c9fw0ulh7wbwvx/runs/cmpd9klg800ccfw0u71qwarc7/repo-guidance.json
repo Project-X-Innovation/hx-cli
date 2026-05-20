@@ -1,0 +1,10 @@
+{
+  "repos": [
+    {
+      "repoKey": "helix-cli",
+      "intent": "target",
+      "rationale": "All changes are within this repo: the update module (src/update/), the CLI entry point (src/index.ts), error messages (src/skill/show.ts, src/skill/paths.ts), and documentation (src/docs/cli-content.ts, skill-content/references/commands.md). No cross-repo impact."
+    }
+  ],
+  "updatedBy": "diagnosis"
+}

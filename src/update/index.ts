@@ -4,8 +4,8 @@ import {
   type InstallSource,
 } from "../lib/config.js";
 import {
-  fetchLatestVersion,
-  isNewerVersion,
+  fetchRemoteSha,
+  GIT_INSTALL_SPEC,
   CANONICAL_REPO,
   CANONICAL_BRANCH,
 } from "./check.js";
@@ -15,7 +15,7 @@ import { validateInstall } from "./validate.js";
 
 /**
  * Check whether an installSource matches a canonical source.
- * Accepts both legacy "github" mode (repo/branch check) and "npm" mode.
+ * Accepts both legacy "npm" mode and "github" mode (repo/branch check).
  */
 function isCanonicalSource(source: InstallSource | undefined): boolean {
   if (!source) return false;
@@ -33,7 +33,7 @@ function isCanonicalSource(source: InstallSource | undefined): boolean {
  * Flags:
  *   --enable-auto   Enable automatic update checks
  *   --disable-auto  Disable automatic update checks
- *   (no flags)      Check for and apply updates from npm
+ *   (no flags)      Check for and apply updates from GitHub
  */
 export async function runUpdate(args: string[]): Promise<void> {
   // Handle --enable-auto / --disable-auto flags
@@ -52,27 +52,41 @@ export async function runUpdate(args: string[]): Promise<void> {
   // Run the update check flow
   console.log("Checking for updates...");
 
-  const remoteVersion = fetchLatestVersion();
-  if (remoteVersion === null) {
+  const remoteSha = fetchRemoteSha();
+  if (remoteSha === null) {
     console.error(
-      "Failed to check for updates. Could not reach the npm registry.",
+      "Failed to check for updates. Could not reach GitHub.",
     );
     process.exit(1);
   }
 
-  const localVersion = getPackageVersion();
+  const config = loadFullConfig();
+  const installSource = config.installSource;
 
-  if (!isNewerVersion(remoteVersion, localVersion)) {
+  // Migration detection: npm-sourced or unknown installs
+  if (
+    !installSource ||
+    installSource.mode === "npm" ||
+    installSource.mode === "unknown"
+  ) {
+    console.log("Switching install source from npm to GitHub main...");
+  }
+
+  const localSha = installSource?.commit;
+
+  if (localSha && remoteSha.toLowerCase() === localSha.toLowerCase()) {
     console.log("Already up to date.");
     return;
   }
 
-  console.log(`Update available: ${localVersion} → ${remoteVersion}`);
+  const version = getPackageVersion();
+  console.log(`Update available: ${version} → ${remoteSha.slice(0, 7)}`);
 
   const result = performUpdate({ quiet: false });
 
   if (!result.success) {
     console.error(`Update failed: ${result.error}`);
+    console.error(`\nTo recover, run:\n  npm install -g ${GIT_INSTALL_SPEC}`);
     process.exit(1);
   }
 
@@ -84,7 +98,7 @@ export async function runUpdate(args: string[]): Promise<void> {
       console.error(`\nnpm output:\n${result.stderr}`);
     }
     console.error(`\nThe update installed a broken package. To recover:`);
-    console.error(`  1. Run: npm install -g @projectxinnovation/helix-cli@latest`);
+    console.error(`  1. Run: npm install -g ${GIT_INSTALL_SPEC}`);
     console.error(`  2. Or re-run 'hlx update' to retry.`);
     process.exit(1);
   }
@@ -92,8 +106,10 @@ export async function runUpdate(args: string[]): Promise<void> {
   // Persist install-source metadata on success
   saveConfig({
     installSource: {
-      mode: "npm",
-      version: remoteVersion,
+      mode: "github",
+      repo: CANONICAL_REPO,
+      branch: CANONICAL_BRANCH,
+      commit: remoteSha,
     },
   });
 
@@ -126,21 +142,23 @@ export async function checkAutoUpdate(): Promise<void> {
     return;
   }
 
-  const localVersion = getPackageVersion();
-
-  // Check remote version — silently skip on failure
-  const remoteVersion = fetchLatestVersion();
-  if (remoteVersion === null) {
+  // Check remote SHA — silently skip on failure
+  const remoteSha = fetchRemoteSha();
+  if (remoteSha === null) {
+    console.error("Warning: could not check for updates.");
     return;
   }
 
+  const localSha = config.installSource?.commit;
+
   // Already current
-  if (!isNewerVersion(remoteVersion, localVersion)) {
+  if (localSha && remoteSha.toLowerCase() === localSha.toLowerCase()) {
     return;
   }
 
   // Perform quiet update
-  console.error(`Updating CLI (${localVersion} → ${remoteVersion})...`);
+  const version = getPackageVersion();
+  console.error(`Updating CLI (${version} → ${remoteSha.slice(0, 7)})...`);
   const result = performUpdate({ quiet: true });
 
   if (result.success) {
@@ -154,8 +172,10 @@ export async function checkAutoUpdate(): Promise<void> {
     }
     saveConfig({
       installSource: {
-        mode: "npm",
-        version: remoteVersion,
+        mode: "github",
+        repo: CANONICAL_REPO,
+        branch: CANONICAL_BRANCH,
+        commit: remoteSha,
       },
     });
     console.error("Updated to latest. Changes take effect on the next invocation.");

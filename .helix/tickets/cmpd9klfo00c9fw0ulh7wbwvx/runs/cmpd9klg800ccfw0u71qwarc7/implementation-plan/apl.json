@@ -1,0 +1,35 @@
+{
+  "questions": [
+    "What is the correct step ordering and dependency chain for rewiring the update system?",
+    "Which files need code changes vs documentation-only changes?",
+    "What verification checks are runnable by an automated agent in a sandbox environment?"
+  ],
+  "answers": [
+    {
+      "answer": "The step ordering is: (1) check.ts — remove npm functions and add GIT_INSTALL_SPEC; (2) perform.ts — switch to GIT_INSTALL_SPEC (depends on step 1); (3) version.ts — add SHA from config (independent of steps 1-2); (4) index.ts (update module) — rewire runUpdate/checkAutoUpdate to SHA-based flow (depends on steps 1-3); (5) index.ts (entry point) — update usage text and --version handler; (6) documentation and error messages across 4 files; (7) build verification. Steps 1-2 must be sequential (perform.ts imports from check.ts). Step 3 is independent. Step 4 depends on step 1 (imports). Steps 5-6 are independent of each other but logically follow the core changes.",
+      "evidence": [
+        "src/update/perform.ts:2 — imports NPM_PACKAGE from check.ts, must change to GIT_INSTALL_SPEC after check.ts is updated",
+        "src/update/index.ts:6-8 — imports fetchLatestVersion and isNewerVersion from check.ts, must change to fetchRemoteSha after check.ts is updated",
+        "src/update/version.ts — has no imports from check.ts, can be changed independently"
+      ]
+    },
+    {
+      "answer": "Code changes: src/update/check.ts (remove 3 functions/constants, add 1 constant), src/update/perform.ts (change import and install spec), src/update/version.ts (add config read for SHA), src/update/index.ts (rewire both update functions, add migration logic, update error messages), src/index.ts (update usage text and --version handler). Documentation-only changes: src/docs/cli-content.ts (4 npm references), src/skill/show.ts (1 reinstall command), src/skill/paths.ts (1 reinstall command), skill-content/references/commands.md (1 description). Files NOT changing: src/update/validate.ts (path construction works for git installs), src/lib/config.ts (types and persistence already support target schema), package.json (publishConfig out of scope).",
+      "evidence": [
+        "diagnosis/diagnosis-statement.md — maps all 12 npm-referencing locations with line numbers",
+        "tech-research/tech-research.md — confirms validateInstall() and isCanonicalSource() require no changes",
+        "src/update/validate.ts:41-47 — constructs path using @projectxinnovation/helix-cli, works for git installs since npm uses package name"
+      ]
+    },
+    {
+      "answer": "Runnable checks: (1) npm run typecheck — verifies all imports and types are correct; (2) npm run build — verifies compilation; (3) node dist/index.js --version — verifies CLI runs (semver-only output expected since no config SHA in sandbox); (4) grep for removed npm functions in src/update/; (5) grep for @projectxinnovation/helix-cli@latest in user-facing text; (6) grep for GIT_INSTALL_SPEC definition and usage; (7) grep for mode:'github' saveConfig calls; (8) grep for git+https URL in documentation files; (9) npm test — runs existing tests. Network-dependent checks like verifying actual hlx update behavior against the private GitHub repo are not runnable in the sandbox and are noted as a pre-condition dependency.",
+      "evidence": [
+        "package.json scripts — typecheck: 'tsc --noEmit', build: 'tsc', test: 'tsc && node --test dist/**/*.test.js'",
+        "Sandbox environment has Node.js, npm, and git available",
+        "GitHub network access to private repo is unknown for sandbox"
+      ]
+    }
+  ],
+  "statement": "The implementation plan defines 7 atomic, sequenced steps to rewire the hlx update system from npm-registry semver to GitHub-main SHA comparison. Steps 1-4 are the core code changes in the src/update/ module, following the dependency chain: check.ts (constants) → perform.ts (install spec) → version.ts (SHA display) → index.ts (flow rewiring + migration). Steps 5-6 update the CLI entry point and documentation surfaces. Step 7 verifies the build. The verification plan includes 9 required checks covering typecheck, build, CLI execution, code correctness (no npm remnants), and existing test suite. All checks are agent-runnable except for live update behavior against the private GitHub repo, which is noted as a pre-condition dependency.",
+  "followups": []
+}
