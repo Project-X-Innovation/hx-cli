@@ -1,0 +1,37 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "FIX-521: Frozen in Deploying Status Investigation",
+  "description": "This tour walks through the ticket context files added for FIX-521, which investigates tickets becoming frozen in a 'deploying' status. The issue was suspected to be related to new sprites. The agent ran two attempts: the first produced a fix across two repositories, and the second run was initiated to unstick a staging/preview environment issue and capture any remaining bugs.",
+  "steps": [
+    {
+      "file": ".helix/tickets/cmpdgb1jq00ecfw0u0gmsyz0v/runs/cmpdgb1ka00ehfw0uvdifnq22/ticket.md",
+      "line": 1,
+      "description": "This is the ticket context file for the first agent run (run ID: cmpdgb1ka00ehfw0uvdifnq22) on branch helix/fix/FIX-521-frozen-in-deploying. The ticket describes tickets becoming frozen in 'deploying' status, suspected to be caused by new sprites. This file captures the input context the agent used during its first attempt to diagnose and fix the issue. The attachment referenced (Screenshot_20260519_222836_Chrome.jpg) provided visual evidence of the frozen state.",
+      "title": "Initial Run: FIX-521 Ticket Context"
+    },
+    {
+      "file": ".helix/tickets/cmpdgb1jq00ecfw0u0gmsyz0v/runs/cmpeaxkxg002djo0ur9m4728g/ticket.md",
+      "line": 1,
+      "description": "This is the ticket context file for the second agent run (run ID: cmpeaxkxg002djo0ur9m4728g). It extends the first run's context by including a Discussion section. The agent's prior response (2026-05-20T03:18:53.164Z) confirms changes were applied to 2 repositories, with 5 verification screenshots linked as proof. The Continuation Context section explains this re-run was triggered because the fix landed in preview rather than staging — the user requested the agent both file a bug for the discrepancy and attempt to unstick the deployment pipeline.",
+      "title": "Second Run: Extended Ticket Context with Discussion"
+    },
+    {
+      "file": ".helix/tickets/cmpdgb1jq00ecfw0u0gmsyz0v/runs/cmpeaxkxg002djo0ur9m4728g/ticket.md",
+      "line": 19,
+      "description": "Lines 19–27 contain five linked verification screenshots captured by the agent after the first run's fix was applied. These images serve as proof-of-work that the deploying-status freeze was addressed. Each image URL references the first run's ID (cmpdgb1ka00ehfw0uvdifnq22), confirming the screenshots were produced during that run and are being surfaced here as part of the ongoing continuation context.",
+      "title": "Agent Verification Screenshots"
+    },
+    {
+      "file": ".helix/tickets/cmpdgb1jq00ecfw0u0gmsyz0v/runs/cmpeaxkxg002djo0ur9m4728g/ticket.md",
+      "line": 29,
+      "description": "The Continuation Context block (lines 29–34) captures the two-part task for this second run: (1) investigate and create a new ticket for the staging/preview environment mismatch — the fix ended up in preview when it should be in staging — and (2) attempt to programmatically unstick the deployment so it progresses past the frozen deploying status. This is the actionable entry point for the second agent run and represents the remaining work to be done on this branch.",
+      "title": "Continuation Context: Staging vs Preview Discrepancy"
+    },
+    {
+      "file": ".helix/tickets/cmpdgb1jq00ecfw0u0gmsyz0v/runs/cmpdgb1ka00ehfw0uvdifnq22/ticket.md",
+      "line": 1,
+      "description": "Both run context files are purely metadata — they live under the .helix/tickets directory and do not modify any application source code, build pipeline logic, or sprite-rendering paths directly. The fix itself was applied to 2 external repositories as confirmed by the agent's discussion entry. The helix-cli repository's core code paths (CLI commands, deployment orchestration, sprite handling) are unaffected by these ticket context additions. Any sprite-related root cause changes should be traced in the two repositories referenced in the agent's prior response.",
+      "title": "Summary: Code Paths Remain Clean"
+    }
+  ]
+}
