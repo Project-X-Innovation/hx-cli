@@ -1,138 +1,123 @@
-# Product Spec — BLD-527: Replace hlx self-update with GitHub release assets
+# Product Spec — BLD-527 (Continuation): Replace tar extraction with in-process JS library
 
 ## Problem Statement
 
-`hlx update` and the pre-command auto-update rely on `npm install -g git+https://...#main`, which triggers a TypeScript build (`tsc`) on the user's machine. This fails when the build toolchain is unavailable — particularly on Windows — and `npm install -g` destructively removes the existing CLI before the new version is confirmed working. A failed update therefore bricks the CLI. Separately, an `auto-tag.yml` workflow pushes a git tag on every merge to `main`, chaining to npm publish and requiring a custom `RELEASE_TOKEN`, creating unwanted release coupling and friction.
+The `hlx update` staged-update flow (implemented in the prior run of BLD-527) shells out to system `tar` via `execSync` at `src/update/perform.ts:124` to extract the downloaded GitHub release tarball. On Windows machines where Git for Windows is installed — the default developer setup — GNU tar from MSYS2/mingw appears first in PATH and interprets Windows drive-letter colons (`C:\...`) as remote-host syntax (traditional Unix `host:path` tape-archive semantics). This produces the error:
 
-**Observed impact:** Users who run `hlx update` on machines without TypeScript lose their working CLI installation with no automatic recovery path. The only fix is a manual reinstall.
+```
+tar (child): Cannot connect to C: resolve failed
+gzip: stdin: unexpected end of file
+```
+
+**User impact:** `hlx update` is completely non-functional for Windows developers who have Git for Windows installed — a near-universal population. The failure is deterministic and not user-recoverable without manual intervention. The existing live install is preserved (fail-closed behavior works), but these users cannot update at all.
+
+**Why workarounds were rejected:** The colon interpretation is intrinsic to GNU tar's argument parser; double-quoting (already present) does not prevent it. `--force-local` is GNU-specific and breaks macOS BSD tar. Hardcoding `C:\Windows\System32\tar.exe` still depends on an external binary and is only available since Windows 10 1803. The ticket's core goal was "no user-side toolchain required," so the fix must eliminate the external binary dependency entirely.
 
 ## Product Vision
 
-The `hlx` CLI updates itself from prebuilt artifacts served by GitHub, with no build tools required on user machines. Updates are safe: the running CLI is never replaced until a new version is fully downloaded and validated. The CI pipeline publishes a ready-to-use artifact on every `main` merge, while npm publishing remains an intentional, manual action for tagged releases.
+The `hlx update` extraction step runs entirely in-process using a JavaScript tar library, removing any dependency on a platform `tar` binary, PATH ordering, or path-quoting behavior. Update works identically on Windows, macOS, and Linux without requiring any external tool.
 
 ## Users
 
 | User | Context |
 |------|---------|
-| **hlx end-users** | Developers using `hlx` day-to-day on macOS, Linux, and Windows. They expect `hlx update` to work without installing Node/TypeScript tooling. |
-| **hlx auto-update** | The pre-command auto-update hook that runs silently before every CLI dispatch. Must never block or break the CLI. |
-| **Maintainers** | Team members who merge PRs to `main` and occasionally cut intentional npm releases via manual tags. |
+| **Windows developers** | Primary affected users. Have Git for Windows installed, which places GNU tar ahead of bsdtar in PATH. Currently cannot use `hlx update`. |
+| **macOS / Linux developers** | Existing users whose updates work today. Must not regress. |
+| **Auto-update hook** | Pre-command auto-update that runs silently. Must continue to fail-open (warn and continue) on extraction errors. |
 
 ## Use Cases
 
-1. **Routine update:** A user runs `hlx update`. The CLI checks for a newer `main` build, downloads it, validates it, and swaps it in. The user sees the new version on the next invocation.
-2. **Already current:** A user runs `hlx update` when already on the latest build. The CLI reports "Already up to date" and exits cleanly.
-3. **Failed update (manual):** Download or validation fails. The CLI exits with a non-zero code, a clear error message, and the previously installed version remains fully functional.
-4. **Failed update (auto):** The pre-command auto-update encounters a network or auth error. It logs a warning and continues dispatching the user's intended command.
-5. **Auth missing for private repo:** The updater cannot access GitHub assets. The CLI tells the user exactly what authentication is needed instead of showing a generic download error.
-6. **Maintainer npm release:** A maintainer pushes a `v*` tag. The existing `publish.yml` workflow publishes to npm as before. No workflow changes needed for this path.
-7. **Version identification:** A user or support engineer runs `hlx --version` and sees the semantic version plus the installed commit SHA, sufficient to identify the exact build.
+1. **Windows update (primary fix):** A Windows developer with Git for Windows installed runs `hlx update`. The tarball is extracted in-process without invoking system `tar`. The update completes successfully.
+2. **macOS / Linux update (no regression):** An existing macOS or Linux user runs `hlx update`. Behavior is identical to before — the extraction now happens in-process instead of via shell, but the outcome is the same.
+3. **Corrupt tarball:** A corrupted or truncated tarball is downloaded. Extraction fails, the error surfaces as a structured `{ success: false, error }` result, the live install is untouched, and the user sees a clear error message.
+4. **Auto-update extraction failure:** The pre-command auto-update encounters an extraction error. It logs a warning and continues dispatching the user's command — the CLI is never bricked.
 
 ## Core Workflow
 
 ```
-main merge -> CI builds & publishes prebuilt artifact (GitHub Release)
-                                   |
-     hlx update / auto-update -> query latest artifact metadata + commit SHA
-                                   |
-                          compare to local installed SHA
-                                   |
-                     (same) -> "Already up to date"
-                     (different) -> download to staging area
-                                   |
-                          unpack & validate staged candidate
-                                   |
-                     (pass) -> swap staged -> live, record metadata
-                     (fail) -> abort, keep current install, report error
+hlx update / auto-update
+         |
+  download tarball to staging  (unchanged)
+         |
+  extract tarball in-process   <-- THIS IS THE FIX
+  (JS tar library, no shell)
+         |
+  validate staged candidate    (unchanged: dist/index.js, package.json, --version)
+         |
+  swap staged -> live          (unchanged)
 ```
+
+Only the extraction step changes. Everything upstream (discovery, download, auth) and downstream (validation, swap, metadata recording) remains as-is.
 
 ## Essential Features (MVP)
 
-1. **CI build artifact on main merge:** Every push to `main` produces a prebuilt, runnable artifact published as a GitHub Release asset. The release tag must not match `v*` (to avoid triggering npm publish).
+1. **In-process tar extraction:** Replace the `execSync('tar -xzf ...')` call at `src/update/perform.ts:124` with a JavaScript tar library that decompresses and extracts .tgz files without invoking any external binary.
 
-2. **Staged download-validate-swap updater:** `hlx update` downloads the artifact to a staging location, validates it (entrypoint exists, `--version` runs), and only then replaces the live install. The old install is never modified until the candidate passes validation.
+2. **Same output layout:** After extraction, the staging directory must contain the same top-level entries the CI workflow produces: `dist/`, `skill-content/`, `package.json`, `build-metadata.json`. The existing `validateStaged()` function must pass without modification.
 
-3. **Shared mechanism for manual and auto-update:** Both `hlx update` (fail-closed) and pre-command auto-update (fail-open) use the identical staged install path.
+3. **Error contract preserved:** Extraction errors must return `{ success: false, error: string }` from the same code path (not throw). Manual `hlx update` continues to exit non-zero with a clear error. Auto-update continues to log a warning and proceed.
 
-4. **SHA-based version comparison:** The updater compares the remote artifact's commit SHA against the locally recorded SHA to determine whether an update is needed.
+4. **Runtime dependency added:** A JavaScript tar library is added to `dependencies` in `package.json`. The library must be pure JavaScript with no native build dependency and must support ESM (the project uses `"type": "module"` with ES2022 target and Node16 module resolution).
 
-5. **Explicit auth failure messaging:** When the GitHub artifact is inaccessible due to missing authentication, the CLI reports the specific auth requirement rather than a generic error.
-
-6. **Remove auto-tag workflow:** Delete `.github/workflows/auto-tag.yml`. No tag is pushed on `main` merge.
-
-7. **Preserve manual npm publish path:** The existing `publish.yml` workflow continues to work unchanged when a maintainer manually pushes a `v*` tag.
-
-8. **Install metadata persistence:** After a successful update, record `source=github`, `channel=main`, and the installed commit SHA in the user's config (`~/.hlx/config.json`).
-
-9. **Version display with commit SHA:** `hlx --version` continues to show the version and commit SHA (e.g., `1.3.4 (c8620a5)`).
-
-10. **Updated documentation and error messages:** Replace all hardcoded `npm install -g git+https://...` references (6 known locations) with instructions reflecting the new GitHub artifact install path.
+5. **Extraction test coverage:** A new test file exercises extraction of a representative .tgz payload and asserts the resulting directory layout matches the expected structure (`dist/index.js` exists, `package.json` exists, etc.). The test must be platform-independent and should reproduce the original failure mode conceptually (paths with colons or drive-letter patterns).
 
 ## Features Explicitly Out of Scope (MVP)
 
-- Reworking unrelated CLI commands or features.
-- Removing the manual npm publish workflow (`publish.yml`).
-- Package manager integrations (Homebrew, winget, MSI, etc.).
-- General repo cleanup beyond files directly touched by this change.
-- Multi-platform or OS-specific binary builds (the artifact is a Node.js package, not a compiled binary).
+- CI workflow changes (`.github/workflows/build-release.yml` is unchanged).
+- Update channel, auth, or discovery logic (`src/update/check.ts` is unchanged).
+- The validate step (`src/update/validate.ts` is unchanged).
+- The swap step in `src/update/perform.ts` (only the extraction block changes).
+- Documentation rewrites beyond any user-facing message change at the extraction boundary.
+- Replacing non-tar `execSync` calls (`copyDirRecursive` for EXDEV fallback, `gh auth token`, `node --version` validation).
+- Runtime detection or rejection of GNU tar at runtime.
 
 ## Success Criteria
 
 | # | Criterion | Verification Method |
 |---|-----------|---------------------|
-| 1 | A merge to `main` produces a prebuilt GitHub Release asset without creating a `v*` tag | Inspect CI workflow output after a main merge |
-| 2 | `auto-tag.yml` is deleted | File no longer exists in the repo |
-| 3 | Manual `v*` tag push still triggers npm publish via `publish.yml` | Push a test tag and observe publish workflow |
-| 4 | `hlx update` installs the latest `main` artifact without requiring `tsc` or any build tools | Run `hlx update` on a machine without TypeScript installed |
-| 5 | A failed artifact download/validation leaves the previous CLI fully functional | Simulate download failure; confirm `hlx` still runs afterward |
-| 6 | Auto-update failure logs a warning and does not block command dispatch | Simulate auto-update failure; confirm the user's command still executes |
-| 7 | Missing GitHub auth produces explicit auth guidance, not a generic error | Attempt update without GitHub credentials against a private repo |
-| 8 | Install/update docs no longer reference `npm install -g git+https://...` as the primary path | Grep the codebase for the old install string |
-| 9 | `hlx --version` shows commit SHA after a GitHub-sourced update | Run `hlx --version` after a successful update |
-| 10 | A previously failing update scenario (e.g., no `tsc` on Windows) now succeeds | Reproduce the original failure condition and verify the fix |
+| 1 | On a Windows machine with Git for Windows installed and GNU tar first in PATH, `hlx update` successfully extracts the tarball and completes the staged swap | Run `hlx update` on Windows with Git for Windows in PATH |
+| 2 | On macOS and Linux, `hlx update` continues to work without regression | Run `hlx update` on macOS/Linux |
+| 3 | No remaining external `tar` invocation in the update module | Grep for `execSync`/`spawnSync`/`child_process` in `src/update/` and confirm no tar calls remain |
+| 4 | A unit or integration test exercises extraction of a .tgz payload and asserts the resulting layout | `npm test` passes with the new test |
+| 5 | `npm test` passes, `npm run build` passes, `node dist/index.js --version` reports the commit SHA | Run quality gate commands |
 
 ## Key Design Principles
 
-- **Never brick the CLI:** The live install is immutable until a fully validated candidate is ready to replace it.
-- **Fail-open for auto-update, fail-closed for manual update:** Auto-update must never block the user's command. Manual update must give a clear non-zero exit on failure.
-- **No user-side build tools:** The artifact must be prebuilt and runnable as-is. Users should not need `tsc`, `npm`, or `git` to update.
-- **Single canonical update channel:** One source of truth for the latest build (the newest GitHub Release asset from `main`).
-- **Explicit over silent:** Auth failures, download failures, and validation failures all produce specific, actionable error messages.
+- **No external binary dependency for extraction:** The fix must eliminate the system `tar` dependency, not work around it with detection, flags, or hardcoded paths.
+- **Minimal change surface:** Only the extraction block (lines 122-131 of `perform.ts`) and `package.json` are modified. The rest of the update pipeline is untouched.
+- **Preserve error contract:** The function signature and error-handling behavior of `performStagedUpdate` remain identical. Callers are unaffected.
+- **Fail-closed is preserved:** A failed extraction leaves the live install intact. This behavior is already correct and must not regress.
 
 ## Scope & Constraints
 
-- **Repository:** `helix-cli` only. No cross-repo impact identified.
-- **Affected areas:** CI workflows (new build-release, remove auto-tag), update module (`src/update/` — 5 files), documentation/error messages (6 files), and potentially config types (`src/lib/config.ts`).
-- **Preserve:** `publish.yml` must remain unchanged. The `--version` output format must be preserved. The fail-open/fail-closed behavioral split between auto-update and manual update must be preserved.
-- **Constraint:** The CI workflow must use the standard `GITHUB_TOKEN` with `contents: write`. No new custom secrets are required for the normal update path.
-- **Constraint:** Zero production dependencies in the project. The prebuilt artifact does not need `node_modules/`.
+- **Repository:** `helix-cli` only. No cross-repo impact.
+- **Files changed:** `src/update/perform.ts` (extraction block), `package.json` (new runtime dependency), new test file (e.g., `src/update/perform.test.ts`).
+- **Files NOT changed:** `src/update/validate.ts`, `src/update/index.ts`, `src/update/check.ts`, `src/update/version.ts`, `.github/workflows/build-release.yml`, `tsconfig.json`.
+- **Constraint:** The project currently has zero runtime dependencies. Adding one is explicitly authorized by the ticket, but the dependency must be pure JS (no native build step), ESM-compatible, and suitable for Node >= 18.
+- **Constraint:** The `execSync` import in `perform.ts` is also used by `copyDirRecursive` (line 33) for the EXDEV fallback. The import must remain; only the tar invocation is removed.
+- **Constraint:** The tarball is standard `.tgz` with top-level entries (no nested prefix directory), created by GNU tar on ubuntu-latest in CI. No symlinks, long paths, or special attributes.
 
 ## Future Considerations
 
-- **Platform-specific optimized builds:** If performance demands it, the artifact could evolve into per-OS compiled binaries (e.g., via `pkg` or `bun compile`), but Node.js tarball is sufficient for MVP.
-- **Delta/incremental updates:** Currently, every update downloads the full artifact. If artifact size becomes a concern, diff-based updates could be explored.
-- **Rollback capability:** MVP ensures the old install survives a failed update, but does not provide an explicit `hlx rollback` command. This could be added later.
-- **Update channels:** MVP supports only the `main` channel. Named channels (e.g., `beta`, `canary`) could be added by publishing additional release tags.
-- **Telemetry:** Update success/failure rates could be tracked to monitor the health of the new update mechanism.
+- **Replace remaining shell-outs:** The non-tar `execSync` calls (`copyDirRecursive`, `gh auth token`) could also be replaced with pure Node.js equivalents in a future pass, further reducing external binary dependencies.
+- **Streaming extraction:** If tarball sizes grow significantly, streaming extraction (pipe download directly to extractor without writing to disk first) could reduce disk I/O and staging space.
 
 ## Open Questions / Risks
 
 | # | Question / Risk | Impact | Status |
 |---|----------------|--------|--------|
-| 1 | **Private repo auth model:** Is the `helix-cli` GitHub repo private or public? This determines whether artifact downloads require a GitHub token and the shape of the auth error messaging. | Directly affects whether auth guidance is needed for all users or only some. | Unknown — record for tech-research |
-| 2 | **GitHub Release vs. Actions artifact:** GitHub Releases have permanent assets with stable URLs. Actions artifacts expire (default 90 days) and require API auth. Diagnosis recommends Releases with a rolling `latest` tag. | Fundamental to the download URL scheme and whether `GITHUB_TOKEN` is needed for downloads. | Recommended: GitHub Releases; confirm in tech-research |
-| 3 | **Atomic file swap on Windows:** Windows locks running executables, complicating the staged-swap step. The swap mechanism must account for OS-specific file-locking behavior. | Could cause update failures on Windows if not handled. | Unknown — requires tech-research |
-| 4 | **Install location discovery:** The running CLI needs to know its own install root to replace files. `import.meta.url` is available, but the exact strategy depends on how the CLI was originally installed (npm global, direct download, etc.). | Affects the swap logic in the updater. | Partially answered — `import.meta.url` is used in existing code; needs tech-research for edge cases |
-| 5 | **Replacing `git ls-remote` with GitHub API:** Currently the SHA comparison uses `git ls-remote`, which requires `git` on the user's machine. If the updater already hits the GitHub API for release metadata, consolidating removes the `git` dependency. | Removes a user-machine dependency but changes the SHA-check mechanism. | Recommended by diagnosis; confirm in tech-research |
-| 6 | **No existing update module tests:** The `src/update/` module has zero test coverage. Changes to this critical path should include tests. | Risk of regressions in the update mechanism without tests. | Known gap — implementation should add tests |
+| 1 | **Which JS tar library to use?** Diagnosis recommends `tar` (isaacs/node-tar v7+) — TypeScript-native, ESM/CJS hybrid, pure JS, used by npm itself. Alternative `tar-stream` is lower-level and requires significantly more code. | Affects implementation complexity and dependency footprint. | Recommended: `tar` (node-tar); confirm in tech-research |
+| 2 | **Does node-tar v7+ bundle correctly into the release tarball?** The CI build excludes `node_modules/` but the release tarball must include the `tar` dependency's compiled output or it must be bundled. | If the dependency is not available at runtime in the release artifact, extraction will fail. | Needs tech-research — how does the current build pipeline handle runtime deps? |
+| 3 | **Tarball format compatibility:** The .tgz is created by GNU tar on Ubuntu. Are there any GNU tar-specific extensions (pax headers, long-name encoding) that might trip up a JS library? | Could cause extraction failures on edge-case file names. | Low risk — the payload contains simple, short paths with no symlinks. Confirm in tech-research. |
+| 4 | **Test infrastructure for .tgz creation:** Tests need to create representative .tgz payloads. Can this be done with the same JS tar library, or does the test need a different approach? | Affects test file structure and any additional dev dependencies. | Likely the same library can create test payloads; confirm in tech-research |
 
 ## Artifact Inputs Used
 
 | Artifact | Why Used | Key Takeaway |
 |----------|----------|--------------|
-| `ticket.md` | Primary requirements, acceptance criteria, and non-negotiable invariants | Detailed behavioral specs for staged update, failure modes, and workflow changes |
-| `scout/scout-summary.md` | Codebase architecture analysis | 5-file update module structure, 2 CI workflows, 6 hardcoded npm-install references, zero tests |
-| `scout/reference-map.json` | File-level evidence inventory and open unknowns | 19 facts confirming root causes; 8 unknowns including artifact mechanism, auth model, and Windows atomicity |
-| `diagnosis/diagnosis-statement.md` | Root cause analysis and proposed change scope | 4 root causes identified; recommends rolling `latest` tag, staged download-validate-swap, GitHub API for SHA check |
-| `diagnosis/apl.json` | Structured Q&A with evidence citations | Confirmed zero production deps (tarball needs no node_modules), `v*`-avoidance for tag naming, GITHUB_TOKEN sufficiency |
-| `repo-guidance.json` | Repo intent classification | Single repo (`helix-cli`) confirmed as the sole change target with no cross-repo impact |
+| `ticket.md` (continuation context) | Primary scope, requirements, acceptance criteria, and explicit decision constraints | Extraction-only fix; must remove tar binary dependency; preserve error contract; add test; explicit rejection of workarounds |
+| `scout/scout-summary.md` | Codebase analysis, extraction flow location, dependency landscape, test infrastructure | Bug at perform.ts:124; only one tar invocation; zero runtime deps; node:test runner; no existing update tests |
+| `scout/reference-map.json` | File inventory, facts, code boundaries, unknowns | 16 facts confirming root cause, staging paths, validation contract, error handling contract; 5 unknowns including library choice and tarball format nuances |
+| `diagnosis/diagnosis-statement.md` | Root cause analysis, alternative hypothesis rejection, success criteria, change scope | Single root cause confirmed; recommends node-tar; 3 files changed; error contract preserved; cross-platform correctness required |
+| `diagnosis/apl.json` | Structured Q&A with evidence citations | Confirmed colon interpretation is in GNU tar's parser (not shell escaping), --force-local is non-portable, node-tar v7+ is best fit |
+| `repo-guidance.json` | Repo intent classification | helix-cli is the sole target; no cross-repo impact |
