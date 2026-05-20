@@ -3,77 +3,63 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Validate that the globally-installed helix-cli package is usable.
+ * Validate a staged update directory before swapping it into the live install.
  *
- * 1. Resolves the global node_modules path via `npm root -g`.
- * 2. Checks that the bin target (`dist/index.js`) exists on disk.
- * 3. Runs `node <binTarget> --version` to confirm the CLI can start.
+ * 1. Checks that `<stagingDir>/dist/index.js` exists on disk.
+ * 2. Checks that `<stagingDir>/package.json` exists on disk.
+ * 3. Runs `node <stagingDir>/dist/index.js --version` to confirm the CLI can start.
  *
  * Returns a structured result — never throws.
  */
-export function validateInstall(): {
+export function validateStaged(stagingDir: string): {
   valid: boolean;
-  binTargetPath: string;
   error?: string;
 } {
-  // Resolve global node_modules path
-  const rootResult = spawnSync("npm root -g", {
-    shell: true,
-    encoding: "utf8",
-    timeout: 15_000,
-  });
+  const entrypoint = join(stagingDir, "dist", "index.js");
+  const packageJson = join(stagingDir, "package.json");
 
-  if (rootResult.error || rootResult.status !== 0 || !rootResult.stdout?.trim()) {
-    const detail =
-      rootResult.error?.message ??
-      rootResult.stderr?.trim() ??
-      "empty output";
+  // Check entrypoint existence
+  if (!existsSync(entrypoint)) {
     return {
       valid: false,
-      binTargetPath: "",
-      error: `Failed to resolve global npm root: ${detail}`,
+      error: `Entrypoint missing: ${entrypoint}`,
     };
   }
 
-  const globalRoot = rootResult.stdout.trim();
-
-  // Construct the bin target path from the known package bin contract
-  const binTargetPath = join(
-    globalRoot,
-    "@projectxinnovation",
-    "helix-cli",
-    "dist",
-    "index.js",
-  );
-
-  // Check file existence
-  if (!existsSync(binTargetPath)) {
+  // Check package.json existence
+  if (!existsSync(packageJson)) {
     return {
       valid: false,
-      binTargetPath,
-      error: `Bin target missing: ${binTargetPath}`,
+      error: `package.json missing: ${packageJson}`,
     };
   }
 
   // Run version check to confirm the CLI can start
-  const versionResult = spawnSync(`node "${binTargetPath}" --version`, {
-    shell: true,
+  const result = spawnSync("node", [entrypoint, "--version"], {
     encoding: "utf8",
     timeout: 10_000,
     env: { ...process.env, HLX_SKIP_UPDATE_CHECK: "1" },
+    stdio: ["pipe", "pipe", "pipe"],
   });
 
-  if (versionResult.error || versionResult.status !== 0 || versionResult.signal) {
+  if (result.error || result.status !== 0 || result.signal) {
     const detail =
-      versionResult.error?.message ??
-      versionResult.stderr?.trim() ??
-      `exit code ${versionResult.status}`;
+      result.error?.message ??
+      result.stderr?.trim() ??
+      `exit code ${result.status}`;
     return {
       valid: false,
-      binTargetPath,
       error: `Version check failed: ${detail}`,
     };
   }
 
-  return { valid: true, binTargetPath };
+  const output = result.stdout?.trim();
+  if (!output) {
+    return {
+      valid: false,
+      error: "Version check produced no output",
+    };
+  }
+
+  return { valid: true };
 }

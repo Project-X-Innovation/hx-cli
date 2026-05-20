@@ -12,13 +12,13 @@ The Helix CLI (\`hlx\`) is the command-line interface for the Helix platform. It
 
 ## Installation
 
-Install the CLI globally from GitHub:
+Install the CLI from the latest GitHub release:
 
-\`\`\`bash
-npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main
-\`\`\`
+1. Download the latest release from https://github.com/Project-X-Innovation/helix-cli/releases/latest
+2. Extract the tarball: \`tar -xzf helix-cli.tgz\`
+3. Run: \`npm install -g ./\` from the extracted directory
 
-After installation the \`hlx\` command is available system-wide.
+After installation the \`hlx\` command is available system-wide. Use \`hlx update\` to update to the latest version.
 
 ---
 
@@ -293,13 +293,15 @@ hlx update --disable-auto   # Turn off automatic checks
 
 ## Troubleshooting
 
-### Stale Symlink After Update
+### CLI Not Working After Update
 
-If \`hlx\` stops working after an update (e.g. "command not found" or "module not found" errors), the global npm symlink may be stale. Fix it with a clean reinstall:
+If \`hlx\` stops working after an update (e.g. "command not found" or "module not found" errors), re-run the update to restore a clean installation:
 
 \`\`\`bash
-npm install -g git+https://github.com/Project-X-Innovation/helix-cli.git#main
+hlx update
 \`\`\`
+
+If \`hlx\` is completely unusable, download the latest release manually from https://github.com/Project-X-Innovation/helix-cli/releases/latest and reinstall.
 
 ### Authentication Issues
 

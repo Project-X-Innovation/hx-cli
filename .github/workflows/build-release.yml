@@ -1,0 +1,59 @@
+name: Build and publish release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-release
+  cancel-in-progress: true
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+        # prepare script runs build automatically after npm ci
+
+      - run: npm test
+
+      - name: Generate build metadata
+        run: |
+          echo "{\"commit\":\"$GITHUB_SHA\",\"builtAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > build-metadata.json
+          cat build-metadata.json
+
+      - name: Create tarball
+        run: |
+          tar -czf helix-cli.tgz \
+            --exclude='*.test.js' \
+            --exclude='*.test.d.ts' \
+            dist/ \
+            skill-content/ \
+            package.json \
+            build-metadata.json
+          echo "--- Tarball contents ---"
+          tar -tzf helix-cli.tgz
+
+      - name: Delete existing latest release
+        run: gh release delete latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create latest release
+        run: |
+          gh release create latest helix-cli.tgz \
+            --title "Latest main build" \
+            --notes "Commit: $GITHUB_SHA" \
+            --target "$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}

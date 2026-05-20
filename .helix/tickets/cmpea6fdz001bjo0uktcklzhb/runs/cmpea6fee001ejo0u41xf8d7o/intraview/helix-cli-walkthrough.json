@@ -1,0 +1,60 @@
+{
+  "title": "Replace hlx self-update with GitHub release assets",
+  "description": "Walkthrough of the BLD-527 implementation: CI workflow for prebuilt release artifacts, rewritten update module with staged download-validate-swap, and documentation updates.",
+  "steps": [
+    {
+      "file": ".github/workflows/build-release.yml",
+      "line": 1,
+      "title": "New CI workflow for prebuilt release artifacts",
+      "description": "Triggers on push to main. Builds, tests, creates a tarball (dist/ + skill-content/ + package.json + build-metadata.json), and publishes it as a GitHub Release under a rolling 'latest' tag. The tag name 'latest' avoids matching 'v*' in publish.yml, preventing accidental npm publishes."
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 30,
+      "title": "GitHub auth token discovery",
+      "description": "getGitHubToken() tries GITHUB_TOKEN env var, then GH_TOKEN, then 'gh auth token' CLI command, finally returns null. Null is fine for public repos; private repos will get an explicit auth error downstream."
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 50,
+      "title": "GitHub REST API for release metadata",
+      "description": "fetchLatestRelease() replaces git ls-remote. Single API call to /repos/{owner}/{repo}/releases/tags/latest returns both the commit SHA (target_commitish) and the tarball download URL (assets[0].url). Handles 401/403 (auth required), 404 (no release), and network errors."
+    },
+    {
+      "file": "src/update/validate.ts",
+      "line": 14,
+      "title": "Staged directory validation",
+      "description": "validateStaged() checks that dist/index.js and package.json exist in the staging directory, then runs 'node dist/index.js --version' with HLX_SKIP_UPDATE_CHECK=1 to confirm the candidate CLI can start. This replaces the old npm-path-dependent validation."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 22,
+      "title": "Install root discovery via import.meta.url",
+      "description": "getInstallRoot() uses import.meta.url to find the package root (two directories up from dist/update/perform.js). Same proven pattern already used in version.ts and paths.ts."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 44,
+      "title": "Safe rename with EXDEV and Windows fallbacks",
+      "description": "safeRename() attempts fs.renameSync first. If EXDEV (cross-filesystem), falls back to cp -R + rmSync. On Windows, retries once after a 500ms Atomics.wait() to handle file-locking edge cases."
+    },
+    {
+      "file": "src/update/perform.ts",
+      "line": 77,
+      "title": "Staged update: download-extract-validate-swap",
+      "description": "performStagedUpdate() is the core update mechanism. Downloads tarball to ~/.hlx/staging/<sha>/, extracts via system tar, validates with validateStaged(), then does a rename-based swap with .bak backup dirs. On any swap failure, restores from backups. On success, cleans up staging and backups."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 57,
+      "title": "Explicit GitHub auth error messaging",
+      "description": "When the GitHub API returns 401/403, runUpdate() exits with a clear message listing three auth options: GITHUB_TOKEN env var, GH_TOKEN env var, or 'gh auth login'. This satisfies the ticket requirement for explicit auth guidance."
+    },
+    {
+      "file": "src/update/index.ts",
+      "line": 119,
+      "title": "Auto-update with fail-open behavior",
+      "description": "checkAutoUpdate() uses the same staged update mechanism as runUpdate() but preserves fail-open semantics: on any failure (auth, network, download, swap), it logs a warning to stderr and returns without blocking command dispatch."
+    }
+  ]
+}
