@@ -1,60 +1,67 @@
 {
-  "title": "BLD-517: Switch hlx update from npm to GitHub main",
-  "description": "Tour of changes to rewire the hlx CLI update system from npm-registry semver comparison to GitHub-main SHA-based comparison.",
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "BLD-517: Switch hlx update system from npm registry to GitHub SHA-based comparison",
+  "description": "This tour walks through the complete rewiring of the hlx CLI update system. The previous system queried the npm registry via `npm view`, compared semver strings, and installed via `npm install -g @projectxinnovation/helix-cli@latest`. That approach depended on a fragile CI publish step that frequently left npm behind the main branch. The fix activates already-present but unused git primitives (fetchRemoteSha, isUpdateAvailable, CANONICAL_* constants) and wires them into both the explicit update and auto-check flows, introduces a GIT_INSTALL_SPEC constant as a single source of truth for the install URL, adds inline migration for existing npm-sourced users, appends the commit SHA to version output, and removes all dead npm-registry code and documentation references.",
   "steps": [
     {
       "file": "src/update/check.ts",
       "line": 9,
-      "title": "GIT_INSTALL_SPEC replaces NPM_PACKAGE",
-      "description": "The npm package constant and functions (NPM_PACKAGE, fetchLatestVersion, isNewerVersion) are removed. A single GIT_INSTALL_SPEC constant is added, composed from existing CANONICAL_REPO_URL and CANONICAL_BRANCH constants. This is the canonical install spec used by perform.ts and error messages."
+      "description": "This is the foundational change. The three npm-registry artifacts (NPM_PACKAGE constant, fetchLatestVersion() which ran `npm view @projectxinnovation/helix-cli version`, and isNewerVersion() which did semver comparison) are deleted here. In their place, GIT_INSTALL_SPEC is composed from the existing CANONICAL_REPO_URL and CANONICAL_BRANCH constants and exported so that perform.ts and index.ts share exactly one source of truth for the install URL. The already-present fetchRemoteSha() and isUpdateAvailable() functions are retained and now become the primary comparison mechanism.",
+      "title": "Step 1 — Remove npm infrastructure, export GIT_INSTALL_SPEC"
     },
     {
       "file": "src/update/perform.ts",
-      "line": 15,
-      "title": "Install spec switched to git URL",
-      "description": "The install spec now uses GIT_INSTALL_SPEC (git+https://...#main) instead of the npm registry package. npm is still the installer tool (it runs prepare/tsc and links the bin), but the npm registry is never contacted."
+      "line": 2,
+      "description": "perform.ts previously imported NPM_PACKAGE from check.ts and built the install spec as `@projectxinnovation/helix-cli@latest`. With NPM_PACKAGE removed, this import is updated to bring in GIT_INSTALL_SPEC instead. At line 15 the spawnSync call now passes GIT_INSTALL_SPEC (the `git+https://...#main` URL) as the package argument to `npm install -g`. This is the only file that actually shells out to install, so this single change completes the install-transport switch.",
+      "title": "Step 2 — Switch install command to git URL"
     },
     {
       "file": "src/update/version.ts",
-      "line": 27,
-      "title": "Version output includes commit SHA",
-      "description": "getPackageVersion() now reads installSource.commit from the user's config. When a SHA is available, it returns '<semver> (<short-sha>)' (e.g., '1.3.4 (c8620a5)'). Falls back to semver-only gracefully on any config error."
+      "line": 1,
+      "description": "version.ts previously returned only the semver string from package.json. This step adds an import of loadFullConfig and reads the installSource.commit field that was always present in the config type but never written. When commit is present and at least 7 characters, a short SHA suffix is appended (e.g. `1.2.3 (abc1234)`). The entire config read is wrapped in a try-catch so any config read failure silently falls back to the bare version string — this guarantees the --version flag never throws.",
+      "title": "Step 3 — Append commit SHA to version output"
     },
     {
       "file": "src/update/index.ts",
       "line": 55,
-      "title": "runUpdate() uses fetchRemoteSha() — fail-closed",
-      "description": "The explicit update command now fetches the remote main HEAD SHA via git ls-remote. On null return (network error), it exits non-zero immediately with a clear error message. This is the fail-closed behavior required by the ticket."
-    },
-    {
-      "file": "src/update/index.ts",
-      "line": 66,
-      "title": "Migration detection for npm-sourced installs",
-      "description": "When the install source is missing, mode 'npm', or mode 'unknown', a one-line notice is printed before proceeding with the GitHub-based install. This transparently migrates legacy npm users on their first 'hlx update'."
-    },
-    {
-      "file": "src/update/index.ts",
-      "line": 107,
-      "title": "Install source recorded as GitHub with SHA",
-      "description": "On successful update, saveConfig() records {mode: 'github', repo, branch, commit: remoteSha}. The commit field is the full 40-character SHA, used for future comparison and for the --version output."
+      "description": "runUpdate() is the explicit `hlx update` path and must be fail-closed: any failure must print a clear error and exit non-zero. Here fetchRemoteSha() replaces the deleted fetchLatestVersion(). If fetchRemoteSha() returns null, the function prints an error message with a recovery command using GIT_INSTALL_SPEC and calls process.exit(1). On a successful fetch the remote SHA is compared against the local installSource.commit via isUpdateAvailable(). Migration is handled inline: if installSource.mode is 'npm' (legacy install), the update is forced regardless of SHA comparison so the user is transparently moved to the GitHub-sourced install on their next explicit update.",
+      "title": "Step 4a — runUpdate() rewired to SHA comparison (fail-closed)"
     },
     {
       "file": "src/update/index.ts",
       "line": 146,
-      "title": "checkAutoUpdate() — fail-open with SHA comparison",
-      "description": "The pre-command auto-update check now uses SHA comparison. On network failure, it emits a stderr warning and returns silently — never blocking command dispatch. This is the fail-open behavior required by the ticket."
+      "description": "checkAutoUpdate() runs silently in the background on every CLI invocation and must be fail-open: it must never block normal CLI usage. fetchRemoteSha() is used here too, but when it returns null the function emits a stderr warning and returns normally — no process.exit(). On update failure it also only prints a stderr warning and continues. After a successful update, saveConfig records {mode: 'github', commit: remoteSha} so that subsequent invocations have a SHA baseline to compare against. This is the write path that finally populates the installSource.commit field that version.ts reads.",
+      "title": "Step 4b — checkAutoUpdate() rewired to SHA comparison (fail-open)"
     },
     {
       "file": "src/index.ts",
-      "line": 122,
-      "title": "--version handler with SHA fallback note",
-      "description": "When the version string doesn't contain a parenthesized SHA (legacy installs), a note is printed to stderr suggesting 'hlx update' to refresh install metadata."
+      "line": 1,
+      "description": "The top-level CLI entry point has two surfaces updated: (1) the usage/help text which previously referenced `npm install -g @projectxinnovation/helix-cli` is updated to show the `git+https://` URL; (2) the --version handler is updated to call the new version.ts output (which may include the SHA suffix) and, when the SHA is absent (fresh npm-sourced install before first update), prints a short note to stderr explaining that the SHA will appear after the first `hlx update`.",
+      "title": "Step 5 — Update CLI entry point usage text and --version handler"
     },
     {
       "file": "src/docs/cli-content.ts",
-      "line": 18,
-      "title": "Documentation updated to git+https install URL",
-      "description": "The canonical install command in all documentation surfaces now references git+https://github.com/Project-X-Innovation/helix-cli.git#main instead of the npm registry package."
+      "line": 1,
+      "description": "cli-content.ts drives the `hlx docs` command output and contains inline documentation strings. All four occurrences of the npm install command and the word 'npm' (used as a source descriptor) are replaced with the git+https URL and 'github' respectively. This ensures that users who run `hlx docs` or read generated documentation see the correct install instructions and are not directed to the npm registry.",
+      "title": "Step 6a — Documentation: replace 4 npm references with git+https URL"
+    },
+    {
+      "file": "src/skill/show.ts",
+      "line": 1,
+      "description": "show.ts emits a reinstall suggestion in its error path when a skill binary is missing or corrupted. The hardcoded `npm install -g @projectxinnovation/helix-cli@latest` string in that message is replaced with GIT_INSTALL_SPEC (imported from check.ts) so recovery instructions are always consistent with the actual install mechanism.",
+      "title": "Step 6b — Error messages: reinstall command updated in show.ts"
+    },
+    {
+      "file": "src/skill/paths.ts",
+      "line": 1,
+      "description": "paths.ts has an equivalent reinstall suggestion in its path-resolution error path. Same change as show.ts: the npm registry install command is replaced with the git+https URL via the shared GIT_INSTALL_SPEC constant. Having both error paths import the same constant means a future URL change requires editing only check.ts.",
+      "title": "Step 6c — Error messages: reinstall command updated in paths.ts"
+    },
+    {
+      "file": "src/update/check.ts",
+      "line": 9,
+      "description": "The tour ends back at check.ts to confirm the post-change invariants. GIT_INSTALL_SPEC is the single definition of the install URL — exported here and imported by perform.ts, index.ts (update), show.ts, and paths.ts. The functions fetchLatestVersion, isNewerVersion, and the constant NPM_PACKAGE no longer exist anywhere in src/. Grep across src/ confirms zero matches for those identifiers, for '@projectxinnovation/helix-cli@latest', and for 'npm view' or 'npm registry'. The git primitives (fetchRemoteSha, isUpdateAvailable, CANONICAL_REPO_URL, CANONICAL_BRANCH) that were previously dead code are now the load-bearing update comparison mechanism. InstallSource.commit in config.ts is now written on every successful update and read by version.ts.",
+      "title": "Step 7 — Summary: single source of truth and dead code elimination confirmed"
     }
   ]
 }
